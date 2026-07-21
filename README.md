@@ -93,3 +93,7 @@ Harness:  模型看不到的东西（ReAct 循环、Hooks）
 Harness Engineering: 优化 Agent 内部（Tools/Hooks/Prompts）
 Loop Engineering:   以 Agent 为基本单元构建工作流
 ```
+
+---
+
+本项目使用 devloop 契约驱动开发体系，当前阶段与文档导航见 [docs/README.md](docs/README.md)。
