@@ -18,9 +18,15 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *
  * Mapping decisions (lossy projection, ADR-0001):
  * - uuid → recordId as-is; parentUuid → parentId. Records of dropped types
- *   (queue-operation / attachment / last-prompt / system / mode /
- *   permission-mode / file-history-snapshot / summary-title) forward their
- *   resolved parent to their children, so the kept tree stays connected.
+ *   (queue-operation / last-prompt / system / mode / permission-mode /
+ *   file-history-snapshot / summary-title / non-goal attachments) forward
+ *   their resolved parent to their children, so the kept tree stays
+ *   connected.
+ * - `attachment` records with subtype `goal_status` are harness goal
+ *   verdicts (control plane) and become `goal_update` records. The source
+ *   field is `met: boolean` (not a status string) — mapped to
+ *   "met" / "unmet"; `reason` is kept when present. The source has no goal
+ *   id, so goalId is omitted.
  * - Assistant `tool_use` blocks are split out of the assistant message into
  *   their own `tool_call` records. Chain rule: within one source record the
  *   emitted records form a chain (assistant_message → tool_call → tool_call …
@@ -32,10 +38,18 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   AC-0002-N-4) is attached to the first tool_call record instead.
  * - tool_result blocks live inside `user` records (array content). String
  *   content is kept verbatim; non-string content is JSON.stringify'd.
+ *   When the same toolCallId yields several tool_results (resubmit/branch),
+ *   the FIRST in file order is kept and later ones are dropped.
+ * - tool_call status: derived after projection — "completed"/"failed" from
+ *   the paired tool_result status; "interrupted" when the turn/session ends
+ *   with no paired result (no synthetic result record is emitted).
  * - Compaction: Claude marks compaction with `isCompactSummary: true` on a
  *   user record (content = the continued-context summary). These become
  *   `compaction` records. The unrelated `type: "summary"` line is the
  *   AI-generated session TITLE — it is mapped to Manifest.title instead.
+ * - Claude Code has no explicit harness-injected-message markers, so no
+ *   `harness_message` records are emitted; such messages stay user_message
+ *   (source-unavailable provenance, per spec).
  * - Sidechains (ADR-0002): each `subagents/agent-*.jsonl` file is one child
  *   session; inline `isSidechain: true` records in the main file are grouped
  *   by `agentId` into child sessions as well. Child sessionId = agentId.
@@ -66,6 +80,13 @@ interface RawLine {
   version?: string;
   gitBranch?: string;
   summary?: string;
+  attachment?: {
+    type?: string;
+    met?: boolean;
+    reason?: string;
+    condition?: string;
+    iterations?: number;
+  };
   message?: {
     role?: string;
     model?: string;
@@ -150,6 +171,7 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
   // source uuid -> recordId this source record resolved to. For dropped
   // records this forwards the resolved parent so the kept tree stays linked.
   const resolved = new Map<string, string | null>();
+  const seenToolResults = new Set<string>();
   let seq = 0;
   let lastEmitted: string | null = null;
 
@@ -238,6 +260,11 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
           let toolResultIndex = 0;
           for (const block of content) {
             if (block.type !== "tool_result") continue;
+            const toolCallId = block.tool_use_id ?? "";
+            // Resubmit/branch can produce several tool_results for the same
+            // toolCallId — keep the first in file order, drop later ones.
+            if (seenToolResults.has(toolCallId)) continue;
+            seenToolResults.add(toolCallId);
             // tool_result blocks share the source uuid; suffix keeps
             // recordIds unique and deterministic when there are several.
             const recordId =
@@ -249,7 +276,7 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
               parentId: nextParent(),
               seq: nextSeq(),
               type: "tool_result",
-              toolCallId: block.tool_use_id ?? "",
+              toolCallId,
               content: stringifyToolResultContent(block.content),
               status: block.is_error === true ? "error" : "success",
             });
@@ -257,6 +284,25 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
           }
         }
       }
+    } else if (
+      line.type === "attachment" &&
+      line.attachment?.type === "goal_status" &&
+      uuid !== undefined
+    ) {
+      // Harness goal verdict (control plane) → goal_update. The source field
+      // is `met: boolean`; map to a status string. goalId is omitted — the
+      // source identifies goals only by free-text `condition`.
+      const reason = line.attachment.reason;
+      emit({
+        ...base,
+        recordId: uuid,
+        parentId: nextParent(),
+        seq: nextSeq(),
+        type: "goal_update",
+        status: line.attachment.met === true ? "met" : "unmet",
+        ...(reason !== undefined ? { reason } : {}),
+      });
+      emitted = true;
     } else if (line.type === "assistant" && uuid !== undefined) {
       const msg = line.message ?? {};
       const blocks = Array.isArray(msg.content) ? msg.content : [];
@@ -313,14 +359,34 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
         emitted = true;
       }
     }
-    // All other types (queue-operation, attachment, last-prompt, summary,
-    // system, mode, permission-mode, file-history-snapshot, ...) are dropped
-    // per ADR-0001 (process/telemetry). Their children re-anchor through
-    // the forwarding map below.
+    // All other types (queue-operation, last-prompt, summary, system, mode,
+    // permission-mode, file-history-snapshot, non-goal attachments, ...) are
+    // dropped per ADR-0001 (process/telemetry). Their children re-anchor
+    // through the forwarding map below.
 
     if (uuid !== undefined) {
       resolved.set(uuid, emitted ? lastEmitted : parent);
     }
+  }
+
+  // Derive tool_call status from the pairing outcome: a paired tool_result
+  // gives "completed"/"failed" (from the result status); a tool_call whose
+  // turn/session ended without a result is "interrupted" — no synthetic
+  // result record is emitted.
+  const resultStatus = new Map<string, "success" | "error">();
+  for (const rec of records) {
+    if (rec.type === "tool_result") {
+      resultStatus.set(rec.toolCallId, rec.status ?? "success");
+    }
+  }
+  for (let i = 0; i < records.length; i += 1) {
+    const rec = records[i]!;
+    if (rec.type !== "tool_call") continue;
+    const paired = resultStatus.get(rec.toolCallId);
+    records[i] = {
+      ...rec,
+      status: paired === undefined ? "interrupted" : paired === "error" ? "failed" : "completed",
+    };
   }
 
   return records;

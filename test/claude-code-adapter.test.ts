@@ -99,6 +99,7 @@ describe("claude-code adapter", () => {
     it("projects records with message counts equal to the source", async () => {
       const records = await readAll(adapter, SESSION_A);
       expect(records.map((r) => r.type)).toEqual([
+        "goal_update", // initial goal_status attachment (sentinel)
         "user_message",
         "user_message",
         "assistant_message",
@@ -108,12 +109,34 @@ describe("claude-code adapter", () => {
         "tool_call",
         "tool_result",
         "assistant_message",
+        "goal_update", // final goal_status attachment (met)
       ]);
+    });
+
+    it("maps goal_status attachments to goal_update records", async () => {
+      const records = await readAll(adapter, SESSION_A);
+      const initial = records[0]!;
+      expect(initial.type).toBe("goal_update");
+      if (initial.type === "goal_update") {
+        expect(initial.status).toBe("unmet");
+        expect(initial.reason).toBeUndefined();
+        expect(initial.goalId).toBeUndefined();
+        expect(initial.parentId).toBeNull(); // session root
+      }
+      const final = records[10]!;
+      expect(final.type).toBe("goal_update");
+      if (final.type === "goal_update") {
+        expect(final.status).toBe("met");
+        expect(final.reason).toBe(
+          "The flaky timing wait was replaced with an explicit event await.",
+        );
+        expect(final.parentId).toBe("aaaa0008-0000-4000-8000-000000000008");
+      }
     });
 
     it("preserves text verbatim, including slash-command XML", async () => {
       const records = await readAll(adapter, SESSION_A);
-      const first = records[0]!;
+      const first = records[1]!;
       expect(first.type).toBe("user_message");
       if (first.type === "user_message") {
         expect(first.content).toEqual([
@@ -123,7 +146,7 @@ describe("claude-code adapter", () => {
           },
         ]);
       }
-      const assistant = records[2]!;
+      const assistant = records[3]!;
       if (assistant.type === "assistant_message") {
         expect(assistant.content[0]).toEqual({
           type: "thinking",
@@ -138,7 +161,7 @@ describe("claude-code adapter", () => {
 
     it("splits tool_use blocks into tool_call records chained off the assistant record", async () => {
       const records = await readAll(adapter, SESSION_A);
-      const toolCall = records[3]!;
+      const toolCall = records[4]!;
       if (toolCall.type === "tool_call") {
         expect(toolCall.toolCallId).toBe("toolu_01AAAAAAAAAAAAAAAAAAAAAA");
         expect(toolCall.name).toBe("Bash");
@@ -150,18 +173,26 @@ describe("claude-code adapter", () => {
         expect(toolCall.parentId).toBe("aaaa0004-0000-4000-8000-000000000004");
       }
       // next record parents to the LAST record emitted by the previous message
-      const toolResult = records[4]!;
+      const toolResult = records[5]!;
       if (toolResult.type === "tool_result") {
         expect(toolResult.toolCallId).toBe("toolu_01AAAAAAAAAAAAAAAAAAAAAA");
         expect(toolResult.status).toBe("success");
         expect(toolResult.parentId).toBe(toolCall.recordId);
       }
       // error tool_result keeps status
-      const errorResult = records[7]!;
+      const errorResult = records[8]!;
       if (errorResult.type === "tool_result") {
         expect(errorResult.status).toBe("error");
         expect(errorResult.content).toBe("Error: ENOENT: no such file or directory");
       }
+    });
+
+    it("derives tool_call status from the paired tool_result", async () => {
+      const records = await readAll(adapter, SESSION_A);
+      const bash = records[4]!;
+      if (bash.type === "tool_call") expect(bash.status).toBe("completed");
+      const read = records[7]!;
+      if (read.type === "tool_call") expect(read.status).toBe("failed");
     });
 
     it("keeps coarse usage and drops fine tiers", async () => {
@@ -172,7 +203,7 @@ describe("claude-code adapter", () => {
         cacheReadTokens: 2300,
         cacheWriteTokens: 300,
       });
-      const assistant = records[2]!;
+      const assistant = records[3]!;
       expect(assistant.usage).toEqual({
         inputTokens: 1200,
         outputTokens: 45,
@@ -185,7 +216,7 @@ describe("claude-code adapter", () => {
 
     it("assigns seq in emission order and keeps causal chain connected", async () => {
       const records = await readAll(adapter, SESSION_A);
-      expect(records.map((r) => r.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(records.map((r) => r.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       expect(records[0]!.parentId).toBeNull();
       for (let i = 1; i < records.length; i += 1) {
         const parentId = records[i]!.parentId!;
@@ -278,7 +309,36 @@ describe("claude-code adapter", () => {
         "tool_call",
         "tool_result",
         "assistant_message",
+        "assistant_message",
+        "tool_call", // no result in the source — session ends mid-turn
       ]);
+    });
+
+    it("keeps the first of duplicate tool_results and drops later ones", async () => {
+      const main = await readAll(adapter, SESSION_C);
+      const results = main.filter(
+        (r) => r.type === "tool_result" && r.toolCallId === "toolu_task02AAAAAAAAAAAAAAAAAA",
+      );
+      expect(results).toHaveLength(1);
+      expect(JSON.stringify(results[0])).not.toMatch(/resubmit duplicate/);
+    });
+
+    it("marks a tool_call without a paired result as interrupted, without synthesizing a result", async () => {
+      const main = await readAll(adapter, SESSION_C);
+      const completed = main.find(
+        (r) => r.type === "tool_call" && r.toolCallId === "toolu_task02AAAAAAAAAAAAAAAAAA",
+      )!;
+      if (completed.type === "tool_call") expect(completed.status).toBe("completed");
+
+      const last = main[main.length - 1]!;
+      expect(last.type).toBe("tool_call");
+      if (last.type === "tool_call") {
+        expect(last.toolCallId).toBe("toolu_task03AAAAAAAAAAAAAAAAAA");
+        expect(last.status).toBe("interrupted");
+      }
+      expect(
+        main.some((r) => r.type === "tool_result" && r.toolCallId === "toolu_task03AAAAAAAAAAAAAAAAAA"),
+      ).toBe(false);
     });
   });
 });

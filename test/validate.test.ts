@@ -50,6 +50,7 @@ function validSession(sessionId: string, relation?: Manifest["relation"]): Sessi
         toolCallId: "call-1",
         name: "Bash",
         args: {},
+        status: "completed",
       }),
       rec({
         recordId: `${sessionId}-r3`,
@@ -100,11 +101,27 @@ describe("validateSessions (AC layer-2 invariants)", () => {
     expect(validateSessions([session]).some((e) => e.code === "seq-order")).toBe(true);
   });
 
-  it("rejects a tool_call without exactly one tool_result", () => {
+  it("rejects a tool_call without exactly one tool_result (unless interrupted)", () => {
     const missing = validSession("s");
     missing.records = missing.records.filter((r) => r.type !== "tool_result");
+    // unpaired and not marked interrupted -> error
     expect(
       validateSessions([missing]).some((e) => e.code === "tool-result-match"),
+    ).toBe(true);
+
+    // AC-0002-B-1: explicitly marked interrupted -> accepted, no synthetic result
+    const interrupted = validSession("s");
+    interrupted.records = interrupted.records.filter((r) => r.type !== "tool_result");
+    const call = interrupted.records.find((r) => r.type === "tool_call")!;
+    if (call.type === "tool_call") call.status = "interrupted";
+    expect(validateSessions([interrupted])).toEqual([]);
+
+    // interrupted AND paired -> XOR violated
+    const both = validSession("s");
+    const pairedCall = both.records.find((r) => r.type === "tool_call")!;
+    if (pairedCall.type === "tool_call") pairedCall.status = "interrupted";
+    expect(
+      validateSessions([both]).some((e) => e.code === "tool-result-match"),
     ).toBe(true);
 
     const duplicated = validSession("s");

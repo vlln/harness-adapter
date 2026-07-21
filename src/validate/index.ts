@@ -94,7 +94,12 @@ function checkRelations(sessions: SessionData[], errors: InvariantError[]): void
   }
 }
 
-/** AC-0002-N-3 (partial): every tool_call pairs with exactly one tool_result. */
+/**
+ * AC-0002-N-6: every tool_call has exactly one paired tool_result, XOR
+ * status === "interrupted" (AC-0002-B-1: interrupted calls are explicitly
+ * marked, never silently omitted and never given a synthetic result).
+ * Every tool_result must reference an existing tool_call.
+ */
 function checkToolPairing(session: SessionData, errors: InvariantError[]): void {
   const sid = session.manifest.sessionId;
   const results = new Map<string, number>();
@@ -106,11 +111,18 @@ function checkToolPairing(session: SessionData, errors: InvariantError[]): void 
   for (const rec of session.records) {
     if (rec.type !== "tool_call") continue;
     const count = results.get(rec.toolCallId) ?? 0;
-    if (count !== 1) {
+    const interrupted = rec.status === "interrupted";
+    if (count === 1 && interrupted) {
       errors.push({
         code: "tool-result-match",
         sessionId: sid,
-        message: `tool_call ${rec.toolCallId} (record ${rec.recordId}) has ${count} tool_result(s), expected exactly 1`,
+        message: `tool_call ${rec.toolCallId} (record ${rec.recordId}) is marked interrupted but has a paired tool_result`,
+      });
+    } else if (count !== 1 && !interrupted) {
+      errors.push({
+        code: "tool-result-match",
+        sessionId: sid,
+        message: `tool_call ${rec.toolCallId} (record ${rec.recordId}) has ${count} tool_result(s) and is not marked interrupted`,
       });
     }
   }

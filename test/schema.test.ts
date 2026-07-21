@@ -56,6 +56,11 @@ describe("records", () => {
     { ...base, type: "user_message", content: [{ type: "text", text: "hi" }] },
     {
       ...base,
+      type: "harness_message",
+      content: [{ type: "text", text: "Background task completed: npm test" }],
+    },
+    {
+      ...base,
       type: "assistant_message",
       content: [
         { type: "thinking", text: "hmm" },
@@ -66,6 +71,9 @@ describe("records", () => {
     },
     { ...base, type: "tool_call", toolCallId: "tc1", name: "Bash", args: { command: "ls" } },
     { ...base, type: "tool_call", toolCallId: "tc1", name: "Bash", args: {}, kind: "shell" },
+    { ...base, type: "tool_call", toolCallId: "tc1", name: "Bash", args: {}, status: "completed" },
+    { ...base, type: "tool_call", toolCallId: "tc1", name: "Bash", args: {}, status: "failed" },
+    { ...base, type: "tool_call", toolCallId: "tc1", name: "Bash", args: {}, status: "interrupted" },
     { ...base, type: "tool_result", toolCallId: "tc1", content: "ok", status: "success" },
     {
       ...base,
@@ -78,6 +86,8 @@ describe("records", () => {
     { ...base, type: "model_change", model: "gpt-5", provider: "openai" },
     { ...base, type: "compaction", summary: "context summarized" },
     { ...base, type: "compaction" },
+    { ...base, type: "goal_update", status: "met", reason: "greeting contained hello" },
+    { ...base, type: "goal_update", goalId: "goal-1", status: "unmet" },
   ];
 
   it.each(valid)("parses a valid $type record", (record) => {
@@ -91,6 +101,16 @@ describe("records", () => {
 
   it("rejects a tool_result without toolCallId", () => {
     const bad = { ...base, type: "tool_result", content: "ok" };
+    expect(AhsRecordSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a goal_update without status", () => {
+    const bad = { ...base, type: "goal_update", reason: "no status" };
+    expect(AhsRecordSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a tool_call with an unknown status", () => {
+    const bad = { ...base, type: "tool_call", toolCallId: "tc1", name: "Bash", args: {}, status: "crashed" };
     expect(AhsRecordSchema.safeParse(bad).success).toBe(false);
   });
 
