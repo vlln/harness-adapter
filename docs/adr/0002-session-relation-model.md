@@ -54,9 +54,17 @@ AHS 只有 **Session** 和 **Relation** 两个核心实体：
 
 | 验证项 | 复现步骤 | 结论 | 经验 | 验证 Branch |
 |--------|---------|------|------|------------|
-| Claude sidechain 拆分 | spike 适配器投影含 subagent 的 Claude 会话，验证 sidechain → 独立 session + spawned_by(toolUseId 锚点) 无信息损失 | 待验证 | — | spike/0001-adapter-prototypes（待创建） |
+| Claude sidechain 拆分 | spike 适配器投影含 subagent 的 Claude 会话，验证 sidechain → 独立 session + spawned_by(toolUseId 锚点) 无信息损失 | **通过**（2026-07-21，80 个子 session，relation/锚点不变量 0 错误） | 见下 | spike/0001-adapter-prototypes |
 | Kimi 多 wire | spike 适配器投影含子 agent 的 Kimi 会话，验证每个 wire.jsonl → 一个 session、parentAgentId → spawned_by（无 toolCallId）可行 | 待验证 | — | 同上 |
 | Devin 森林 | spike 适配器投影多 root 的 Devin 会话，验证 sibling_attempt + isMainChain 能还原主链 | 待验证 | — | 同上 |
+
+**Claude Code 验证经验**：
+
+- 真实数据中 sidechain **全部**以 `<session>/subagents/agent-*.jsonl` 独立文件存在；主文件内联 `isSidechain: true` 记录在 173 会话中出现 0 次（研究文档的"内联"示例实际来自子代理文件）。适配器对内联路径仍保留支持（按 `agentId` 分组）。
+- 子代理文件首条记录 `parentUuid: null`——子 session 天然是自包含单根树，跨 session 链接完全由 Relation 承担，模型契合干净。
+- 锚点：meta.json 实测字段 `{agentType, description, toolUseId}`（`spawnDepth` 常缺席）；子代理 record 上的 `sourceToolUseID` 可作 toolUseId 回退。
+- 真实数据暴露的两个树结构问题（适配器已解决，属源数据怪癖非模型缺陷）：丢弃型记录可作为"链重启"根（需重锚定到链尾）；存在只含 `mode` 行的空会话文件（投影后 0 record，跳过）。
+- 发现一项超出模型的源端现实：真实数据有 862 处 tool_call 无配对 tool_result（中断/取消/重发）。这是 AC 层2 配对断言的边界，处理策略（合成占位 result 或显式缺失标记）已列入 Spec 待定。
 
 三案例任一无法无损（保留判据内）表达时，退回修订本模型。
 

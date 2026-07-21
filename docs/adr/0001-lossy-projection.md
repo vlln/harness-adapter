@@ -52,7 +52,14 @@ AHS 定义为**有损但有原则**的投影格式：
 
 | 验证项 | 复现步骤 | 结论 | 经验 | 验证 Branch |
 |--------|---------|------|------|------------|
-| 首批适配器投影时不出现"保留判据内的信息无处安放" | 在 spike/* 分支实现 Claude Code / Codex / Kimi 三个适配器原型，投影真实会话，记录所有被迫丢弃但属于保留判据的信息 | 待验证 | — | spike/0001-adapter-prototypes（待创建） |
+| 首批适配器投影时不出现"保留判据内的信息无处安放" | 在 spike/* 分支实现 Claude Code / Codex / Kimi 三个适配器原型，投影真实会话，记录所有被迫丢弃但属于保留判据的信息 | **Claude Code：通过**（2026-07-21）；Codex / Kimi 待验证 | 见下 | spike/0001-adapter-prototypes |
+
+**Claude Code 验证经验**（173 个真实会话 / 66,339 records 只读 sweep，0 schema 错误）：
+
+- 保留判据内无处安放的信息：**未发现**。
+- 真实数据出现而研究文档未覆盖的 record 类型（`system`、`mode`、`permission-mode`、`file-history-snapshot`、`ai-title`、`agent-name`）全部属于过程/遥测，按本 ADR 丢弃无压力。
+- 两处源格式事实修正：compaction 的真实形态是 user record 上的 `isCompactSummary: true`（已映射为 `compaction` record）；`"type":"summary"` 行实为 AI 生成的会话标题（属保留判据内元数据，映射为 `Manifest.title + titleOrigin:"generated"`，不丢）。
+- 灰色地带：`attachment.goal_status`（目标达成判定 + reason）接近"关键状态事件"，当前最小 record 集无 goal 类型，暂按遥测丢弃——已列入 Spec 待定，若评测场景需要可复议（非推翻本 ADR，属保留判据校准）。
 
 若验证中出现保留判据内信息无处安放，则本 ADR 被推翻，退回修订保留判据或数据模型（见 AC 元标准）。
 
