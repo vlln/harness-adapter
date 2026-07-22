@@ -2,7 +2,7 @@
 title: Plan 02 门禁与自证
 description: 提测门禁脚本、develop 分支保护（MR 门禁）、TEST_INFRA 门禁表全部自证项。
 type: plan
-status: pending
+status: done
 created: 2026-07-22T07:33:05Z
 ---
 

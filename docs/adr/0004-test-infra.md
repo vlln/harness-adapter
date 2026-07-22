@@ -46,11 +46,11 @@ created: 2026-07-22T07:33:05Z
 
 | 验证项 | 复现步骤 | 结论 | 经验 | 验证 Branch |
 |--------|---------|------|------|------------|
-| CI 可运行 | push 后触发 Actions，确认 tsc + vitest + coverage 全执行 | 待验证 | — | ci/0002-test-infra |
-| MR 门禁正确拦截 | 提交故意失败的测试 PR，确认 status check 报红阻断合并 | 待验证 | — | 同上 |
-| 提测门禁正确拦截 | 构造不达标 Report（缺 AC 标注），确认 check-report 报错 | 待验证 | — | 同上 |
-| 覆盖率数据准确 | 对已知代码基线跑覆盖率，与人工统计比对 | 待验证 | — | 同上 |
-| 系统测试框架可跑冒烟 | vite-node 运行 ahs-report 对 fixture 归档，确认启动成功 | 待验证 | — | 同上 |
+| CI 可运行 | push 后触发 Actions，确认 tsc + vitest + coverage 全执行 | 通过（run 29901827795、29902033763 success） | pull_request 工作流取自 base 分支——工作流未合并到 develop 前，PR 不触发 CI | ci/0002-test-infra |
+| MR 门禁正确拦截 | 提交故意失败的测试 PR，确认 status check 报红阻断合并 | 通过（PR #2：run 29902198447 failure，`gh pr merge` 被拒 "base branch policy prohibits the merge"） | 分支保护 required check=`test`，enforce_admins | 同上 |
+| 提测门禁正确拦截 | 构造不达标 Report（缺 AC 标注），确认 check-report 报错 | 通过（植入坏 Report：2 violations，exit 1） | 无 Report 时 vacuous pass；跳过 `*-template` 容器 | 同上 |
+| 覆盖率数据准确 | 对已知代码基线跑覆盖率，与人工统计比对 | 通过（usage.ts：branches/functions 人工统计 0/0 与 v8 一致；statements 仅粒度差异，覆盖判定一致 100%） | v8 按子表达式段计 statements，纯声明式 zod 文件 branches/functions 为 0 | 同上 |
+| 系统测试框架可跑冒烟 | vite-node 运行 e2e 冒烟脚本，确认启动成功 | 通过（本地 + CI 均 OK） | ahs-report.ts 在未合并 spike 分支，故为框架级占位；真实 CLI 用例 DEVELOP 落地 | 同上 |
 
 ---
 
