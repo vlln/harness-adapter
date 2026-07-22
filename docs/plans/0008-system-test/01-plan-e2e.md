@@ -2,7 +2,7 @@
 title: Plan 01 系统测试：真实 e2e + 统一 sweep
 description: 真实 CLI 端到端用例（适配器→归档→ahs-report 全链路），统一真实数据 sweep，失败原因分类，系统测试 Report。
 type: plan
-status: pending
+status: done
 created: 2026-07-22T12:00:00Z
 ---
 

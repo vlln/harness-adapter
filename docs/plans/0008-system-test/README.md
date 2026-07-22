@@ -8,7 +8,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| [01-plan-e2e.md](01-plan-e2e.md) | 真实 CLI 端到端（替换 TEST_INFRA 占位冒烟）+ 统一真实数据 sweep + 失败分类 | pending | — |
+| [01-plan-e2e.md](01-plan-e2e.md) | 真实 CLI 端到端（替换 TEST_INFRA 占位冒烟）+ 统一真实数据 sweep + 失败分类 | done | [01-report-system-test.md](01-report-system-test.md) |
 
 ## 完成判据
 
