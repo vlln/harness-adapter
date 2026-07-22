@@ -2,7 +2,7 @@
 title: ADR-0004 测试基建选型
 description: vitest + v8 覆盖率 + GitHub Actions + 合成 fixture 策略 + CLI 端到端系统测试；无付费依赖、无服务部署，相关项标记 N/A。
 type: adr
-status: proposed
+status: accepted
 created: 2026-07-22T07:33:05Z
 ---
 

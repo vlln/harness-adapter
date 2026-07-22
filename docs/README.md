@@ -2,7 +2,7 @@
 
 | 字段 | 值 |
 |------|-----|
-| **当前阶段** | `TEST_INFRA` |
+| **当前阶段** | `DEVELOP` |
 | **设计评估** | — |
 
 Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):"` 重建上下文。
@@ -31,11 +31,12 @@ Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):
 
 ## 行为边界
 
-当前处于 **TEST_INFRA** 阶段：
+当前处于 **DEVELOP** 阶段：
 
-- 契约已冻结（2026-07-21 审查通过）：Vision/Spec/AC/Interface = `active`，ADR = `accepted`。冻结后不可原地修改——契约变更须退回 DESIGN 走 ADR 修订流程（typo、措辞澄清等非破坏性修改除外，走快速通道 B）。
-- 本阶段只做一次性基建：`ci/*` `test/*` `build/*` 分支 → develop（CI 流水线、覆盖率、MR 门禁、系统测试框架）。
-- 不写正式业务功能代码。正式适配器开发等 TEST_INFRA 门禁通过后在 DEVELOP 阶段以 `feat/*` 执行容器进行（spike/0001-adapter-prototypes 上的 4 个适配器原型为设计证据，保留不合并，作为正式实现的参考底稿）。
+- 契约已冻结（2026-07-21）：Vision/Spec/AC/Interface = `active`，ADR = `accepted`。契约变更须退回 DESIGN 走 ADR 修订流程（typo、措辞澄清走快速通道 B）。
+- 基建就绪（2026-07-22）：GitHub Actions CI（tsc + vitest + 覆盖率 ≥80%）、develop 分支保护（status check 必过）、提测门禁脚本、系统测试框架（冒烟占位）。
+- 业务开发以 `feat/*` 执行容器进行：docs/plans/ 下创建容器（README + Plan），从 develop 拉分支，TDD 实现，PR 过 MR 门禁合并，Report 留档 AC 验收结果。
+- 正式适配器（claude-code / codex / kimi-code / devin）以 spike/0001-adapter-prototypes 的原型为参考底稿重做；spike 保留不合并。
 
 ### 快速通道（项目自定义）
 
