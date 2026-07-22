@@ -1,0 +1,20 @@
+{
+  "createdAt": "2026-07-20T10:00:00.000Z",
+  "updatedAt": "2026-07-20T10:05:00.000Z",
+  "title": "修复登录页空指针",
+  "isCustomTitle": false,
+  "agents": {
+    "main": {
+      "homedir": "/home/test/.kimi-code/sessions/wd_test123/session_11111111-2222-4333-8444-555555555555/agents/main",
+      "type": "main",
+      "parentAgentId": null
+    },
+    "agent-0": {
+      "homedir": "/home/test/.kimi-code/sessions/wd_test123/session_11111111-2222-4333-8444-555555555555/agents/agent-0",
+      "type": "sub",
+      "parentAgentId": "main"
+    }
+  },
+  "custom": {},
+  "lastPrompt": "修复登录页空指针"
+}
