@@ -1,0 +1,354 @@
+[
+  {
+    "manifest": {
+      "ahsVersion": "0.1.0",
+      "cwd": "/work/gamma",
+      "harness": "devin",
+      "harnessVersion": "unknown",
+      "isMainChain": true,
+      "model": "devin-mini",
+      "sessionId": "odd-cove",
+      "stats": {
+        "durationMs": 60000,
+        "turnCount": 1
+      }
+    },
+    "records": [
+      {
+        "content": [
+          {
+            "text": "no message id here",
+            "type": "text"
+          }
+        ],
+        "parentId": null,
+        "recordId": "node-0",
+        "seq": 0,
+        "timestamp": "2025-07-11T02:13:20.000Z",
+        "type": "user_message"
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "ahsVersion": "0.1.0",
+      "cwd": "/work/beta",
+      "harness": "devin",
+      "harnessVersion": "unknown",
+      "isMainChain": true,
+      "model": "devin-mini",
+      "sessionId": "quiet-pond",
+      "stats": {
+        "durationMs": 0,
+        "turnCount": 1
+      }
+    },
+    "records": [
+      {
+        "content": [
+          {
+            "text": "hello",
+            "type": "text"
+          }
+        ],
+        "parentId": null,
+        "recordId": "m-q-0",
+        "seq": 0,
+        "timestamp": "2025-07-09T22:26:40.000Z",
+        "type": "user_message"
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "ahsVersion": "0.1.0",
+      "cwd": "/work/alpha",
+      "harness": "devin",
+      "harnessVersion": "unknown",
+      "isMainChain": true,
+      "model": "claude-test-medium",
+      "sessionId": "sunny-forest",
+      "stats": {
+        "durationMs": 3600000,
+        "totalUsage": {
+          "cacheWriteTokens": 177,
+          "cost": {
+            "amount": 7,
+            "currency": "credit"
+          },
+          "durationMs": 2300,
+          "inputTokens": 150,
+          "outputTokens": 30
+        },
+        "turnCount": 3
+      },
+      "title": "Alpha Refactor",
+      "titleOrigin": "custom"
+    },
+    "records": [
+      {
+        "content": [
+          {
+            "text": "You are Devin (test system prompt).",
+            "type": "text"
+          }
+        ],
+        "parentId": null,
+        "recordId": "m-sys-0",
+        "seq": 0,
+        "timestamp": "2025-07-08T18:40:00.000Z",
+        "type": "harness_message"
+      },
+      {
+        "content": [
+          {
+            "text": "Refactor the parser.",
+            "type": "text"
+          }
+        ],
+        "parentId": "m-sys-0",
+        "recordId": "m-user-1",
+        "seq": 1,
+        "timestamp": "2025-07-08T18:40:10.000Z",
+        "type": "user_message"
+      },
+      {
+        "content": [
+          {
+            "text": "Let me think.",
+            "type": "thinking"
+          },
+          {
+            "text": "I'll inspect the file.",
+            "type": "text"
+          }
+        ],
+        "parentId": "m-user-1",
+        "recordId": "m-asst-2",
+        "seq": 2,
+        "timestamp": "2025-07-08T18:40:20.000Z",
+        "type": "assistant_message",
+        "usage": {
+          "cacheWriteTokens": 177,
+          "durationMs": 1500,
+          "inputTokens": 100,
+          "outputTokens": 20
+        }
+      },
+      {
+        "args": {
+          "path": "/work/alpha/a.ts"
+        },
+        "kind": "read",
+        "name": "read_file",
+        "parentId": "m-asst-2",
+        "recordId": "m-asst-2/tool_call/0",
+        "seq": 3,
+        "status": "completed",
+        "timestamp": "2025-07-08T18:40:20.000Z",
+        "toolCallId": "tc-1",
+        "type": "tool_call"
+      },
+      {
+        "content": "file contents here",
+        "parentId": "m-asst-2/tool_call/0",
+        "recordId": "m-tool-3",
+        "seq": 4,
+        "status": "success",
+        "timestamp": "2025-07-08T18:40:30.000Z",
+        "toolCallId": "tc-1",
+        "type": "tool_result"
+      },
+      {
+        "args": {
+          "path": "/work/alpha/a.ts",
+          "text": "new"
+        },
+        "name": "write_file",
+        "parentId": "m-tool-3",
+        "recordId": "m-asst-4/tool_call/0",
+        "seq": 5,
+        "status": "completed",
+        "timestamp": "2025-07-08T18:40:40.000Z",
+        "toolCallId": "tc-2",
+        "type": "tool_call",
+        "usage": {
+          "durationMs": 800,
+          "inputTokens": 50,
+          "outputTokens": 10
+        }
+      },
+      {
+        "content": "ok",
+        "parentId": "m-asst-4/tool_call/0",
+        "recordId": "m-tool-5",
+        "seq": 6,
+        "status": "success",
+        "timestamp": "2025-07-08T18:40:50.000Z",
+        "toolCallId": "tc-2",
+        "type": "tool_result"
+      },
+      {
+        "content": [
+          {
+            "text": "One more try.",
+            "type": "text"
+          }
+        ],
+        "parentId": "m-tool-5",
+        "recordId": "m-asst-9",
+        "seq": 7,
+        "timestamp": "2025-07-08T18:41:30.000Z",
+        "type": "assistant_message"
+      },
+      {
+        "args": {
+          "cmd": "ls"
+        },
+        "name": "run_shell",
+        "parentId": "m-asst-9",
+        "recordId": "m-asst-9/tool_call/0",
+        "seq": 8,
+        "status": "interrupted",
+        "timestamp": "2025-07-08T18:41:30.000Z",
+        "toolCallId": "tc-3",
+        "type": "tool_call"
+      },
+      {
+        "content": [
+          {
+            "text": "continue",
+            "type": "text"
+          }
+        ],
+        "parentId": "m-asst-9/tool_call/0",
+        "recordId": "m-user-11",
+        "seq": 9,
+        "timestamp": "2025-07-08T18:41:50.000Z",
+        "type": "user_message"
+      },
+      {
+        "content": [
+          {
+            "text": "again",
+            "type": "text"
+          }
+        ],
+        "parentId": "m-user-11",
+        "recordId": "m-user-13",
+        "seq": 10,
+        "timestamp": "2025-07-08T18:42:10.000Z",
+        "type": "user_message"
+      },
+      {
+        "content": [
+          {
+            "text": "<system-reminder>tick</system-reminder>",
+            "type": "text"
+          }
+        ],
+        "parentId": "m-user-13",
+        "recordId": "m-harness-15",
+        "seq": 11,
+        "timestamp": "2025-07-08T18:42:30.000Z",
+        "type": "harness_message"
+      },
+      {
+        "content": [
+          {
+            "text": "Alternative attempt.",
+            "type": "text"
+          }
+        ],
+        "parentId": "m-user-1",
+        "recordId": "m-asst-7",
+        "seq": 12,
+        "timestamp": "2025-07-08T18:41:10.000Z",
+        "type": "assistant_message"
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "ahsVersion": "0.1.0",
+      "cwd": "/work/alpha",
+      "harness": "devin",
+      "harnessVersion": "unknown",
+      "model": "claude-test-medium",
+      "relation": {
+        "sessionId": "sunny-forest",
+        "type": "sibling_attempt"
+      },
+      "sessionId": "sunny-forest#root-20",
+      "stats": {
+        "durationMs": 3600000,
+        "turnCount": 0
+      },
+      "title": "Alpha Refactor",
+      "titleOrigin": "custom"
+    },
+    "records": [
+      {
+        "content": [
+          {
+            "text": "Orphaned context.",
+            "type": "text"
+          }
+        ],
+        "parentId": null,
+        "recordId": "m-sys-20",
+        "seq": 0,
+        "timestamp": "2025-07-08T18:43:20.000Z",
+        "type": "harness_message"
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "ahsVersion": "0.1.0",
+      "cwd": "/work/alpha",
+      "harness": "devin",
+      "harnessVersion": "unknown",
+      "model": "claude-test-medium",
+      "relation": {
+        "sessionId": "sunny-forest",
+        "type": "sibling_attempt"
+      },
+      "sessionId": "sunny-forest#root-30",
+      "stats": {
+        "durationMs": 3600000,
+        "turnCount": 1
+      },
+      "title": "Alpha Refactor",
+      "titleOrigin": "custom"
+    },
+    "records": [
+      {
+        "content": [
+          {
+            "text": "Second context.",
+            "type": "text"
+          }
+        ],
+        "parentId": null,
+        "recordId": "m-sys-30",
+        "seq": 0,
+        "timestamp": "2025-07-08T18:45:00.000Z",
+        "type": "harness_message"
+      },
+      {
+        "content": [
+          {
+            "text": "Try differently.",
+            "type": "text"
+          }
+        ],
+        "parentId": "m-sys-30",
+        "recordId": "m-user-31",
+        "seq": 1,
+        "timestamp": "2025-07-08T18:45:10.000Z",
+        "type": "user_message"
+      }
+    ]
+  }
+]

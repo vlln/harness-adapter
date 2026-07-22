@@ -2,7 +2,7 @@
 title: Plan 01 Devin 正式适配器
 description: 按 active 契约正式实现 Devin 适配器；TDD；编程生成 SQLite fixture；真实数据 sweep 留证。
 type: plan
-status: pending
+status: done
 created: 2026-07-22T10:20:00Z
 ---
 

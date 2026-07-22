@@ -8,7 +8,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| [01-plan-devin.md](01-plan-devin.md) | Devin 正式适配器（forest → sibling_attempt） | pending | — |
+| [01-plan-devin.md](01-plan-devin.md) | Devin 正式适配器（forest → sibling_attempt） | done | [01-report-devin.md](01-report-devin.md) |
 
 ## 适配器要点
 
