@@ -1,0 +1,103 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/Users/test/Project/demo",
+    "git": {
+      "branch": "main"
+    },
+    "harness": "claude-code",
+    "harnessVersion": "2.1.204",
+    "model": "claude-opus-4-1",
+    "sessionId": "22222222-2222-4222-8222-222222222222",
+    "stats": {
+      "totalUsage": {
+        "cacheReadTokens": 2000,
+        "cacheWriteTokens": 1000,
+        "inputTokens": 12000,
+        "outputTokens": 200
+      },
+      "turnCount": 1
+    },
+    "title": "Refactor parser for nested generics",
+    "titleOrigin": "generated"
+  },
+  "records": [
+    {
+      "content": [
+        {
+          "text": "Refactor the parser to handle nested generics",
+          "type": "text"
+        }
+      ],
+      "parentId": null,
+      "recordId": "bbbb0001-0000-4000-8000-000000000001",
+      "seq": 0,
+      "timestamp": "2026-07-15T09:00:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "I'll delegate a codebase search to an Explore agent first.",
+          "type": "text"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "parentId": "bbbb0001-0000-4000-8000-000000000001",
+      "recordId": "bbbb0002-0000-4000-8000-000000000002",
+      "seq": 1,
+      "timestamp": "2026-07-15T09:00:04.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 1000,
+        "inputTokens": 5000,
+        "outputTokens": 120
+      }
+    },
+    {
+      "args": {
+        "description": "Find parser files",
+        "prompt": "Search the codebase for parser implementations and report file paths.",
+        "subagent_type": "Explore"
+      },
+      "name": "Task",
+      "parentId": "bbbb0002-0000-4000-8000-000000000002",
+      "recordId": "bbbb0002-0000-4000-8000-000000000002/tool_use/0",
+      "seq": 2,
+      "status": "completed",
+      "timestamp": "2026-07-15T09:00:04.000Z",
+      "toolCallId": "toolu_task01AAAAAAAAAAAAAAAAAA",
+      "type": "tool_call"
+    },
+    {
+      "content": "Agent completed: found 3 parser files (src/parser.ts, src/generics.ts, src/ast.ts)",
+      "parentId": "bbbb0002-0000-4000-8000-000000000002/tool_use/0",
+      "recordId": "bbbb0003-0000-4000-8000-000000000003",
+      "seq": 3,
+      "status": "success",
+      "timestamp": "2026-07-15T09:00:30.000Z",
+      "toolCallId": "toolu_task01AAAAAAAAAAAAAAAAAA",
+      "type": "tool_result"
+    },
+    {
+      "content": [
+        {
+          "text": "The agent found the parser files. I'll refactor src/parser.ts to handle nested generics.",
+          "type": "text"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "parentId": "bbbb0003-0000-4000-8000-000000000003",
+      "recordId": "bbbb0004-0000-4000-8000-000000000004",
+      "seq": 4,
+      "timestamp": "2026-07-15T09:00:33.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 2000,
+        "inputTokens": 7000,
+        "outputTokens": 80
+      }
+    }
+  ]
+}
