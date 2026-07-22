@@ -12,6 +12,9 @@ export const ContentBlockSchema = z.discriminatedUnion("type", [
     /** Base64-encoded image data. */
     data: z.string(),
   }),
+  // Oversized text/thinking content (>64 KiB) is externalized at archive
+  // time per the spec's blob rule; the block becomes a blob reference.
+  BlobRefSchema,
 ]);
 
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;

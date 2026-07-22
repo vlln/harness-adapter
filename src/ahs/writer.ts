@@ -1,0 +1,188 @@
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+import type { Manifest } from "../schema/manifest";
+import type { BlobRef } from "../schema/blob";
+import type { AhsRecord } from "../schema/record";
+import type { HarnessAdapter, SessionFilter } from "../store/adapter";
+
+/**
+ * AHS archive writer (spec section "磁盘布局与 blob 外置").
+ *
+ * Layout:
+ *   <outDir>/<sanitized-sessionId>/manifest.json   sorted-keys JSON
+ *   <outDir>/<sanitized-sessionId>/records.jsonl   one record per line, seq order
+ *   <outDir>/<sanitized-sessionId>/blobs/sha256-<hex>
+ *
+ * Determinism / idempotency: manifest.json and each records.jsonl line use
+ * recursively sorted object keys; records are written in seq order; blobs
+ * are content-addressed and skipped when already present. Re-exporting over
+ * the same outDir yields byte-identical files.
+ */
+
+/** Spec threshold: content above 64 KiB is externalized. */
+export const BLOB_THRESHOLD = 64 * 1024;
+
+const PREVIEW_CHARS = 256;
+
+/**
+ * Map a sessionId to a directory-safe name. Characters outside
+ * [A-Za-z0-9.-] are escaped as `_xHH` per UTF-8 byte (uppercase hex);
+ * `_` itself is escaped (`_x5F`) so the `_x` introducer never appears
+ * literally in output — the encoding is unambiguous, injective
+ * (collision-free), and reversible by scanning for `_xHH` tokens.
+ * Example: Devin's `grand-barometer#root-10` → `grand-barometer_x23root-10`.
+ */
+export function sanitizeSessionId(sessionId: string): string {
+  const bytes = Buffer.from(sessionId, "utf8");
+  let out = "";
+  for (const byte of bytes) {
+    const ch = String.fromCharCode(byte);
+    if (/[A-Za-z0-9.-]/.test(ch)) {
+      out += ch;
+    } else {
+      out += `_x${byte.toString(16).toUpperCase().padStart(2, "0")}`;
+    }
+  }
+  return out;
+}
+
+/** JSON.stringify with recursively sorted object keys (deterministic). */
+function stableStringify(value: unknown, indent?: number): string {
+  return JSON.stringify(sortKeys(value), null, indent);
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (typeof value === "object" && value !== null) {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = sortKeys((value as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
+function sha256Hex(content: string): string {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+interface BlobWrite {
+  sha256: string;
+  content: string;
+}
+
+/**
+ * Externalize oversized content in one record. Returns the rewritten record
+ * plus any blobs to store. A text/thinking block whose text exceeds the
+ * threshold becomes a blob_ref block; a tool_result string content becomes
+ * a BlobRef. Everything below the threshold stays inline, byte-identical.
+ */
+function externalizeRecord(rec: AhsRecord): { record: AhsRecord; blobs: BlobWrite[] } {
+  const blobs: BlobWrite[] = [];
+  const toBlobRef = (content: string): BlobRef => {
+    const sha256 = sha256Hex(content);
+    blobs.push({ sha256, content });
+    return {
+      type: "blob_ref",
+      sha256,
+      mediaType: "text/plain",
+      byteLength: Buffer.byteLength(content, "utf8"),
+      preview: content.slice(0, PREVIEW_CHARS),
+    };
+  };
+  const oversized = (s: string): boolean => Buffer.byteLength(s, "utf8") > BLOB_THRESHOLD;
+
+  if (
+    rec.type === "user_message" ||
+    rec.type === "assistant_message" ||
+    rec.type === "harness_message"
+  ) {
+    let changed = false;
+    const content = rec.content.map((block) => {
+      if ((block.type === "text" || block.type === "thinking") && oversized(block.text)) {
+        changed = true;
+        return toBlobRef(block.text);
+      }
+      return block;
+    });
+    if (changed) return { record: { ...rec, content }, blobs };
+  } else if (rec.type === "tool_result" && typeof rec.content === "string") {
+    if (oversized(rec.content)) {
+      const ref = toBlobRef(rec.content);
+      return { record: { ...rec, content: ref }, blobs };
+    }
+  }
+  return { record: rec, blobs };
+}
+
+export interface WriteArchiveResult {
+  sessionId: string;
+  dir: string;
+  recordCount: number;
+  blobCount: number;
+}
+
+/**
+ * Write one session's archive. The manifest is located via the adapter's
+ * listSessions (adapters may synthesize manifests only there).
+ */
+export async function writeArchive(
+  adapter: HarnessAdapter,
+  sessionId: string,
+  outDir: string,
+): Promise<WriteArchiveResult> {
+  let manifest: Manifest | undefined;
+  for await (const m of adapter.listSessions()) {
+    if (m.sessionId === sessionId) {
+      manifest = m;
+      break;
+    }
+  }
+  if (manifest === undefined) throw new Error(`session not found: ${sessionId}`);
+
+  const records: AhsRecord[] = [];
+  for await (const rec of adapter.readRecords(sessionId)) records.push(rec);
+  records.sort((a, b) => a.seq - b.seq);
+
+  const dir = path.join(outDir, sanitizeSessionId(sessionId));
+  const blobsDir = path.join(dir, "blobs");
+  await mkdir(blobsDir, { recursive: true });
+
+  const lines: string[] = [];
+  let blobCount = 0;
+  for (const rec of records) {
+    const { record, blobs } = externalizeRecord(rec);
+    for (const blob of blobs) {
+      const blobPath = path.join(blobsDir, `sha256-${blob.sha256}`);
+      try {
+        // Content-addressed: an existing file holds the same bytes — skip.
+        await readFile(blobPath);
+      } catch {
+        await writeFile(blobPath, blob.content, "utf8");
+        blobCount += 1;
+      }
+    }
+    lines.push(stableStringify(record));
+  }
+
+  await writeFile(path.join(dir, "manifest.json"), `${stableStringify(manifest, 2)}\n`, "utf8");
+  await writeFile(path.join(dir, "records.jsonl"), lines.join("\n") + (lines.length > 0 ? "\n" : ""), "utf8");
+
+  return { sessionId, dir, recordCount: records.length, blobCount };
+}
+
+/** Export every session an adapter lists (optionally filtered) into outDir. */
+export async function exportSessions(
+  adapter: HarnessAdapter,
+  outDir: string,
+  filter?: SessionFilter,
+): Promise<WriteArchiveResult[]> {
+  const results: WriteArchiveResult[] = [];
+  for await (const manifest of adapter.listSessions(filter)) {
+    results.push(await writeArchive(adapter, manifest.sessionId, outDir));
+  }
+  return results;
+}
