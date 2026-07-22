@@ -9,10 +9,14 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "vite-node test/e2e/smoke.ts",
+    "check:report": "vite-node scripts/check-report.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^3.2.7",
     "typescript": "^5.8.0",
     "vitest": "^3.2.0"
   },
