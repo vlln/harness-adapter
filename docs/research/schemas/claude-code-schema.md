@@ -473,6 +473,8 @@ Preview (first 2KB):
 
 ## Complete Record Type Summary
 
+> **Update (2026-07-22, formal adapter sweep):** session titles are now emitted as `{"type":"ai-title","aiTitle":...}` records; the `type:"summary"` title form described by earlier samples no longer appears in real data (adapters should accept both, ai-title is the current form). Additional record types observed beyond this table, all process/telemetry: `agent-name`, `worktree-state`, `agent-setting`, `pr-link`, `file-history-snapshot`, plus `system` subtypes (turn_duration, away_summary, stop_hook_summary) and `mode`/`permission-mode`.
+
 ### Main Session
 
 | # | Type | Has `uuid` | Has `parentUuid` | Has `message` | Has `attachment` |
