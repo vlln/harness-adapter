@@ -12,6 +12,9 @@ export const ContentBlockSchema = z.discriminatedUnion("type", [
     /** Base64-encoded image data. */
     data: z.string(),
   }),
+  // Oversized text/thinking content (>64 KiB) is externalized at archive
+  // time per the spec's blob rule; the block becomes a blob reference.
+  BlobRefSchema,
 ]);
 
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
@@ -45,6 +48,13 @@ export const AhsRecordSchema = z.discriminatedUnion("type", [
     type: z.literal("assistant_message"),
     content: z.array(ContentBlockSchema),
   }),
+  // Same content model as user_message; only the provenance differs —
+  // harness-injected messages (re-prompts, cron reminders, background
+  // notices, system reminders) get a first-class type, not a tag field.
+  BaseRecordSchema.extend({
+    type: z.literal("harness_message"),
+    content: z.array(ContentBlockSchema),
+  }),
   BaseRecordSchema.extend({
     type: z.literal("tool_call"),
     toolCallId: z.string(),
@@ -53,6 +63,12 @@ export const AhsRecordSchema = z.discriminatedUnion("type", [
     args: z.unknown(),
     /** Optional derived classification. */
     kind: z.string().optional(),
+    /**
+     * "interrupted" when the source session/turn ended without a paired
+     * tool_result (no synthetic result is emitted); otherwise mirrors the
+     * paired tool_result status. Exactly one of (paired result, interrupted).
+     */
+    status: z.enum(["completed", "failed", "interrupted"]).optional(),
   }),
   BaseRecordSchema.extend({
     type: z.literal("tool_result"),
@@ -74,6 +90,17 @@ export const AhsRecordSchema = z.discriminatedUnion("type", [
   BaseRecordSchema.extend({
     type: z.literal("compaction"),
     summary: z.string().optional(),
+  }),
+  /**
+   * Structured record of harness goal verdicts (control-plane events only —
+   * goal CREATION via ordinary tool calls stays a tool_call).
+   */
+  BaseRecordSchema.extend({
+    type: z.literal("goal_update"),
+    goalId: z.string().optional(),
+    /** Closed verdict set: sentinel (goal registered) / met / not met. */
+    status: z.enum(["pending", "met", "unmet"]),
+    reason: z.string().optional(),
   }),
 ]);
 
