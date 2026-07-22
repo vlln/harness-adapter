@@ -56,7 +56,7 @@ AHS 只有 **Session** 和 **Relation** 两个核心实体：
 |--------|---------|------|------|------------|
 | Claude sidechain 拆分 | spike 适配器投影含 subagent 的 Claude 会话，验证 sidechain → 独立 session + spawned_by(toolUseId 锚点) 无信息损失 | **通过**（2026-07-21，80 个子 session，relation/锚点不变量 0 错误） | 见下 | spike/0001-adapter-prototypes |
 | Kimi 多 wire | spike 适配器投影含子 agent 的 Kimi 会话，验证每个 wire.jsonl → 一个 session、parentAgentId → spawned_by（无 toolCallId）可行 | **通过**（2026-07-21，189 个子 session，0 不变量错误） | 见下 | 同上 |
-| Devin 森林 | spike 适配器投影多 root 的 Devin 会话，验证 sibling_attempt + isMainChain 能还原主链 | 待验证 | — | 同上 |
+| Devin 森林 | spike 适配器投影多 root 的 Devin 会话，验证 sibling_attempt + isMainChain 能还原主链 | **通过**（2026-07-21，6 个 Devin 会话 → 52 个 AHS session：6 主链 + 46 sibling_attempt，0 不变量错误） | 见下 | 同上 |
 
 **Claude Code 验证经验**：
 
@@ -77,6 +77,14 @@ AHS 只有 **Session** 和 **Relation** 两个核心实体：
 - 多 wire → 多 session 干净利落：887 条 wire 中 189 条是 sub-agent，全部 `parentAgentId: "main"`（语料内无嵌套），每条 wire 产出独立 session + `spawned_by`（无 toolCallId，AC-0002-B-3 路径）。
 - 子 agent 的任务 prompt 在子 wire 中以 `system_trigger` 注入——落入 `harness_message`，父子 session 的内容边界清晰，无重复投影。
 - 研究文档一处过时：state.json 的 agent type 实测为 `"sub"` 而非 `"subagent"`。
+
+**Devin 验证经验**（森林是真实的：6 个会话的 root 数为 4/26/4/4/7/7）：
+
+- `sibling_attempt` + `isMainChain` 干净捕获森林，树内分叉（单父多子）也被 AHS tree 零修改吸收。
+- **一处 Spec 级修正**：`main_chain_id` 不是 root id，而是胜出链的**末端节点**——主链识别需从 tip 沿 parent_node_id 上溯到 root（适配器已实现，兜底取最小 root id）。
+- 意外发现：分支重试会把同一 message 复制进兄弟节点（2,250 节点 vs 1,192 个 distinct message_id）——适配器按"树内首次出现"去重，跨 root 共享的消息在每个 sibling session 各保留一份（session 自包含原则）。
+- `compact/prior_node_ids`（447 节点）实为分支重试的 lineage 标记而非 compaction，按分支机制丢弃；真正的 compaction 信号 `summarized_from` 在语料中 0 例，正式适配器需留意。
+- Devin 的 system 消息（intro/subagent profile）落入 `harness_message` 且体积可能很大——与 Spec §八 的 blob 外置开放问题相关。
 
 三案例任一无法无损（保留判据内）表达时，退回修订本模型。
 
