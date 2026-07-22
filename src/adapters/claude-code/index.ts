@@ -23,10 +23,10 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   their resolved parent to their children, so the kept tree stays
  *   connected.
  * - `attachment` records with subtype `goal_status` are harness goal
- *   verdicts (control plane) and become `goal_update` records. The source
- *   field is `met: boolean` (not a status string) — mapped to
- *   "met" / "unmet"; `reason` is kept when present. The source has no goal
- *   id, so goalId is omitted.
+ *   verdicts (control plane) and become `goal_update` records. Mapping:
+ *   `sentinel: true` (goal registered, no verdict yet) → "pending";
+ *   verdict records map `met: boolean` → "met" / "unmet". `reason` is kept
+ *   when present. The source has no goal id, so goalId is omitted.
  * - Assistant `tool_use` blocks are split out of the assistant message into
  *   their own `tool_call` records. Chain rule: within one source record the
  *   emitted records form a chain (assistant_message → tool_call → tool_call …
@@ -83,6 +83,7 @@ interface RawLine {
   attachment?: {
     type?: string;
     met?: boolean;
+    sentinel?: boolean;
     reason?: string;
     condition?: string;
     iterations?: number;
@@ -289,17 +290,25 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
       line.attachment?.type === "goal_status" &&
       uuid !== undefined
     ) {
-      // Harness goal verdict (control plane) → goal_update. The source field
-      // is `met: boolean`; map to a status string. goalId is omitted — the
-      // source identifies goals only by free-text `condition`.
+      // Harness goal verdict (control plane) → goal_update. Mapping: the
+      // initial sentinel record (goal registered, no verdict yet) →
+      // "pending"; verdict records map `met: boolean` → "met" / "unmet".
+      // goalId is omitted — the source identifies goals only by free-text
+      // `condition`.
       const reason = line.attachment.reason;
+      const status =
+        line.attachment.sentinel === true
+          ? ("pending" as const)
+          : line.attachment.met === true
+            ? ("met" as const)
+            : ("unmet" as const);
       emit({
         ...base,
         recordId: uuid,
         parentId: nextParent(),
         seq: nextSeq(),
         type: "goal_update",
-        status: line.attachment.met === true ? "met" : "unmet",
+        status,
         ...(reason !== undefined ? { reason } : {}),
       });
       emitted = true;

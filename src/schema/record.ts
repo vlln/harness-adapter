@@ -95,7 +95,8 @@ export const AhsRecordSchema = z.discriminatedUnion("type", [
   BaseRecordSchema.extend({
     type: z.literal("goal_update"),
     goalId: z.string().optional(),
-    status: z.string(),
+    /** Closed verdict set: sentinel (goal registered) / met / not met. */
+    status: z.enum(["pending", "met", "unmet"]),
     reason: z.string().optional(),
   }),
 ]);

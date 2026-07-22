@@ -118,7 +118,7 @@ describe("claude-code adapter", () => {
       const initial = records[0]!;
       expect(initial.type).toBe("goal_update");
       if (initial.type === "goal_update") {
-        expect(initial.status).toBe("unmet");
+        expect(initial.status).toBe("pending"); // sentinel: goal registered, no verdict yet
         expect(initial.reason).toBeUndefined();
         expect(initial.goalId).toBeUndefined();
         expect(initial.parentId).toBeNull(); // session root

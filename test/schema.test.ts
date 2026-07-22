@@ -88,6 +88,7 @@ describe("records", () => {
     { ...base, type: "compaction" },
     { ...base, type: "goal_update", status: "met", reason: "greeting contained hello" },
     { ...base, type: "goal_update", goalId: "goal-1", status: "unmet" },
+    { ...base, type: "goal_update", status: "pending" },
   ];
 
   it.each(valid)("parses a valid $type record", (record) => {
@@ -106,6 +107,11 @@ describe("records", () => {
 
   it("rejects a goal_update without status", () => {
     const bad = { ...base, type: "goal_update", reason: "no status" };
+    expect(AhsRecordSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a goal_update with a status outside the closed enum", () => {
+    const bad = { ...base, type: "goal_update", status: "in-progress" };
     expect(AhsRecordSchema.safeParse(bad).success).toBe(false);
   });
 
