@@ -64,7 +64,13 @@ AHS 只有 **Session** 和 **Relation** 两个核心实体：
 - 子代理文件首条记录 `parentUuid: null`——子 session 天然是自包含单根树，跨 session 链接完全由 Relation 承担，模型契合干净。
 - 锚点：meta.json 实测字段 `{agentType, description, toolUseId}`（`spawnDepth` 常缺席）；子代理 record 上的 `sourceToolUseID` 可作 toolUseId 回退。
 - 真实数据暴露的两个树结构问题（适配器已解决，属源数据怪癖非模型缺陷）：丢弃型记录可作为"链重启"根（需重锚定到链尾）；存在只含 `mode` 行的空会话文件（投影后 0 record，跳过）。
-- 发现一项超出模型的源端现实：真实数据有 862 处 tool_call 无配对 tool_result（中断/取消/重发）。这是 AC 层2 配对断言的边界，处理策略（合成占位 result 或显式缺失标记）已列入 Spec 待定。
+- 发现一项超出模型的源端现实：真实数据有 862 处 tool_call 无配对 tool_result（中断/取消/重发）。这是 AC 层2 配对断言的边界，处理策略（合成占位 result 或显式缺失标记）已列入 Spec 待定。**（2026-07-21 后续：已通过 `tool_call.status` 三态解决，见 Spec 第五节与 AC-0002-N-6）**
+
+**Codex 验证经验（意外收获，2026-07-21）**：
+
+- 研究文档已过时：现行 Codex **有** sub-agent 机制——子线程 rollout 文件的 `session_meta.source` 为 `{subagent:{thread_spawn:{parent_thread_id,...}}}`。适配器将其映射为 `spawned_by` relation（真实数据 3 例，不变量通过）——两实体模型对研究调研之外的新情况同样成立。
+- toolCallId 锚点可恢复（父线程 `sub_agent_activity.event_id` 即 `call_*` id），当前 spike 省略，留待正式适配器实现。
+- 暴露一个模型边界：`session_meta.id` 是**线程 id** 而非文件 id——恢复/fork 的会话跨多个 rollout 文件，共享线程 lineage。AHS 目前一个文件 = 一个 session，跨文件的同线程分组无表达。已列入 Spec 开放问题（候选：Relation 增加类型，或 Manifest 增加 threadId 分组字段）。
 
 三案例任一无法无损（保留判据内）表达时，退回修订本模型。
 
