@@ -8,7 +8,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| [01-plan-kimi-code.md](01-plan-kimi-code.md) | Kimi Code 正式适配器（多 wire → 多 session） | pending | — |
+| [01-plan-kimi-code.md](01-plan-kimi-code.md) | Kimi Code 正式适配器（多 wire → 多 session） | done | [01-report-kimi-code.md](01-report-kimi-code.md) |
 
 ## 适配器要点
 
