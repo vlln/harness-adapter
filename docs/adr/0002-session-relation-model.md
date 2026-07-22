@@ -55,7 +55,7 @@ AHS 只有 **Session** 和 **Relation** 两个核心实体：
 | 验证项 | 复现步骤 | 结论 | 经验 | 验证 Branch |
 |--------|---------|------|------|------------|
 | Claude sidechain 拆分 | spike 适配器投影含 subagent 的 Claude 会话，验证 sidechain → 独立 session + spawned_by(toolUseId 锚点) 无信息损失 | **通过**（2026-07-21，80 个子 session，relation/锚点不变量 0 错误） | 见下 | spike/0001-adapter-prototypes |
-| Kimi 多 wire | spike 适配器投影含子 agent 的 Kimi 会话，验证每个 wire.jsonl → 一个 session、parentAgentId → spawned_by（无 toolCallId）可行 | 待验证 | — | 同上 |
+| Kimi 多 wire | spike 适配器投影含子 agent 的 Kimi 会话，验证每个 wire.jsonl → 一个 session、parentAgentId → spawned_by（无 toolCallId）可行 | **通过**（2026-07-21，189 个子 session，0 不变量错误） | 见下 | 同上 |
 | Devin 森林 | spike 适配器投影多 root 的 Devin 会话，验证 sibling_attempt + isMainChain 能还原主链 | 待验证 | — | 同上 |
 
 **Claude Code 验证经验**：
@@ -71,6 +71,12 @@ AHS 只有 **Session** 和 **Relation** 两个核心实体：
 - 研究文档已过时：现行 Codex **有** sub-agent 机制——子线程 rollout 文件的 `session_meta.source` 为 `{subagent:{thread_spawn:{parent_thread_id,...}}}`。适配器将其映射为 `spawned_by` relation（真实数据 3 例，不变量通过）——两实体模型对研究调研之外的新情况同样成立。
 - toolCallId 锚点可恢复（父线程 `sub_agent_activity.event_id` 即 `call_*` id），当前 spike 省略，留待正式适配器实现。
 - 暴露一个模型边界：`session_meta.id` 是**线程 id** 而非文件 id——恢复/fork 的会话跨多个 rollout 文件，共享线程 lineage。AHS 目前一个文件 = 一个 session，跨文件的同线程分组无表达。已列入 Spec 开放问题（候选：Relation 增加类型，或 Manifest 增加 threadId 分组字段）。
+
+**Kimi Code 验证经验**：
+
+- 多 wire → 多 session 干净利落：887 条 wire 中 189 条是 sub-agent，全部 `parentAgentId: "main"`（语料内无嵌套），每条 wire 产出独立 session + `spawned_by`（无 toolCallId，AC-0002-B-3 路径）。
+- 子 agent 的任务 prompt 在子 wire 中以 `system_trigger` 注入——落入 `harness_message`，父子 session 的内容边界清晰，无重复投影。
+- 研究文档一处过时：state.json 的 agent type 实测为 `"sub"` 而非 `"subagent"`。
 
 三案例任一无法无损（保留判据内）表达时，退回修订本模型。
 

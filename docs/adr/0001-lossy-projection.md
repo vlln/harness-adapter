@@ -52,7 +52,7 @@ AHS 定义为**有损但有原则**的投影格式：
 
 | 验证项 | 复现步骤 | 结论 | 经验 | 验证 Branch |
 |--------|---------|------|------|------------|
-| 首批适配器投影时不出现"保留判据内的信息无处安放" | 在 spike/* 分支实现 Claude Code / Codex / Kimi 三个适配器原型，投影真实会话，记录所有被迫丢弃但属于保留判据的信息 | **Claude Code：通过**（2026-07-21）；**Codex：通过**（2026-07-21）；Kimi 待验证 | 见下 | spike/0001-adapter-prototypes |
+| 首批适配器投影时不出现"保留判据内的信息无处安放" | 在 spike/* 分支实现 Claude Code / Codex / Kimi 三个适配器原型，投影真实会话，记录所有被迫丢弃但属于保留判据的信息 | **全部通过**（Claude Code / Codex / Kimi，2026-07-21） | 见下 | spike/0001-adapter-prototypes |
 
 **Claude Code 验证经验**（173 个真实会话 / 66,339 records 只读 sweep，0 schema 错误）：
 
@@ -67,6 +67,15 @@ AHS 定义为**有损但有原则**的投影格式：
 - 冗余去重策略成立：`response_item` 为内容规范表示，`event_msg` 仅用于 token_count/生命周期/compaction/goal；`last_token_usage` 非增量而是最近一次请求的全量——不去重会高估 usage ~1.3×，这条已写入适配器注释，值得规范层面知晓。
 - `developer` 角色消息恰好落入新类型 `harness_message`（真实数据 518 条，是该类型的首个真实用例）；`turn_aborted`（研究文档未覆盖）映射为 `turn_boundary` end。
 - 加密推理（20,516 条）按本 ADR 丢弃——这是仅次于内容的第三大类源数据，丢弃后历史语义完整性不受影响的判断在真实数据上成立。
+
+**Kimi Code 验证经验**（698 个真实 session 目录 / 887 条 wire → 862 个 AHS session / 75,347 records，0 不变量错误，usage 与源端 turn-scope 总量精确相等）：
+
+- 保留判据内无处安放的信息：**未发现**（AC 元标准第三次成立，三个代表性 harness 全部通过）。
+- `harness_message` 在 Kimi 上成为主力类型：`origin.kind` 的 `injection`/`system_trigger`/`background_task`/`skill_activation` 全部落入，源端标注充分——该类型的引入在三个 harness 中两个有真实大规模用例（Codex developer 消息、Kimi 注入消息）。
+- `goal_update` 的完整生命周期在 Kimi 上跑通：`goal.create` → pending（带 goalId+objective，Kimi 是三家唯一有 goalId 的）、`goal.update` 判定 → met/unmet；进度遥测（turnsUsed/tokensUsed，约占 90%）按本 ADR 丢弃无压力。
+- 源端不可得补充：Kimi 的 cwd 是 hash（`wd_` id 不可还原路径）、CLI 版本不存在、`forked` 事件不带源 session id（forked_from 无法建立）。Spec 需注明这些字段对部分 harness 可为空/unknown。
+- 一处保真缺口：`context.undo`（撤销已发消息）无法在 append-only 投影上回溯应用，真实数据仅 1 例，记录在适配器注释。
+- `plans/*.md` 保留为 plan 内容块（文件侧投影，流内位置不可恢复）——"评审者必须看到 plan 是什么"的保留判据判断。
 
 若验证中出现保留判据内信息无处安放，则本 ADR 被推翻，退回修订保留判据或数据模型（见 AC 元标准）。
 
