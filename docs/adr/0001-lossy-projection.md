@@ -2,7 +2,7 @@
 title: ADR-0001 有损投影：AHS 是交换/消费格式而非备份
 description: AHS 采用有损投影，保留判据为评审者/评测系统理解"发生了什么、花了多少代价"所需的信息；不留 raw/extra 逃生舱；无损性由源数据提供。
 type: adr
-status: draft
+status: proposed
 created: 2026-07-21T11:48:45Z
 ---
 

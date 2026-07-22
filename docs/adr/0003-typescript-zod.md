@@ -2,7 +2,7 @@
 title: ADR-0003 技术选型：TypeScript strict + zod v4
 description: AHS schema 用 TypeScript strict + zod v4 定义（可导出 JSON Schema），适配器接口为 AsyncIterable 只读接口，先行冻结。
 type: adr
-status: draft
+status: proposed
 created: 2026-07-21T11:48:45Z
 ---
 

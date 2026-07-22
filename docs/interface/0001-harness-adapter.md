@@ -2,7 +2,7 @@
 title: Interface-0001 HarnessAdapter 契约
 description: HarnessAdapter 只读投影接口：listSessions / readRecords，AsyncIterable 返回 AHS Manifest 与 Record；能力声明与错误语义。
 type: interface
-status: draft
+status: proposed
 created: 2026-07-21T11:48:45Z
 ---
 
@@ -74,6 +74,11 @@ export interface HarnessAdapter {
 | | `"partial"` | 源端部分不可得（如 Cursor 消息正文在云端） |
 | | `"none"` | 源端无可访问会话数据（如 OpenCode 无持久化、Devin 桌面端云端） |
 | `capabilities.control` | boolean | 是否能控制会话（启动/停止）——当前阶段恒为 false，控制面走 ACP 不在本契约内 |
+
+## 已知限制与演进方向
+
+- 无 `readManifest(sessionId)` 方法：写入方取单个 session 的 Manifest 需遍历 `listSessions()`。spike 验证中不构成阻塞，正式实现时评估是否补充。
+- 归档读写契约见 [0002-archive.md](0002-archive.md)。
 
 ## 错误语义
 

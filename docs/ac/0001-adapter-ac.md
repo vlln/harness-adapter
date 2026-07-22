@@ -2,7 +2,7 @@
 title: AC-0001 适配器验收标准
 description: Harness 适配器的四层验收标准（合法/完整/保真/可用）+ 元标准与执行位置，覆盖全部 HarnessAdapter 实现。
 type: ac
-status: draft
+status: proposed
 created: 2026-07-21T11:48:45Z
 ---
 
