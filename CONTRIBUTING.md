@@ -20,6 +20,7 @@ npx vitest run     # 运行测试
 |------|------|
 | `package.json` | 依赖声明、scripts（`typecheck` / `test`）、ESM 入口 |
 | `tsconfig.json` | TypeScript strict 配置 |
+| `vitest.config.mts` | vitest 配置：v8 覆盖率 provider、include `src/**`、四项阈值 ≥ 80% |
 | `src/index.ts` | 库入口（导出 schema 与 store 接口） |
 
 ---
@@ -122,12 +123,16 @@ devloop 特有约定：
 |------|------|
 | `npx tsc --noEmit` | 类型检查（提交前必过） |
 | `npx vitest run` | 单元测试 |
+| `npx vitest run --coverage` | 单元测试 + v8 覆盖率（statements/branches/functions/lines 阈值 ≥ 80%，CI 必过） |
+| `npm run test:e2e` | 系统测试冒烟（CLI e2e 框架占位；真实 CLI 用例随适配器在 DEVELOP 落地） |
+| `npm run check:report` | 提测门禁：校验 docs/plans 下 Report 完整性（frontmatter / AC 标注 / commit 引用） |
 
 ### 测试目录
 
 | 层级 | 目录路径 | 说明 |
 |------|---------|------|
 | 单元测试 | `test/` | vitest，覆盖 schema 校验与适配器逻辑 |
+| 系统测试 | `test/e2e/` | CLI 端到端（vite-node 驱动；当前仅冒烟占位） |
 
 ---
 
