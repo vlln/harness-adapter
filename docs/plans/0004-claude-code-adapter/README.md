@@ -8,7 +8,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| [01-plan-claude-code.md](01-plan-claude-code.md) | Claude Code 正式适配器（graph + sidechain 拆分） | pending | — |
+| [01-plan-claude-code.md](01-plan-claude-code.md) | Claude Code 正式适配器（graph + sidechain 拆分） | done | [01-report-claude-code.md](01-report-claude-code.md) |
 
 ## 适配器要点
 
