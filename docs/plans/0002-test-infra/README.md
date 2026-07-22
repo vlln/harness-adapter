@@ -8,8 +8,8 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| [01-plan-ci-pipeline.md](01-plan-ci-pipeline.md) | GH Actions 工作流 + 覆盖率阈值 + Node 版本固定 | pending | — |
-| [02-plan-gates.md](02-plan-gates.md) | 提测门禁脚本 + MR 门禁（分支保护）+ 全部自证 | pending | — |
+| [01-plan-ci-pipeline.md](01-plan-ci-pipeline.md) | GH Actions 工作流 + 覆盖率阈值 + Node 版本固定 | done | [01-report-ci-pipeline.md](01-report-ci-pipeline.md) |
+| [02-plan-gates.md](02-plan-gates.md) | 提测门禁脚本 + MR 门禁（分支保护）+ 全部自证 | done | [02-report-gates.md](02-report-gates.md) |
 
 ## 完成判据
 

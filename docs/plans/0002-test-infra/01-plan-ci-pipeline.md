@@ -2,7 +2,7 @@
 title: Plan 01 CI 流水线
 description: GitHub Actions 工作流：tsc + vitest + v8 覆盖率阈值；固定 Node 22；push/PR 触发。
 type: plan
-status: pending
+status: done
 created: 2026-07-22T07:33:05Z
 ---
 
