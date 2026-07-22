@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "vite-node test/e2e/smoke.ts",
+    "test:e2e": "vite-node test/e2e/smoke.ts && vite-node test/e2e/adapter-chains.ts",
     "check:report": "vite-node scripts/check-report.ts"
   },
   "devDependencies": {

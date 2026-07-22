@@ -1,12 +1,9 @@
 /**
- * System-test (CLI end-to-end) smoke entry — framework placeholder.
+ * System-test (CLI end-to-end) smoke entry — framework liveness check.
  *
- * The real e2e cases run the consumer CLI (examples/ahs-report.ts) against
- * synthetic fixture archives. That CLI lives on the unmerged spike branch
- * today and lands with the adapters in DEVELOP, so per the devloop rule
- * ("the framework must start successfully even with empty/trivial cases")
- * this placeholder only asserts that the runner works and can load the
- * library entry — the same substrate the real CLI cases will use.
+ * Asserts that the e2e runner works and can load the library entry — the
+ * same substrate the real CLI cases in test/e2e/adapter-chains.ts use
+ * (adapter → archive → ahs-report CLI, run right after this smoke).
  *
  * Run with: npm run test:e2e
  */
@@ -22,5 +19,5 @@ if (Object.keys(ahs).length === 0) {
 
 console.log(
   `[e2e smoke] OK — runner works, library entry loaded (${Object.keys(ahs).length} exports). ` +
-    "Real CLI e2e cases arrive in DEVELOP with the adapters.",
+    "Real CLI chains run next (test/e2e/adapter-chains.ts).",
 );
