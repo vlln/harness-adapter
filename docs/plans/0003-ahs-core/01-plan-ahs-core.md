@@ -2,7 +2,7 @@
 title: Plan 01 AHS 核心层（validate + archive + report）
 description: 正式实现不变量检查器、AHS 归档读写（含 blob 外置）、报告消费方；TDD；覆盖率 ≥80%。
 type: plan
-status: pending
+status: done
 created: 2026-07-22T10:10:23Z
 ---
 

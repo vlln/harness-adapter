@@ -10,7 +10,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| [01-plan-ahs-core.md](01-plan-ahs-core.md) | 不变量检查器 + 归档读写 + 报告消费方，TDD 正式化 | pending | — |
+| [01-plan-ahs-core.md](01-plan-ahs-core.md) | 不变量检查器 + 归档读写 + 报告消费方，TDD 正式化 | done | [01-report-ahs-core.md](01-report-ahs-core.md) |
 
 ## 下游容器
 
