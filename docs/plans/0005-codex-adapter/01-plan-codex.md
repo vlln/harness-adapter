@@ -2,7 +2,7 @@
 title: Plan 01 Codex 正式适配器
 description: 按 active 契约正式实现 Codex 适配器；TDD；合成 fixture；真实数据 sweep 留证。
 type: plan
-status: pending
+status: done
 created: 2026-07-22T10:20:00Z
 ---
 

@@ -8,7 +8,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| [01-plan-codex.md](01-plan-codex.md) | Codex 正式适配器（stream 合成链 + 冗余去重） | pending | — |
+| [01-plan-codex.md](01-plan-codex.md) | Codex 正式适配器（stream 合成链 + 冗余去重） | done | [01-report-codex.md](01-report-codex.md) |
 
 ## 适配器要点
 
