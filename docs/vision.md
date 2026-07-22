@@ -2,7 +2,7 @@
 title: Vision — harness-adapter 顶层愿景
 description: 编码 Agent Harness 的中立通用抽象库与离线交换标准（AHS），消除生态碎片化、解除厂商锁定。
 type: vision
-status: proposed
+status: active
 created: 2026-07-21T11:48:45Z
 ---
 

@@ -2,7 +2,7 @@
 title: Interface-0002 AHS 归档读写契约
 description: AHS 磁盘归档的写入/读取 API：exportSessions/writeArchive/readManifest/readRecords/readBlob，blob 外置与完整性校验语义。
 type: interface
-status: proposed
+status: active
 created: 2026-07-21T13:30:00Z
 ---
 

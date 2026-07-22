@@ -2,7 +2,7 @@
 
 | 字段 | 值 |
 |------|-----|
-| **当前阶段** | `DESIGN` |
+| **当前阶段** | `TEST_INFRA` |
 | **设计评估** | — |
 
 Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):"` 重建上下文。
@@ -31,11 +31,11 @@ Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):
 
 ## 行为边界
 
-当前处于 **DESIGN** 阶段：
+当前处于 **TEST_INFRA** 阶段：
 
-- 只做契约文档工作（Vision / Spec / AC / ADR / Interface 的编写与修订），目标是把契约推进到 `proposed` 并通过审查门禁。
-- 不写正式功能代码。已有代码骨架（src/schema、src/store、test）是 INIT 前已完成的草案实现，作为设计的参考存在。
-- 为验证/推翻设计而写的适配器原型走快速通道 A（`spike/*` 分支，保留不合并，产出回流为 ADR 验证段或 Spec 修订）。
+- 契约已冻结（2026-07-21 审查通过）：Vision/Spec/AC/Interface = `active`，ADR = `accepted`。冻结后不可原地修改——契约变更须退回 DESIGN 走 ADR 修订流程（typo、措辞澄清等非破坏性修改除外，走快速通道 B）。
+- 本阶段只做一次性基建：`ci/*` `test/*` `build/*` 分支 → develop（CI 流水线、覆盖率、MR 门禁、系统测试框架）。
+- 不写正式业务功能代码。正式适配器开发等 TEST_INFRA 门禁通过后在 DEVELOP 阶段以 `feat/*` 执行容器进行（spike/0001-adapter-prototypes 上的 4 个适配器原型为设计证据，保留不合并，作为正式实现的参考底稿）。
 
 ### 快速通道（项目自定义）
 

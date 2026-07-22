@@ -2,7 +2,7 @@
 title: ADR-0002 Session/Relation 两实体模型
 description: AHS 只有 Session 和 Relation 两个实体；Session = agent profile 的实例化、单根 tree 历史；subagent 建模为独立 session + spawned_by 关系。
 type: adr
-status: proposed
+status: accepted
 created: 2026-07-21T11:48:45Z
 ---
 
