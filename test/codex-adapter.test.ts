@@ -5,13 +5,20 @@
  * Fixture set:
  * - a1: full-featured main session — redundant response_item/event_msg/
  *   top-level duplicates, encrypted reasoning, web_search_call, model_change,
- *   custom_tool_call, spawn_agent + sub_agent_activity (child anchor),
- *   compaction pair, goal verdicts, token_count with an unchanged-total
- *   duplicate.
- * - b2: sub-agent child of a1 (thread_spawn) with ancestor lineage headers.
- * - c3: resumed session (forked_from lineage), turn_aborted with an unpaired
+ *   custom_tool_call, spawn_agent + sub_agent_activity (child anchor +
+ *   forward link), compaction pair, goal verdicts, token_count with an
+ *   unchanged-total duplicate.
+ * - b2: sub-agent child of a1 (thread_spawn) with ancestor lineage headers
+ *   (invocation wins over lineage).
+ * - c3: resumed session (forked_from a1), turn_aborted with an unpaired
  *   tool_call, no token_count at all, truncated tail line.
  * - d4: session_meta only (no projectable content) — must be skipped.
+ * - g7: session that crashed right after a user_message (its last record is
+ *   a user_message).
+ * - e5: resumed from g7, re-answering the pending prompt — sibling_attempt
+ *   anchored at g7's user_message (AC-0002-N-7 type judgment).
+ * - f6: resumed from c3 (chained fork) — forked_from anchored at c3's last
+ *   record; also makes f6 the HEAD of the {a1, c3, f6} lineage group.
  */
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
@@ -42,6 +49,10 @@ const A1 = "019f8000-0000-7000-8000-0000000000a1";
 const B2 = "019f8000-0000-7000-8000-0000000000b2";
 const C3 = "019f8000-0000-7000-8000-0000000000c3";
 const D4 = "019f8000-0000-7000-8000-0000000000d4";
+const E5 = "019f8000-0000-7000-8000-0000000000e5";
+const F6 = "019f8000-0000-7000-8000-0000000000f6";
+const G7 = "019f8000-0000-7000-8000-0000000000g7";
+const ALL_CONTENT = [A1, B2, C3, E5, F6, G7];
 
 const tmp = mkdtempSync(path.join(tmpdir(), "codex-adapter-test-"));
 afterAll(() => {
@@ -81,8 +92,8 @@ describe("codex adapter", () => {
     byId = new Map(sessions.map((s) => [s.manifest.sessionId, s]));
   });
 
-  it("lists exactly the three content-bearing sessions (empty file skipped)", () => {
-    expect([...byId.keys()].sort()).toEqual([A1, B2, C3].sort());
+  it("lists exactly the six content-bearing sessions (empty file skipped)", () => {
+    expect([...byId.keys()].sort()).toEqual([...ALL_CONTENT].sort());
     expect(byId.has(D4)).toBe(false);
   });
 
@@ -127,21 +138,49 @@ describe("codex adapter", () => {
     expect(validateSessions(sessions)).toEqual([]);
   });
 
-  it("AC-0002-N-2: thread_spawn child gets an invocation back-link to the parent", () => {
+  it("AC-0002-N-2: thread_spawn child gets the invocation two-link (anchor + forward link reconciled)", () => {
     const child = byId.get(B2)!;
-    // TODO(Plan 02): atRecordId anchor (call_spwn3 → spawn_agent tool_call
-    // record) + the parent's tool_result.sessionId forward link.
-    expect(child.manifest.invocation).toEqual({ sessionId: A1 });
+    expect(child.manifest.invocation?.sessionId).toBe(A1);
+    // Anchor: resolved via the parent's sub_agent_activity
+    // (agent_thread_id b2 → event_id call_spwn3 → that tool_call's recordId).
+    const anchorId = child.manifest.invocation?.atRecordId;
+    expect(anchorId).toBeDefined();
     const parent = byId.get(A1)!;
-    const spawning = parent.records.find(
-      (r) => r.type === "tool_call" && r.toolCallId === "call_spwn3",
-    );
-    expect(spawning).toBeDefined();
-    expect(spawning!.type === "tool_call" && spawning!.name).toBe("spawn_agent");
+    const anchor = parent.records.find((r) => r.recordId === anchorId);
+    expect(anchor).toBeDefined();
+    expect(anchor!.type === "tool_call" && anchor!.name).toBe("spawn_agent");
+    expect(anchor!.type === "tool_call" && anchor!.toolCallId).toBe("call_spwn3");
+    // Forward link: the parent's paired tool_result carries the child id.
+    const callId = anchor!.type === "tool_call" ? anchor!.toolCallId : "";
+    const paired = parent.records.find((r) => r.type === "tool_result" && r.toolCallId === callId);
+    expect(paired).toBeDefined();
+    expect(paired!.type === "tool_result" && paired!.sessionId).toBe(B2);
   });
 
-  it("forked_from lineage: a resumed rollout maps its most recent lineage ancestor", () => {
-    expect(byId.get(C3)!.manifest.lineage).toEqual({ type: "forked_from", sessionId: A1 });
+  it("AC-0002-N-7: lineage anchors resolve and the type is judged by the anchor record", () => {
+    // c3 forked_from a1, anchored at a1's last record (a turn_boundary).
+    const a1Last = byId.get(A1)!.records.at(-1)!;
+    expect(a1Last.type).toBe("turn_boundary");
+    expect(byId.get(C3)!.manifest.lineage).toEqual({
+      type: "forked_from",
+      sessionId: A1,
+      atRecordId: a1Last.recordId,
+    });
+    // f6 chained fork from c3, anchored at c3's last record.
+    const c3Last = byId.get(C3)!.records.at(-1)!;
+    expect(byId.get(F6)!.manifest.lineage).toEqual({
+      type: "forked_from",
+      sessionId: C3,
+      atRecordId: c3Last.recordId,
+    });
+    // e5 anchored at g7's last record — a user_message ⇔ sibling_attempt.
+    const g7Last = byId.get(G7)!.records.at(-1)!;
+    expect(g7Last.type).toBe("user_message");
+    expect(byId.get(E5)!.manifest.lineage).toEqual({
+      type: "sibling_attempt",
+      sessionId: G7,
+      atRecordId: g7Last.recordId,
+    });
     // The sub-agent child carries invocation, NOT lineage, despite its lineage headers.
     expect(byId.get(B2)!.manifest.invocation).toBeDefined();
     expect(byId.get(B2)!.manifest.lineage).toBeUndefined();
@@ -153,11 +192,15 @@ describe("codex adapter", () => {
       "修复登录页的崩溃 bug",
       "请审查 src/login.ts 的改动",
       "继续，补充一个回归测试",
+      "把缓存层也一起优化了吧",
+      "换个思路：直接重构登录模块",
     ]);
     expect(textsOf(all, "assistant_message")).toEqual([
       "我先定位登录页代码。",
       "已修复：崩溃原因是空指针，已加防护并交给子代理审查。",
       "审查完成：修复正确，无回归风险。",
+      "好的，我先起草重构计划。",
+      "缓存层已优化：为登录查询加了 memo 缓存。",
     ]);
   });
 
@@ -272,11 +315,26 @@ describe("codex adapter", () => {
     for await (const m of adapter.listSessions({ harness: "kimi" })) wrongHarness.push(m.sessionId);
     expect(wrongHarness).toEqual([]);
     const byCwd: string[] = [];
-    for await (const m of adapter.listSessions({ cwd: "/workspace/demo" })) byCwd.push(m.sessionId);
-    expect(byCwd.sort()).toEqual([A1, B2, C3].sort());
+    for await (const m of adapter.listSessions({ cwd: "/workspace/demo", includeForks: true })) {
+      byCwd.push(m.sessionId);
+    }
+    expect(byCwd.sort()).toEqual([...ALL_CONTENT].sort());
     const noMatch: string[] = [];
     for await (const m of adapter.listSessions({ cwd: "/elsewhere" })) noMatch.push(m.sessionId);
     expect(noMatch).toEqual([]);
+  });
+
+  it("includeForks (interface/0001): default lists only lineage-group HEADs; true lists everything", async () => {
+    const adapter = new CodexAdapter(SESSIONS_DIR);
+    const heads: string[] = [];
+    for await (const m of adapter.listSessions()) heads.push(m.sessionId);
+    // HEAD = most recently updated per lineage group: f6 for {a1, c3, f6},
+    // e5 for {g7, e5}; b2 (invocation-only) is its own group and never folds.
+    expect(heads.sort()).toEqual([B2, E5, F6].sort());
+
+    const all: string[] = [];
+    for await (const m of adapter.listSessions({ includeForks: true })) all.push(m.sessionId);
+    expect(all.sort()).toEqual([...ALL_CONTENT].sort());
   });
 
   it("readRecords throws for an unknown sessionId", async () => {

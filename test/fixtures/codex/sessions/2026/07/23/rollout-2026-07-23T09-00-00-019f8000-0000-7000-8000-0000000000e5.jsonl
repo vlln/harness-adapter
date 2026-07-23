@@ -1,0 +1,7 @@
+{"timestamp":"2026-07-23T09:00:00.000Z","type":"session_meta","payload":{"id":"019f8000-0000-7000-8000-0000000000e5","timestamp":"2026-07-23T09:00:00.000Z","cwd":"/workspace/demo","originator":"codex-tui","cli_version":"0.142.5","source":"cli","model_provider":"openai"}}
+{"timestamp":"2026-07-22T13:00:00.000Z","type":"session_meta","payload":{"id":"019f8000-0000-7000-8000-0000000000g7","timestamp":"2026-07-22T13:00:00.000Z","cwd":"/workspace/demo","cli_version":"0.142.5","source":"cli","model_provider":"openai"}}
+{"timestamp":"2026-07-23T09:00:00.100Z","type":"turn_context","payload":{"turn_id":"turn-e1","cwd":"/workspace/demo","workspace_roots":["/workspace/demo"],"model":"gpt-5.5"}}
+{"timestamp":"2026-07-23T09:00:00.200Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-e1","model_context_window":258400}}
+{"timestamp":"2026-07-23T09:00:05.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"缓存层已优化：为登录查询加了 memo 缓存。"}]}}
+{"timestamp":"2026-07-23T09:00:05.100Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":800,"cached_input_tokens":100,"output_tokens":120,"reasoning_output_tokens":40,"total_tokens":1020},"last_token_usage":{"input_tokens":800,"cached_input_tokens":100,"output_tokens":120,"reasoning_output_tokens":40,"total_tokens":1020}}}}
+{"timestamp":"2026-07-23T09:00:06.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-e1"}}
