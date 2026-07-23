@@ -6,33 +6,54 @@
  * (sessions + message_nodes; the other tables exist but are unused by the
  * adapter and therefore not created here).
  *
- * Fixture shape (see devin-adapter.test.ts for what each element exercises):
+ * Fixture shape (ADR-0005 linear sessions; see devin-adapter.test.ts for what
+ * each element exercises). Branch shapes mirror the observed real-data
+ * patterns: twin child nodes carrying the same assistant message_id, and
+ * cross-root shared system prefixes.
  *
- *   sunny-forest    main_chain_id = 5 (a TIP, not a root — research doc erratum)
- *     ├─ root 0  system → user → assistant(thinking+text+tool_call+metrics)
- *     │          → tool result → assistant(tool-only, metrics ride on the
- *     │            tool_call) → tool result → [dup result, skipped]
- *     │          → assistant(text + dangling tool_call → interrupted)
- *     │            → unknown-role node (skipped) → user (re-anchored)
- *     │            → malformed JSON node (skipped) → user (re-anchored)
- *     │            → empty assistant (skipped)
- *     │            → user with is_user_input=false → harness_message
- *     │          └─ branch-retry DUPLICATE of m-user-1 (skipped) → its
- *     │            assistant reply re-anchors to the first occurrence
- *     ├─ root 20 (dangling parent 99 — deleted-parent gap) → sibling
- *     └─ root 30 system → user → sibling
+ *   sunny-forest    main_chain_id = 18 (the base tree's TIP — real data:
+ *                   main_chain_id always points at a tip, not a root)
+ *     base tree (root 0) → AHS session "sunny-forest":
+ *       system → user → [TWIN BRANCH: nodes 2/3 both carry m-asst-2; node 2
+ *       is a dead end — no fork session] → tool result → assistant
+ *       (tool-only, metrics ride on the tool_call) → tool result → [dup
+ *       result node 7, skipped] → assistant(text + dangling tool_call →
+ *       interrupted) → unknown-role node (skipped) → user → malformed JSON
+ *       node (skipped) → user → empty assistant (skipped) → user with
+ *       is_user_input=false → harness_message → [REAL FORK: nodes 15/16
+ *       both carry m-asst-15 (text + tool_call tc-4) and BOTH continue;
+ *       node 15's subtree holds the last leaf so it stays main; node 16 →
+ *       "sunny-forest#fork-16" anchored at m-asst-15/tool_call/0
+ *       (forked_from); the fork's tool_result for tc-4 is ancestor-orphaned
+ *       → dropped; suffix = user + assistant]
+ *     root 30 (dangling parent 99 — deleted-parent gap): shares nothing →
+ *       anchor-less sibling_attempt → "sunny-forest#root-30"
+ *     root 40: leading copy of m-sys-0 → anchored at the harness_message
+ *       m-sys-0 (forked_from — the real-data cross-root anchor role) →
+ *       "sunny-forest#root-40", suffix user + assistant
+ *     root 50: leading copies of m-sys-0 + m-user-1 → anchored at the
+ *       user_message m-user-1 (sibling_attempt) → "sunny-forest#root-50",
+ *       suffix = one assistant re-answer
  *   quiet-pond      minimal: no metrics, no title, metadata NULL,
- *                   main_chain_id NULL (fallback: lowest root)
+ *                   main_chain_id NULL (HEAD fallback: latest record)
  *   odd-cove        invalid metadata JSON, main_chain_id 999 (unresolvable),
  *                   node without message_id (recordId falls back to node-<id>)
  *   hidden-one      hidden = 1 → never listed
  *   cycle-gone      two nodes parenting each other → no roots → not listed
+ *
+ * AC-0002-B-4: createDevinFixture takes an optional sunnyMainChainId —
+ * flipping it (18 = base tip → 42 = root-40 tip) must leave the session set
+ * byte-identical and move only the HEAD yielded by default listSessions.
  */
 
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 
 export const T0 = 1752000000; // sunny-forest created_at (unix seconds)
+
+/** Base-tree tip node (default winner) and root-40 tip node (flipped winner). */
+export const BASE_TIP_NODE = 18;
+export const ROOT40_TIP_NODE = 42;
 
 interface FixtureSession {
   id: string;
@@ -56,63 +77,65 @@ interface FixtureNode {
   createdAt: number;
 }
 
-const SESSIONS: FixtureSession[] = [
-  {
-    id: "sunny-forest",
-    workingDirectory: "/work/alpha",
-    model: "claude-test-medium",
-    createdAt: T0,
-    lastActivityAt: T0 + 3600,
-    title: "Alpha Refactor",
-    mainChainId: 5,
-    metadata: JSON.stringify({ total_credit_cost: 7, total_acu_cost: 0.0 }),
-  },
-  {
-    id: "quiet-pond",
-    workingDirectory: "/work/beta",
-    model: "devin-mini",
-    createdAt: T0 + 100000,
-    lastActivityAt: T0 + 100000,
-    title: null,
-    mainChainId: null,
-    metadata: null,
-  },
-  {
-    id: "odd-cove",
-    workingDirectory: "/work/gamma",
-    model: "devin-mini",
-    createdAt: T0 + 200000,
-    lastActivityAt: T0 + 200060,
-    title: null,
-    mainChainId: 999,
-    metadata: "not-json{{",
-  },
-  {
-    id: "hidden-one",
-    workingDirectory: "/work/hidden",
-    model: "devin-mini",
-    createdAt: T0 + 300000,
-    lastActivityAt: T0 + 300000,
-    title: null,
-    mainChainId: null,
-    hidden: true,
-    metadata: null,
-  },
-  {
-    id: "cycle-gone",
-    workingDirectory: "/work/cycle",
-    model: "devin-mini",
-    createdAt: T0 + 400000,
-    lastActivityAt: T0 + 400000,
-    title: null,
-    mainChainId: null,
-    metadata: null,
-  },
-];
+function sessions(sunnyMainChainId: number): FixtureSession[] {
+  return [
+    {
+      id: "sunny-forest",
+      workingDirectory: "/work/alpha",
+      model: "claude-test-medium",
+      createdAt: T0,
+      lastActivityAt: T0 + 3600,
+      title: "Alpha Refactor",
+      mainChainId: sunnyMainChainId,
+      metadata: JSON.stringify({ total_credit_cost: 7, total_acu_cost: 0.0 }),
+    },
+    {
+      id: "quiet-pond",
+      workingDirectory: "/work/beta",
+      model: "devin-mini",
+      createdAt: T0 + 100000,
+      lastActivityAt: T0 + 100000,
+      title: null,
+      mainChainId: null,
+      metadata: null,
+    },
+    {
+      id: "odd-cove",
+      workingDirectory: "/work/gamma",
+      model: "devin-mini",
+      createdAt: T0 + 200000,
+      lastActivityAt: T0 + 200060,
+      title: null,
+      mainChainId: 999,
+      metadata: "not-json{{",
+    },
+    {
+      id: "hidden-one",
+      workingDirectory: "/work/hidden",
+      model: "devin-mini",
+      createdAt: T0 + 300000,
+      lastActivityAt: T0 + 300000,
+      title: null,
+      mainChainId: null,
+      hidden: true,
+      metadata: null,
+    },
+    {
+      id: "cycle-gone",
+      workingDirectory: "/work/cycle",
+      model: "devin-mini",
+      createdAt: T0 + 400000,
+      lastActivityAt: T0 + 400000,
+      title: null,
+      mainChainId: null,
+      metadata: null,
+    },
+  ];
+}
 
 const NODES: Record<string, FixtureNode[]> = {
   "sunny-forest": [
-    // Main tree (root 0).
+    // Base tree (root 0) → bare-slug session.
     {
       nodeId: 0,
       parentNodeId: null,
@@ -125,6 +148,8 @@ const NODES: Record<string, FixtureNode[]> = {
       message: { message_id: "m-user-1", role: "user", content: "Refactor the parser.", metadata: { is_user_input: true } },
       createdAt: T0 + 10,
     },
+    // TWIN BRANCH (the dominant real-data shape): nodes 2 and 3 carry the
+    // same assistant message; node 2 is a dead end → no fork session.
     {
       nodeId: 2,
       parentNodeId: 1,
@@ -150,15 +175,38 @@ const NODES: Record<string, FixtureNode[]> = {
     },
     {
       nodeId: 3,
-      parentNodeId: 2,
-      message: { message_id: "m-tool-3", role: "tool", tool_call_id: "tc-1", content: "file contents here" },
-      createdAt: T0 + 30,
+      parentNodeId: 1,
+      message: {
+        message_id: "m-asst-2",
+        role: "assistant",
+        content: "I'll inspect the file.",
+        thinking: { thinking: "Let me think." },
+        tool_calls: [
+          { id: "tc-1", name: "read_file", arguments: { path: "/work/alpha/a.ts" }, index: 0, kind: "read" },
+        ],
+        metadata: {
+          metrics: {
+            input_tokens: 100,
+            output_tokens: 20,
+            cache_read_tokens: null,
+            cache_creation_tokens: 177,
+            total_time_ms: 1500,
+          },
+        },
+      },
+      createdAt: T0 + 21,
     },
     {
       nodeId: 4,
       parentNodeId: 3,
+      message: { message_id: "m-tool-4", role: "tool", tool_call_id: "tc-1", content: "file contents here" },
+      createdAt: T0 + 30,
+    },
+    {
+      nodeId: 5,
+      parentNodeId: 4,
       message: {
-        message_id: "m-asst-4",
+        message_id: "m-asst-5",
         role: "assistant",
         content: "",
         tool_calls: [
@@ -169,102 +217,174 @@ const NODES: Record<string, FixtureNode[]> = {
       createdAt: T0 + 40,
     },
     {
-      nodeId: 5,
-      parentNodeId: 4,
-      message: { message_id: "m-tool-5", role: "tool", tool_call_id: "tc-2", content: "ok" },
+      nodeId: 6,
+      parentNodeId: 5,
+      message: { message_id: "m-tool-6", role: "tool", tool_call_id: "tc-2", content: "ok" },
       createdAt: T0 + 50,
     },
-    // Duplicate result for tc-2: first in DFS order wins, this one is skipped.
+    // Duplicate result for tc-2 on the same chain: first in chain order wins.
     {
-      nodeId: 8,
-      parentNodeId: 5,
-      message: { message_id: "m-tool-8", role: "tool", tool_call_id: "tc-2", content: "ok duplicate" },
-      createdAt: T0 + 80,
+      nodeId: 7,
+      parentNodeId: 6,
+      message: { message_id: "m-tool-7", role: "tool", tool_call_id: "tc-2", content: "ok duplicate" },
+      createdAt: T0 + 60,
     },
     // Dangling tool_call (no result) → interrupted.
     {
-      nodeId: 9,
-      parentNodeId: 5,
+      nodeId: 8,
+      parentNodeId: 7,
       message: {
-        message_id: "m-asst-9",
+        message_id: "m-asst-8",
         role: "assistant",
         content: "One more try.",
         tool_calls: [{ id: "tc-3", name: "run_shell", arguments: { cmd: "ls" }, index: 0 }],
       },
-      createdAt: T0 + 90,
+      createdAt: T0 + 70,
     },
-    // Unknown role → skipped; child re-anchors to node's last emitted record.
+    // Unknown role → skipped; the chain continues through it.
+    {
+      nodeId: 9,
+      parentNodeId: 8,
+      message: { message_id: "m-unk-9", role: "telemetry", content: "{\"cpu\": 0.1}" },
+      createdAt: T0 + 80,
+    },
     {
       nodeId: 10,
       parentNodeId: 9,
-      message: { message_id: "m-unk-10", role: "telemetry", content: "{\"cpu\": 0.1}" },
-      createdAt: T0 + 100,
+      message: { message_id: "m-user-10", role: "user", content: "continue" },
+      createdAt: T0 + 90,
     },
+    // Malformed chat_message JSON → skipped; the chain continues through it.
+    { nodeId: 11, parentNodeId: 10, rawMessage: "not-json{{", createdAt: T0 + 100 },
     {
-      nodeId: 11,
-      parentNodeId: 10,
-      message: { message_id: "m-user-11", role: "user", content: "continue" },
+      nodeId: 12,
+      parentNodeId: 11,
+      message: { message_id: "m-user-12", role: "user", content: "again" },
       createdAt: T0 + 110,
-    },
-    // Malformed chat_message JSON → skipped; child re-anchors.
-    { nodeId: 12, parentNodeId: 11, rawMessage: "not-json{{", createdAt: T0 + 120 },
-    {
-      nodeId: 13,
-      parentNodeId: 12,
-      message: { message_id: "m-user-13", role: "user", content: "again" },
-      createdAt: T0 + 130,
     },
     // Empty assistant (no blocks, no tool calls) → skipped entirely.
     {
-      nodeId: 14,
-      parentNodeId: 13,
-      message: { message_id: "m-asst-14", role: "assistant", content: "" },
-      createdAt: T0 + 140,
+      nodeId: 13,
+      parentNodeId: 12,
+      message: { message_id: "m-asst-13", role: "assistant", content: "" },
+      createdAt: T0 + 120,
     },
     // Harness impersonating the user → harness_message.
     {
-      nodeId: 15,
+      nodeId: 14,
       parentNodeId: 13,
       message: {
-        message_id: "m-harness-15",
+        message_id: "m-harness-14",
         role: "user",
         content: "<system-reminder>tick</system-reminder>",
         metadata: { is_user_input: false },
       },
+      createdAt: T0 + 130,
+    },
+    // REAL FORK: nodes 15 and 16 are twins (same assistant message, text +
+    // tool_call tc-4) and BOTH continue. Node 15's subtree holds the last
+    // leaf (node 18) → stays main; node 16 → fork session.
+    {
+      nodeId: 15,
+      parentNodeId: 14,
+      message: {
+        message_id: "m-asst-15",
+        role: "assistant",
+        content: "Final answer.",
+        tool_calls: [{ id: "tc-4", name: "run_shell", arguments: { cmd: "make test" }, index: 0 }],
+      },
+      createdAt: T0 + 140,
+    },
+    {
+      nodeId: 16,
+      parentNodeId: 14,
+      message: {
+        message_id: "m-asst-15",
+        role: "assistant",
+        content: "Final answer.",
+        tool_calls: [{ id: "tc-4", name: "run_shell", arguments: { cmd: "make test" }, index: 0 }],
+      },
+      createdAt: T0 + 141,
+    },
+    {
+      nodeId: 17,
+      parentNodeId: 15,
+      message: { message_id: "m-tool-17", role: "tool", tool_call_id: "tc-4", content: "main result" },
       createdAt: T0 + 150,
     },
-    // Branch-retry duplicate of m-user-1 → skipped; its reply re-anchors.
     {
-      nodeId: 6,
-      parentNodeId: 1,
-      message: { message_id: "m-user-1", role: "user", content: "Refactor the parser." },
-      createdAt: T0 + 60,
+      nodeId: 18,
+      parentNodeId: 17,
+      message: { message_id: "m-user-18", role: "user", content: "next" },
+      createdAt: T0 + 160,
     },
+    // Fork branch: the tc-4 result is ancestor-orphaned → dropped in the
+    // fork session; suffix = user + assistant.
     {
-      nodeId: 7,
-      parentNodeId: 6,
-      message: { message_id: "m-asst-7", role: "assistant", content: "Alternative attempt." },
-      createdAt: T0 + 70,
+      nodeId: 19,
+      parentNodeId: 16,
+      message: { message_id: "m-tool-19", role: "tool", tool_call_id: "tc-4", content: "fork result" },
+      createdAt: T0 + 151,
     },
-    // Deleted-parent gap (parent 99 missing) → additional root → sibling.
     {
       nodeId: 20,
-      parentNodeId: 99,
-      message: { message_id: "m-sys-20", role: "system", content: "Orphaned context." },
-      createdAt: T0 + 200,
+      parentNodeId: 19,
+      message: { message_id: "m-user-20", role: "user", content: "fork direction" },
+      createdAt: T0 + 152,
     },
-    // Independent second root → sibling.
+    {
+      nodeId: 21,
+      parentNodeId: 20,
+      message: { message_id: "m-asst-21", role: "assistant", content: "Fork answer." },
+      createdAt: T0 + 153,
+    },
+    // Deleted-parent gap (parent 99 missing) → additional root; shares no
+    // message with the base tree → anchor-less sibling_attempt.
     {
       nodeId: 30,
+      parentNodeId: 99,
+      message: { message_id: "m-sys-30", role: "system", content: "Orphaned context." },
+      createdAt: T0 + 200,
+    },
+    // Root sharing only the system prompt (the real-data cross-root shape)
+    // → forked_from anchored at harness_message m-sys-0.
+    {
+      nodeId: 40,
       parentNodeId: null,
-      message: { message_id: "m-sys-30", role: "system", content: "Second context." },
+      message: { message_id: "m-sys-0", role: "system", content: "You are Devin (test system prompt)." },
       createdAt: T0 + 300,
     },
     {
-      nodeId: 31,
-      parentNodeId: 30,
-      message: { message_id: "m-user-31", role: "user", content: "Try differently." },
+      nodeId: 41,
+      parentNodeId: 40,
+      message: { message_id: "m-user-41", role: "user", content: "Try differently." },
       createdAt: T0 + 310,
+    },
+    {
+      nodeId: 42,
+      parentNodeId: 41,
+      message: { message_id: "m-asst-42", role: "assistant", content: "Alternative exploration." },
+      createdAt: T0 + 320,
+    },
+    // Root sharing [system, user] prefix → sibling_attempt anchored at
+    // user_message m-user-1 (a re-answer to the same prompt).
+    {
+      nodeId: 50,
+      parentNodeId: null,
+      message: { message_id: "m-sys-0", role: "system", content: "You are Devin (test system prompt)." },
+      createdAt: T0 + 400,
+    },
+    {
+      nodeId: 51,
+      parentNodeId: 50,
+      message: { message_id: "m-user-1", role: "user", content: "Refactor the parser.", metadata: { is_user_input: true } },
+      createdAt: T0 + 401,
+    },
+    {
+      nodeId: 52,
+      parentNodeId: 51,
+      message: { message_id: "m-asst-52", role: "assistant", content: "Different answer to the same prompt." },
+      createdAt: T0 + 402,
     },
   ],
   "quiet-pond": [
@@ -311,8 +431,9 @@ const NODES: Record<string, FixtureNode[]> = {
 /**
  * Create the synthetic sessions.db under `dir` and return its path.
  * The database is written with plain DDL/DML (no WAL), then closed.
+ * `sunnyMainChainId` flips the winner for AC-0002-B-4 (default: base tip).
  */
-export function createDevinFixture(dir: string): string {
+export function createDevinFixture(dir: string, sunnyMainChainId = BASE_TIP_NODE): string {
   const dbPath = path.join(dir, "sessions.db");
   const db = new DatabaseSync(dbPath);
   try {
@@ -350,7 +471,7 @@ export function createDevinFixture(dir: string): string {
           last_activity_at, title, main_chain_id, hidden, metadata)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
-    for (const s of SESSIONS) {
+    for (const s of sessions(sunnyMainChainId)) {
       insertSession.run(
         s.id,
         s.workingDirectory,

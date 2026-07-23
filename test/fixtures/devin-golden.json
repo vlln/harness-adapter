@@ -75,7 +75,7 @@
           "inputTokens": 150,
           "outputTokens": 30
         },
-        "turnCount": 3
+        "turnCount": 4
       },
       "title": "Alpha Refactor",
       "titleOrigin": "custom"
@@ -118,7 +118,7 @@
         ],
         "recordId": "m-asst-2",
         "seq": 2,
-        "timestamp": "2025-07-08T18:40:20.000Z",
+        "timestamp": "2025-07-08T18:40:21.000Z",
         "type": "assistant_message",
         "usage": {
           "cacheWriteTokens": 177,
@@ -136,13 +136,13 @@
         "recordId": "m-asst-2/tool_call/0",
         "seq": 3,
         "status": "completed",
-        "timestamp": "2025-07-08T18:40:20.000Z",
+        "timestamp": "2025-07-08T18:40:21.000Z",
         "toolCallId": "tc-1",
         "type": "tool_call"
       },
       {
         "content": "file contents here",
-        "recordId": "m-tool-3",
+        "recordId": "m-tool-4",
         "seq": 4,
         "status": "success",
         "timestamp": "2025-07-08T18:40:30.000Z",
@@ -155,7 +155,7 @@
           "text": "new"
         },
         "name": "write_file",
-        "recordId": "m-asst-4/tool_call/0",
+        "recordId": "m-asst-5/tool_call/0",
         "seq": 5,
         "status": "completed",
         "timestamp": "2025-07-08T18:40:40.000Z",
@@ -169,7 +169,7 @@
       },
       {
         "content": "ok",
-        "recordId": "m-tool-5",
+        "recordId": "m-tool-6",
         "seq": 6,
         "status": "success",
         "timestamp": "2025-07-08T18:40:50.000Z",
@@ -183,9 +183,9 @@
             "type": "text"
           }
         ],
-        "recordId": "m-asst-9",
+        "recordId": "m-asst-8",
         "seq": 7,
-        "timestamp": "2025-07-08T18:41:30.000Z",
+        "timestamp": "2025-07-08T18:41:10.000Z",
         "type": "assistant_message"
       },
       {
@@ -193,10 +193,10 @@
           "cmd": "ls"
         },
         "name": "run_shell",
-        "recordId": "m-asst-9/tool_call/0",
+        "recordId": "m-asst-8/tool_call/0",
         "seq": 8,
         "status": "interrupted",
-        "timestamp": "2025-07-08T18:41:30.000Z",
+        "timestamp": "2025-07-08T18:41:10.000Z",
         "toolCallId": "tc-3",
         "type": "tool_call"
       },
@@ -207,9 +207,9 @@
             "type": "text"
           }
         ],
-        "recordId": "m-user-11",
+        "recordId": "m-user-10",
         "seq": 9,
-        "timestamp": "2025-07-08T18:41:50.000Z",
+        "timestamp": "2025-07-08T18:41:30.000Z",
         "type": "user_message"
       },
       {
@@ -219,9 +219,9 @@
             "type": "text"
           }
         ],
-        "recordId": "m-user-13",
+        "recordId": "m-user-12",
         "seq": 10,
-        "timestamp": "2025-07-08T18:42:10.000Z",
+        "timestamp": "2025-07-08T18:41:50.000Z",
         "type": "user_message"
       },
       {
@@ -231,22 +231,55 @@
             "type": "text"
           }
         ],
-        "recordId": "m-harness-15",
+        "recordId": "m-harness-14",
         "seq": 11,
-        "timestamp": "2025-07-08T18:42:30.000Z",
+        "timestamp": "2025-07-08T18:42:10.000Z",
         "type": "harness_message"
       },
       {
         "content": [
           {
-            "text": "Alternative attempt.",
+            "text": "Final answer.",
             "type": "text"
           }
         ],
-        "recordId": "m-asst-7",
+        "recordId": "m-asst-15",
         "seq": 12,
-        "timestamp": "2025-07-08T18:41:10.000Z",
+        "timestamp": "2025-07-08T18:42:20.000Z",
         "type": "assistant_message"
+      },
+      {
+        "args": {
+          "cmd": "make test"
+        },
+        "name": "run_shell",
+        "recordId": "m-asst-15/tool_call/0",
+        "seq": 13,
+        "status": "completed",
+        "timestamp": "2025-07-08T18:42:20.000Z",
+        "toolCallId": "tc-4",
+        "type": "tool_call"
+      },
+      {
+        "content": "main result",
+        "recordId": "m-tool-17",
+        "seq": 14,
+        "status": "success",
+        "timestamp": "2025-07-08T18:42:30.000Z",
+        "toolCallId": "tc-4",
+        "type": "tool_result"
+      },
+      {
+        "content": [
+          {
+            "text": "next",
+            "type": "text"
+          }
+        ],
+        "recordId": "m-user-18",
+        "seq": 15,
+        "timestamp": "2025-07-08T18:42:40.000Z",
+        "type": "user_message"
       }
     ]
   },
@@ -257,14 +290,15 @@
       "harness": "devin",
       "harnessVersion": "unknown",
       "lineage": {
+        "atRecordId": "m-asst-15/tool_call/0",
         "sessionId": "sunny-forest",
-        "type": "sibling_attempt"
+        "type": "forked_from"
       },
       "model": "claude-test-medium",
-      "sessionId": "sunny-forest#root-20",
+      "sessionId": "sunny-forest#fork-16",
       "stats": {
         "durationMs": 3600000,
-        "turnCount": 0
+        "turnCount": 1
       },
       "title": "Alpha Refactor",
       "titleOrigin": "custom"
@@ -273,14 +307,26 @@
       {
         "content": [
           {
-            "text": "Orphaned context.",
+            "text": "fork direction",
             "type": "text"
           }
         ],
-        "recordId": "m-sys-20",
+        "recordId": "m-user-20",
         "seq": 0,
-        "timestamp": "2025-07-08T18:43:20.000Z",
-        "type": "harness_message"
+        "timestamp": "2025-07-08T18:42:32.000Z",
+        "type": "user_message"
+      },
+      {
+        "content": [
+          {
+            "text": "Fork answer.",
+            "type": "text"
+          }
+        ],
+        "recordId": "m-asst-21",
+        "seq": 1,
+        "timestamp": "2025-07-08T18:42:33.000Z",
+        "type": "assistant_message"
       }
     ]
   },
@@ -298,6 +344,41 @@
       "sessionId": "sunny-forest#root-30",
       "stats": {
         "durationMs": 3600000,
+        "turnCount": 0
+      },
+      "title": "Alpha Refactor",
+      "titleOrigin": "custom"
+    },
+    "records": [
+      {
+        "content": [
+          {
+            "text": "Orphaned context.",
+            "type": "text"
+          }
+        ],
+        "recordId": "m-sys-30",
+        "seq": 0,
+        "timestamp": "2025-07-08T18:43:20.000Z",
+        "type": "harness_message"
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "ahsVersion": "0.1.0",
+      "cwd": "/work/alpha",
+      "harness": "devin",
+      "harnessVersion": "unknown",
+      "lineage": {
+        "atRecordId": "m-sys-0",
+        "sessionId": "sunny-forest",
+        "type": "forked_from"
+      },
+      "model": "claude-test-medium",
+      "sessionId": "sunny-forest#root-40",
+      "stats": {
+        "durationMs": 3600000,
         "turnCount": 1
       },
       "title": "Alpha Refactor",
@@ -307,26 +388,61 @@
       {
         "content": [
           {
-            "text": "Second context.",
-            "type": "text"
-          }
-        ],
-        "recordId": "m-sys-30",
-        "seq": 0,
-        "timestamp": "2025-07-08T18:45:00.000Z",
-        "type": "harness_message"
-      },
-      {
-        "content": [
-          {
             "text": "Try differently.",
             "type": "text"
           }
         ],
-        "recordId": "m-user-31",
-        "seq": 1,
+        "recordId": "m-user-41",
+        "seq": 0,
         "timestamp": "2025-07-08T18:45:10.000Z",
         "type": "user_message"
+      },
+      {
+        "content": [
+          {
+            "text": "Alternative exploration.",
+            "type": "text"
+          }
+        ],
+        "recordId": "m-asst-42",
+        "seq": 1,
+        "timestamp": "2025-07-08T18:45:20.000Z",
+        "type": "assistant_message"
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "ahsVersion": "0.1.0",
+      "cwd": "/work/alpha",
+      "harness": "devin",
+      "harnessVersion": "unknown",
+      "lineage": {
+        "atRecordId": "m-user-1",
+        "sessionId": "sunny-forest",
+        "type": "sibling_attempt"
+      },
+      "model": "claude-test-medium",
+      "sessionId": "sunny-forest#root-50",
+      "stats": {
+        "durationMs": 3600000,
+        "turnCount": 0
+      },
+      "title": "Alpha Refactor",
+      "titleOrigin": "custom"
+    },
+    "records": [
+      {
+        "content": [
+          {
+            "text": "Different answer to the same prompt.",
+            "type": "text"
+          }
+        ],
+        "recordId": "m-asst-52",
+        "seq": 0,
+        "timestamp": "2025-07-08T18:46:42.000Z",
+        "type": "assistant_message"
       }
     ]
   }
