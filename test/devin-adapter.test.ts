@@ -147,28 +147,27 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
     expect(validateSessions(sessions)).toEqual([]);
   });
 
-  it("AC-0002-N-1: forest splits — each AHS session has exactly one root", () => {
+  it("AC-0002-N-1: forest splits — each AHS session is linear (seq contiguous from 0)", () => {
     for (const s of sessions) {
-      expect(s.records.filter((r) => r.parentId === null)).toHaveLength(1);
+      expect(s.records.map((r) => r.seq)).toEqual(s.records.map((_, i) => i));
     }
     // Main chain root resolved by walking UP from main_chain_id (a tip, 5).
     const main = session("sunny-forest");
-    expect(main.records[0]).toMatchObject({ recordId: "m-sys-0", parentId: null });
-    // Re-anchoring: children of skipped nodes attach to the last emitted record.
-    expect(main.records.find((r) => r.recordId === "m-user-11")?.parentId).toBe("m-asst-9/tool_call/0");
-    expect(main.records.find((r) => r.recordId === "m-user-13")?.parentId).toBe("m-user-11");
-    // Branch-retry duplicate's reply re-anchors to the first occurrence.
-    expect(main.records.find((r) => r.recordId === "m-asst-7")?.parentId).toBe("m-user-1");
+    expect(main.records[0]).toMatchObject({ recordId: "m-sys-0", seq: 0 });
+    // Dedup: branch-retry duplicates of a message_id are skipped — the
+    // reply to the duplicate lands after the first occurrence.
+    const reply = main.records.find((r) => r.recordId === "m-asst-7");
+    expect(reply).toBeDefined();
   });
 
-  it("AC-0002-N-2: sibling_attempt relations resolve to the main session", () => {
+  it("AC-0002-N-7: sibling_attempt lineage edges resolve to the main session", () => {
     const main = session("sunny-forest");
-    expect(main.manifest.isMainChain).toBe(true);
-    expect(main.manifest.relation).toBeUndefined();
+    expect(main.manifest.lineage).toBeUndefined();
+    expect(main.manifest.invocation).toBeUndefined();
     for (const id of ["sunny-forest#root-20", "sunny-forest#root-30"]) {
       const sibling = session(id);
-      expect(sibling.manifest.isMainChain).toBeUndefined();
-      expect(sibling.manifest.relation).toEqual({ type: "sibling_attempt", sessionId: "sunny-forest" });
+      // TODO(Plan 02): atRecordId shared-prefix anchor (message_id reconciliation).
+      expect(sibling.manifest.lineage).toEqual({ type: "sibling_attempt", sessionId: "sunny-forest" });
     }
   });
 

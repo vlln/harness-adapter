@@ -5,7 +5,6 @@
       "cwd": "/work/gamma",
       "harness": "devin",
       "harnessVersion": "unknown",
-      "isMainChain": true,
       "model": "devin-mini",
       "sessionId": "odd-cove",
       "stats": {
@@ -21,7 +20,6 @@
             "type": "text"
           }
         ],
-        "parentId": null,
         "recordId": "node-0",
         "seq": 0,
         "timestamp": "2025-07-11T02:13:20.000Z",
@@ -35,7 +33,6 @@
       "cwd": "/work/beta",
       "harness": "devin",
       "harnessVersion": "unknown",
-      "isMainChain": true,
       "model": "devin-mini",
       "sessionId": "quiet-pond",
       "stats": {
@@ -51,7 +48,6 @@
             "type": "text"
           }
         ],
-        "parentId": null,
         "recordId": "m-q-0",
         "seq": 0,
         "timestamp": "2025-07-09T22:26:40.000Z",
@@ -65,7 +61,6 @@
       "cwd": "/work/alpha",
       "harness": "devin",
       "harnessVersion": "unknown",
-      "isMainChain": true,
       "model": "claude-test-medium",
       "sessionId": "sunny-forest",
       "stats": {
@@ -93,7 +88,6 @@
             "type": "text"
           }
         ],
-        "parentId": null,
         "recordId": "m-sys-0",
         "seq": 0,
         "timestamp": "2025-07-08T18:40:00.000Z",
@@ -106,7 +100,6 @@
             "type": "text"
           }
         ],
-        "parentId": "m-sys-0",
         "recordId": "m-user-1",
         "seq": 1,
         "timestamp": "2025-07-08T18:40:10.000Z",
@@ -123,7 +116,6 @@
             "type": "text"
           }
         ],
-        "parentId": "m-user-1",
         "recordId": "m-asst-2",
         "seq": 2,
         "timestamp": "2025-07-08T18:40:20.000Z",
@@ -141,7 +133,6 @@
         },
         "kind": "read",
         "name": "read_file",
-        "parentId": "m-asst-2",
         "recordId": "m-asst-2/tool_call/0",
         "seq": 3,
         "status": "completed",
@@ -151,7 +142,6 @@
       },
       {
         "content": "file contents here",
-        "parentId": "m-asst-2/tool_call/0",
         "recordId": "m-tool-3",
         "seq": 4,
         "status": "success",
@@ -165,7 +155,6 @@
           "text": "new"
         },
         "name": "write_file",
-        "parentId": "m-tool-3",
         "recordId": "m-asst-4/tool_call/0",
         "seq": 5,
         "status": "completed",
@@ -180,7 +169,6 @@
       },
       {
         "content": "ok",
-        "parentId": "m-asst-4/tool_call/0",
         "recordId": "m-tool-5",
         "seq": 6,
         "status": "success",
@@ -195,7 +183,6 @@
             "type": "text"
           }
         ],
-        "parentId": "m-tool-5",
         "recordId": "m-asst-9",
         "seq": 7,
         "timestamp": "2025-07-08T18:41:30.000Z",
@@ -206,7 +193,6 @@
           "cmd": "ls"
         },
         "name": "run_shell",
-        "parentId": "m-asst-9",
         "recordId": "m-asst-9/tool_call/0",
         "seq": 8,
         "status": "interrupted",
@@ -221,7 +207,6 @@
             "type": "text"
           }
         ],
-        "parentId": "m-asst-9/tool_call/0",
         "recordId": "m-user-11",
         "seq": 9,
         "timestamp": "2025-07-08T18:41:50.000Z",
@@ -234,7 +219,6 @@
             "type": "text"
           }
         ],
-        "parentId": "m-user-11",
         "recordId": "m-user-13",
         "seq": 10,
         "timestamp": "2025-07-08T18:42:10.000Z",
@@ -247,7 +231,6 @@
             "type": "text"
           }
         ],
-        "parentId": "m-user-13",
         "recordId": "m-harness-15",
         "seq": 11,
         "timestamp": "2025-07-08T18:42:30.000Z",
@@ -260,7 +243,6 @@
             "type": "text"
           }
         ],
-        "parentId": "m-user-1",
         "recordId": "m-asst-7",
         "seq": 12,
         "timestamp": "2025-07-08T18:41:10.000Z",
@@ -274,11 +256,11 @@
       "cwd": "/work/alpha",
       "harness": "devin",
       "harnessVersion": "unknown",
-      "model": "claude-test-medium",
-      "relation": {
+      "lineage": {
         "sessionId": "sunny-forest",
         "type": "sibling_attempt"
       },
+      "model": "claude-test-medium",
       "sessionId": "sunny-forest#root-20",
       "stats": {
         "durationMs": 3600000,
@@ -295,7 +277,6 @@
             "type": "text"
           }
         ],
-        "parentId": null,
         "recordId": "m-sys-20",
         "seq": 0,
         "timestamp": "2025-07-08T18:43:20.000Z",
@@ -309,11 +290,11 @@
       "cwd": "/work/alpha",
       "harness": "devin",
       "harnessVersion": "unknown",
-      "model": "claude-test-medium",
-      "relation": {
+      "lineage": {
         "sessionId": "sunny-forest",
         "type": "sibling_attempt"
       },
+      "model": "claude-test-medium",
       "sessionId": "sunny-forest#root-30",
       "stats": {
         "durationMs": 3600000,
@@ -330,7 +311,6 @@
             "type": "text"
           }
         ],
-        "parentId": null,
         "recordId": "m-sys-30",
         "seq": 0,
         "timestamp": "2025-07-08T18:45:00.000Z",
@@ -343,7 +323,6 @@
             "type": "text"
           }
         ],
-        "parentId": "m-sys-30",
         "recordId": "m-user-31",
         "seq": 1,
         "timestamp": "2025-07-08T18:45:10.000Z",

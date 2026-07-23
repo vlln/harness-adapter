@@ -123,29 +123,28 @@ describe("codex adapter", () => {
     }
   });
 
-  it("AC-0002-N-1/N-2/N-6: tree, relation and tool-pairing invariants hold", () => {
+  it("AC-0002-N-1/N-2/N-6: linear, relation and tool-pairing invariants hold", () => {
     expect(validateSessions(sessions)).toEqual([]);
   });
 
-  it("AC-0002-N-2: thread_spawn child gets spawned_by with a toolCallId anchor resolving in the parent", () => {
+  it("AC-0002-N-2: thread_spawn child gets an invocation back-link to the parent", () => {
     const child = byId.get(B2)!;
-    expect(child.manifest.relation).toEqual({
-      type: "spawned_by",
-      sessionId: A1,
-      toolCallId: "call_spwn3",
-    });
+    // TODO(Plan 02): atRecordId anchor (call_spwn3 → spawn_agent tool_call
+    // record) + the parent's tool_result.sessionId forward link.
+    expect(child.manifest.invocation).toEqual({ sessionId: A1 });
     const parent = byId.get(A1)!;
-    const anchor = parent.records.find(
+    const spawning = parent.records.find(
       (r) => r.type === "tool_call" && r.toolCallId === "call_spwn3",
     );
-    expect(anchor).toBeDefined();
-    expect(anchor!.type === "tool_call" && anchor!.name).toBe("spawn_agent");
+    expect(spawning).toBeDefined();
+    expect(spawning!.type === "tool_call" && spawning!.name).toBe("spawn_agent");
   });
 
-  it("forked_from: a resumed rollout maps its most recent lineage ancestor", () => {
-    expect(byId.get(C3)!.manifest.relation).toEqual({ type: "forked_from", sessionId: A1 });
-    // The sub-agent child is spawned_by, NOT forked_from, despite its lineage headers.
-    expect(byId.get(B2)!.manifest.relation!.type).toBe("spawned_by");
+  it("forked_from lineage: a resumed rollout maps its most recent lineage ancestor", () => {
+    expect(byId.get(C3)!.manifest.lineage).toEqual({ type: "forked_from", sessionId: A1 });
+    // The sub-agent child carries invocation, NOT lineage, despite its lineage headers.
+    expect(byId.get(B2)!.manifest.invocation).toBeDefined();
+    expect(byId.get(B2)!.manifest.lineage).toBeUndefined();
   });
 
   it("AC-0002-N-3: user/assistant message counts match the source and text is verbatim", () => {

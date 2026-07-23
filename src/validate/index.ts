@@ -3,8 +3,13 @@ import type { Manifest } from "../schema/manifest";
 import type { AhsRecord } from "../schema/record";
 
 /**
- * Harness-agnostic AC layer-2 invariant checks (AC-0002) over projected
- * (Manifest, records) sessions. Reusable by every adapter's tests.
+ * Harness-agnostic AC layer-2 invariant checks (AC-0002 v2, linear-session
+ * model per ADR-0005) over projected (Manifest, records) sessions.
+ * Reusable by every adapter's tests.
+ *
+ * Relation checks (N-2 invocation reconciliation, N-7 lineage anchors) are
+ * cross-session: `validateSessions` takes the FULL session set, and
+ * `collectSessions` gathers an adapter's complete output for exactly that.
  */
 
 export interface SessionData {
@@ -14,82 +19,131 @@ export interface SessionData {
 
 export interface InvariantError {
   code:
-    | "single-root"
-    | "parent-resolution"
     | "seq-order"
-    | "relation-session"
-    | "relation-anchor"
+    | "invocation-session"
+    | "invocation-anchor"
+    | "invocation-mismatch"
+    | "lineage-session"
+    | "lineage-anchor"
+    | "lineage-type"
     | "tool-result-match"
     | "not-idempotent";
   sessionId: string;
   message: string;
 }
 
-/** AC-0002-N-1: tree shape — one root, resolving parents, increasing seq. */
-function checkTree(session: SessionData, errors: InvariantError[]): void {
+/**
+ * AC-0002-N-1: linear shape. The schema already forbids structural fields
+ * other than seq (no parentId/branch); here seq must be strictly increasing
+ * AND contiguous (step exactly 1) in file order. The first record is the
+ * root — there is no parent resolution to check anymore.
+ */
+function checkLinear(session: SessionData, errors: InvariantError[]): void {
   const { records } = session;
   const sid = session.manifest.sessionId;
-  const ids = new Set(records.map((r) => r.recordId));
-
-  const roots = records.filter((r) => r.parentId === null);
-  if (roots.length !== 1) {
-    errors.push({
-      code: "single-root",
-      sessionId: sid,
-      message: `expected exactly one root record, found ${roots.length}`,
-    });
-  }
-
-  for (const rec of records) {
-    if (rec.parentId !== null && !ids.has(rec.parentId)) {
-      errors.push({
-        code: "parent-resolution",
-        sessionId: sid,
-        message: `record ${rec.recordId} has dangling parentId ${rec.parentId}`,
-      });
-    }
-  }
-
   for (let i = 1; i < records.length; i += 1) {
     const prev = records[i - 1]!;
     const cur = records[i]!;
-    if (cur.seq <= prev.seq) {
+    if (cur.seq !== prev.seq + 1) {
       errors.push({
         code: "seq-order",
         sessionId: sid,
-        message: `seq not strictly increasing at index ${i}: ${prev.seq} -> ${cur.seq}`,
+        message: `seq not strictly increasing and contiguous at index ${i}: ${prev.seq} -> ${cur.seq}`,
       });
     }
   }
 }
 
-/** AC-0002-N-2: relation anchors resolve across the session set. */
-function checkRelations(sessions: SessionData[], errors: InvariantError[]): void {
+/**
+ * AC-0002-N-2 (cross-session): invocation two-link reconciliation.
+ * For every manifest with `invocation`:
+ * - the parent session must exist in the session set;
+ * - if atRecordId is present, it must resolve to an existing tool_call
+ *   record in the parent;
+ * - the parent's tool_result paired with that tool_call must carry
+ *   sessionId === the child's sessionId (forward/back-link reconciliation).
+ * AC-0002-B-3 form (atRecordId omitted, e.g. Kimi): the anchor and
+ * reconciliation checks are skipped; the parent must still exist.
+ */
+function checkInvocations(sessions: SessionData[], errors: InvariantError[]): void {
   const byId = new Map(sessions.map((s) => [s.manifest.sessionId, s]));
   for (const session of sessions) {
-    const relation = session.manifest.relation;
-    if (relation === undefined) continue;
+    const invocation = session.manifest.invocation;
+    if (invocation === undefined) continue;
     const sid = session.manifest.sessionId;
-    const parent = byId.get(relation.sessionId);
+    const parent = byId.get(invocation.sessionId);
     if (parent === undefined) {
       errors.push({
-        code: "relation-session",
+        code: "invocation-session",
         sessionId: sid,
-        message: `relation.${relation.type} points to unknown session ${relation.sessionId}`,
+        message: `invocation points to unknown session ${invocation.sessionId}`,
       });
       continue;
     }
-    if (relation.type === "spawned_by" && relation.toolCallId !== undefined) {
-      const anchor = parent.records.find(
-        (r) => r.type === "tool_call" && r.toolCallId === relation.toolCallId,
-      );
-      if (anchor === undefined) {
-        errors.push({
-          code: "relation-anchor",
-          sessionId: sid,
-          message: `spawned_by.toolCallId ${relation.toolCallId} matches no tool_call in parent session ${relation.sessionId}`,
-        });
-      }
+    if (invocation.atRecordId === undefined) continue; // AC-0002-B-3
+    const anchor = parent.records.find((r) => r.recordId === invocation.atRecordId);
+    if (anchor === undefined || anchor.type !== "tool_call") {
+      errors.push({
+        code: "invocation-anchor",
+        sessionId: sid,
+        message: `invocation.atRecordId ${invocation.atRecordId} resolves to no tool_call in parent session ${invocation.sessionId}`,
+      });
+      continue;
+    }
+    const paired = parent.records.find(
+      (r) => r.type === "tool_result" && r.toolCallId === anchor.toolCallId,
+    );
+    if (paired === undefined || paired.type !== "tool_result" || paired.sessionId !== sid) {
+      errors.push({
+        code: "invocation-mismatch",
+        sessionId: sid,
+        message: `parent tool_result paired with tool_call ${anchor.toolCallId} does not carry sessionId ${sid} (forward/back-link reconciliation failed)`,
+      });
+    }
+  }
+}
+
+/**
+ * AC-0002-N-7 (cross-session): lineage anchor resolution + type judgment.
+ * For every manifest with `lineage`:
+ * - the parent session must exist in the session set;
+ * - atRecordId (when present — absent means retry-from-start) must resolve
+ *   to an existing record in the parent;
+ * - type judgment: anchored record is a user_message ⇔ sibling_attempt;
+ *   anything else ⇔ forked_from.
+ */
+function checkLineages(sessions: SessionData[], errors: InvariantError[]): void {
+  const byId = new Map(sessions.map((s) => [s.manifest.sessionId, s]));
+  for (const session of sessions) {
+    const lineage = session.manifest.lineage;
+    if (lineage === undefined) continue;
+    const sid = session.manifest.sessionId;
+    const parent = byId.get(lineage.sessionId);
+    if (parent === undefined) {
+      errors.push({
+        code: "lineage-session",
+        sessionId: sid,
+        message: `lineage.${lineage.type} points to unknown session ${lineage.sessionId}`,
+      });
+      continue;
+    }
+    if (lineage.atRecordId === undefined) continue; // retry from start
+    const anchor = parent.records.find((r) => r.recordId === lineage.atRecordId);
+    if (anchor === undefined) {
+      errors.push({
+        code: "lineage-anchor",
+        sessionId: sid,
+        message: `lineage.atRecordId ${lineage.atRecordId} resolves to no record in parent session ${lineage.sessionId}`,
+      });
+      continue;
+    }
+    const expected = anchor.type === "user_message" ? "sibling_attempt" : "forked_from";
+    if (lineage.type !== expected) {
+      errors.push({
+        code: "lineage-type",
+        sessionId: sid,
+        message: `lineage anchored at ${anchor.type} record ${anchor.recordId} must be "${expected}", got "${lineage.type}"`,
+      });
     }
   }
 }
@@ -145,10 +199,11 @@ function checkToolPairing(session: SessionData, errors: InvariantError[]): void 
 export function validateSessions(sessions: SessionData[]): InvariantError[] {
   const errors: InvariantError[] = [];
   for (const session of sessions) {
-    checkTree(session, errors);
+    checkLinear(session, errors);
     checkToolPairing(session, errors);
   }
-  checkRelations(sessions, errors);
+  checkInvocations(sessions, errors);
+  checkLineages(sessions, errors);
   return errors;
 }
 

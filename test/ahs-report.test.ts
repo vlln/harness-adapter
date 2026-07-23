@@ -1,7 +1,7 @@
 /**
  * AC-0004-N-1: the report consumer reads ONLY an AHS archive, renders the
  * child session indented under its anchoring tool_call, and aggregates
- * Usage across the spawned_by relation graph exactly (parent + child sums).
+ * Usage across the invocation graph exactly (parent + child sums).
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -37,19 +37,19 @@ const CHILD_USAGE: Usage = {
 };
 
 const parent = makeSession("sess-parent", [
-  userMessage(0, null, "build the feature"),
-  assistantMessage(1, "r0", "delegating", { usage: PARENT_USAGE }),
-  toolCall(2, "r1", "tc-task", { name: "Task", status: "completed" }),
-  toolResult(3, "r2", "tc-task", "child finished"),
-  assistantMessage(4, "r3", "all done", { usage: PARENT_USAGE_2 }),
+  userMessage(0, "build the feature"),
+  assistantMessage(1, "delegating", { usage: PARENT_USAGE }),
+  toolCall(2, "tc-task", { name: "Task", status: "completed", recordId: "p-call" }),
+  toolResult(3, "tc-task", "child finished", { sessionId: "sess-child" }),
+  assistantMessage(4, "all done", { usage: PARENT_USAGE_2 }),
 ]);
 const child = makeSession(
   "sess-child",
   [
-    userMessage(0, null, "subtask instructions"),
-    assistantMessage(1, "r0", "child working", { usage: CHILD_USAGE }),
+    userMessage(0, "subtask instructions"),
+    assistantMessage(1, "child working", { usage: CHILD_USAGE }),
   ],
-  { relation: { type: "spawned_by", sessionId: "sess-parent", toolCallId: "tc-task" } },
+  { invocation: { sessionId: "sess-parent", atRecordId: "p-call" } },
 );
 
 describe("ahs-report (AC-0004-N-1)", () => {
@@ -90,7 +90,7 @@ describe("ahs-report (AC-0004-N-1)", () => {
   });
 
   it("cuts cycles in the relation graph defensively", async () => {
-    // Hand-build a tiny archive with A spawned_by B and B spawned_by A.
+    // Hand-build a tiny archive with A invoked by B and B invoked by A.
     const cycleRoot = mkdtempSync(path.join(tmpdir(), "ahs-report-cycle-"));
     afterAll(() => rmSync(cycleRoot, { recursive: true, force: true }));
     const base = {
@@ -111,14 +111,13 @@ describe("ahs-report (AC-0004-N-1)", () => {
         JSON.stringify({
           ...base,
           sessionId: id,
-          relation: { type: "spawned_by", sessionId: parentId },
+          invocation: { sessionId: parentId },
         }),
       );
       writeFileSync(
         path.join(dir, "records.jsonl"),
         `${JSON.stringify({
           recordId: `${id}-0`,
-          parentId: null,
           seq: 0,
           timestamp: "2026-07-20T10:00:00.000Z",
           type: "user_message",

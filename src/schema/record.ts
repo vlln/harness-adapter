@@ -20,13 +20,13 @@ export const ContentBlockSchema = z.discriminatedUnion("type", [
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 
 /**
- * Fields shared by every record. A session's history is a single-rooted tree
- * linked by parentId (single parent, multiple children allowed);
- * seq is the temporal ordering number.
+ * Fields shared by every record. A session's history is strictly linear
+ * (ADR-0005): seq is the ONLY structural field — no parentId, no in-session
+ * branching. The first record is the root; every fork produces a new session
+ * linked via the manifest's lineage edge.
  */
 export const BaseRecordSchema = z.object({
   recordId: z.string(),
-  parentId: z.string().nullable(),
   seq: z.number().int().nonnegative(),
   /** ISO 8601. */
   timestamp: z.iso.datetime(),
@@ -75,6 +75,12 @@ export const AhsRecordSchema = z.discriminatedUnion("type", [
     toolCallId: z.string(),
     content: z.union([z.string(), BlobRefSchema]),
     status: z.enum(["success", "error"]).optional(),
+    /**
+     * Forward invocation link (ADR-0005): set when this call produced a
+     * child session (subagent). The child manifest carries the back-link
+     * via `invocation`; the two are reconciled by AC-0002-N-2.
+     */
+    sessionId: z.string().optional(),
   }),
   // State records
   BaseRecordSchema.extend({

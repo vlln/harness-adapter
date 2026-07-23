@@ -92,13 +92,13 @@ describe("kimi-code adapter", () => {
     expect(await checkIdempotency(adapter)).toEqual([]);
   });
 
-  it("multi-wire = multi-session: sub-agent gets spawned_by without toolCallId (AC-0002-N-2, B-3)", async () => {
+  it("multi-wire = multi-session: sub-agent gets an invocation back-link without atRecordId (AC-0002-N-2, B-3)", async () => {
     const sessions = await collectSessions(adapter);
     const ids = sessions.map((s) => s.manifest.sessionId).sort();
     expect(ids).toEqual([CHILD_ID, SESSION_ID].sort());
     const child = sessions.find((s) => s.manifest.sessionId === CHILD_ID)!.manifest;
-    expect(child.relation).toEqual({ type: "spawned_by", sessionId: SESSION_ID });
-    expect(child.relation).not.toHaveProperty("toolCallId");
+    expect(child.invocation).toEqual({ sessionId: SESSION_ID });
+    expect(child.invocation).not.toHaveProperty("atRecordId");
   });
 
   it("maps the manifest from state.json + wire (title/titleOrigin, model, provider, stats)", async () => {
@@ -130,7 +130,6 @@ describe("kimi-code adapter", () => {
     records.forEach((rec, i) => {
       expect(rec.recordId).toBe(`${SESSION_ID}:${i}`);
       expect(rec.seq).toBe(i);
-      expect(rec.parentId).toBe(i === 0 ? null : `${SESSION_ID}:${i - 1}`);
       // Unix-ms `time` converted to ISO 8601.
       expect(rec.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
