@@ -23,7 +23,7 @@ import { join } from "node:path";
 
 const PLANS_DIR = join(import.meta.dirname, "..", "docs", "plans");
 
-const REPORT_FILE = /-report.*\.md$/;
+const REPORT_FILE = /-report-.+\.md$/;
 const AC_ID = /AC-\d{4}-[NBEF]-\d+/;
 const COMMIT_REF = /\b[0-9a-f]{7,40}\b/;
 
