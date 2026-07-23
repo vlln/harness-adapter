@@ -32,18 +32,19 @@ created: 2026-07-21T11:48:45Z
 
 # AC-0002: 适配器输出完整（层2，语义不变量，机器可检查）
 
-完整性 = 保留判据内的信息无静默丢失。以下子项均为不变量断言。
+完整性 = 保留判据内的信息无静默丢失。以下子项均为不变量断言。（v2：按 ADR-0005 线性化模型重写，2026-07-23）
 
 ## 正常场景
 
 | 编号 | 前置条件 | 操作步骤 | 预期结果 | 验证方式 |
 |------|---------|---------|---------|---------|
-| AC-0002-N-1 | 任意源会话（因果完整） | 1. 运行适配器<br>2. 检查输出 record 图 | 每 session 恰好一个 `parentId=null` 的根 record；其余 `parentId` 均指向同 session 内存在的 record；`seq` 单调递增 | 自动化 |
-| AC-0002-N-2 | 源会话含 subagent 单元（关系完整） | 1. 运行适配器<br>2. 检查 Relation | 源存储中每个 subagent 单元恰好产出一个子 session；`spawned_by` 的 sessionId 存在；`toolCallId` 锚点指向父 session 中真实存在的 `tool_call` record | 自动化 |
+| AC-0002-N-1 | 任意源会话（线性完整） | 1. 运行适配器<br>2. 检查输出 record 序列 | record 无 parentId/branch 类结构字段；`seq` 严格递增且连续；session 内无分叉（任何分叉已拆为独立 session + lineage 边） | 自动化 |
+| AC-0002-N-2 | 源会话含 subagent 单元（调用维完整） | 1. 运行适配器<br>2. 检查 invocation 两链 | 每个 subagent 单元恰好产出一个子 session；子 manifest `invocation.sessionId` 存在；`atRecordId`（有锚时）指向父 session 中真实存在的 tool_call record；父中配对 tool_result 的 `sessionId` 与子 sessionId 一致（正回链对账） | 自动化 |
 | AC-0002-N-3 | 任意源会话（内容无静默丢失） | 1. 运行适配器<br>2. 对比源与输出 | user/assistant 消息条数与源相等；文本逐字保留 | 自动化 |
-| AC-0002-N-6 | 任意源会话（tool 配对） | 1. 运行适配器<br>2. 检查 tool_call/tool_result | 每个 `tool_call` 恰有配对 `tool_result`，或 `status === "interrupted"`，二者必居其一；同一 toolCallId 多个 result 时仅保留文件序第一条 | 自动化 |
 | AC-0002-N-4 | 源会话含 usage 数据（usage 无静默丢失） | 1. 运行适配器<br>2. 汇总 record 级 usage | record 级 usage 求和 ≈ 源会话总量（容差内） | 自动化 |
 | AC-0002-N-5 | 任意源会话（幂等） | 1. 同一输入运行适配器两次 | 两次输出逐字节一致 | 自动化 |
+| AC-0002-N-6 | 任意源会话（tool 配对） | 1. 运行适配器<br>2. 检查 tool_call/tool_result | 每个 `tool_call` 恰有配对 `tool_result`，或 `status === "interrupted"`，二者必居其一；同一 toolCallId 多个 result 时仅保留文件序第一条 | 自动化 |
+| AC-0002-N-7 | 源会话含分叉（历史维完整） | 1. 运行适配器<br>2. 检查 lineage | 每个分叉恰好产出一个 fork session（只存后缀）；`lineage.sessionId` 存在；`atRecordId`（非 null 时）指向父 session 中真实存在的 record；类型判据正确：锚点为 user_message ⇔ `sibling_attempt`，否则 `forked_from` | 自动化 |
 
 ## 边界场景
 
@@ -51,7 +52,8 @@ created: 2026-07-21T11:48:45Z
 |------|---------|---------|---------|---------|
 | AC-0002-B-1 | 源会话的 tool_call 无对应 tool_result（中断/崩溃） | 1. 运行适配器 | 该 tool_call 标记 `status: "interrupted"`；不得合成占位 tool_result | 自动化 |
 | AC-0002-B-2 | 源本身缺失 usage（部分 harness/版本不记录） | 1. 运行适配器<br>2. 汇总 usage | usage 字段缺省/为 null 被允许；但适配器不得丢弃源中存在的 usage | 自动化 |
-| AC-0002-B-3 | 源 harness 只有 agent 级父子关系无 toolUseId（如 Kimi） | 1. 运行适配器 | `spawned_by.toolCallId` 省略（可选字段），其余关系断言不变 | 自动化 |
+| AC-0002-B-3 | 源 harness 只有 agent 级父子关系无 tool 级锚点（如 Kimi） | 1. 运行适配器 | `invocation.atRecordId` 省略（可选字段），其余调用维断言不变 | 自动化 |
+| AC-0002-B-4 | 源端主链/winner 标记随时间变化（如 Devin main_chain_id 易主） | 1. 对同一源做两次投影（间隔 winner 易主）<br>2. 对比 session 集合与组指针 | 两次投影的 session 集合（id + records）逐字节一致；仅派生层组指针 `mainSessionId` 移动 | 自动化 |
 
 ---
 
@@ -81,7 +83,7 @@ check-in 的脱敏 fixture + 审查过的期望输出，golden diff 一致。
 
 | 编号 | 前置条件 | 操作步骤 | 预期结果 | 验证方式 |
 |------|---------|---------|---------|---------|
-| AC-0004-N-1 | 已有适配器输出的 AHS 数据（含 spawned_by 子 session） | 1. 运行 examples/ 消费方工具<br>2. 渲染 transcript<br>3. 沿 spawned_by 递归聚合 token/cost | transcript 可读完整（含子 session）；总 token/cost 数字与源 harness 自身报告一致 | Agent 判定 |
+| AC-0004-N-1 | 已有适配器输出的 AHS 数据（含 invocation 子 session） | 1. 运行 examples/ 消费方工具<br>2. 渲染 transcript<br>3. 沿 invocation 递归聚合 token/cost | transcript 可读完整（含子 session）；总 token/cost 数字与源 harness 自身报告一致；fork 共享前缀不双计 | Agent 判定 |
 
 ---
 
