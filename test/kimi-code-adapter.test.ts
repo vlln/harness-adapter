@@ -126,7 +126,7 @@ describe("kimi-code adapter", () => {
 
   it("synthesizes a deterministic linear chain per wire (AC-0002-N-1)", async () => {
     const records = await readAll(adapter, SESSION_ID);
-    expect(records).toHaveLength(13);
+    expect(records).toHaveLength(15);
     records.forEach((rec, i) => {
       expect(rec.recordId).toBe(`${SESSION_ID}:${i}`);
       expect(rec.seq).toBe(i);
@@ -168,7 +168,7 @@ describe("kimi-code adapter", () => {
   it("maps tool.call/tool.result, derives status completed XOR interrupted (AC-0002-N-6, B-1)", async () => {
     const records = await readAll(adapter, SESSION_ID);
     const calls = records.filter((r) => r.type === "tool_call");
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
     expect(calls[0]).toMatchObject({
       toolCallId: "call_k001",
       name: "Grep",
@@ -176,11 +176,30 @@ describe("kimi-code adapter", () => {
       kind: "file_io",
       status: "completed",
     });
+    // The Agent spawning call pairs with its result → completed.
+    expect(calls[1]).toMatchObject({ toolCallId: "call_k002", name: "Agent", status: "completed" });
     // call_k003 dangles at wire end → interrupted, no synthetic result.
-    expect(calls[1]).toMatchObject({ toolCallId: "call_k003", status: "interrupted" });
+    expect(calls[2]).toMatchObject({ toolCallId: "call_k003", status: "interrupted" });
     expect(records.some((r) => r.type === "tool_result" && r.toolCallId === "call_k003")).toBe(
       false,
     );
+  });
+
+  it("invocation forward link: the Agent tool_result carries the child sessionId (ADR-0005, AC-0002-N-2)", async () => {
+    const records = await readAll(adapter, SESSION_ID);
+    const result = records.find((r) => r.type === "tool_result" && r.toolCallId === "call_k002");
+    expect(result).toMatchObject({
+      type: "tool_result",
+      status: "success",
+      sessionId: CHILD_ID,
+    });
+    // The result content is preserved verbatim (agent_id header included).
+    expect(result).toMatchObject({
+      content: expect.stringContaining("agent_id: agent-0"),
+    });
+    // Non-Agent results carry no forward link.
+    const grep = records.find((r) => r.type === "tool_result" && r.toolCallId === "call_k001");
+    expect(grep).not.toHaveProperty("sessionId");
   });
 
   it("attaches turn-scope usage to the immediately preceding record", async () => {
@@ -265,6 +284,69 @@ describe("kimi-code adapter", () => {
       matched.push(m.sessionId);
     }
     expect(matched.sort()).toEqual([CHILD_ID, SESSION_ID].sort());
+  });
+
+  it("listSessions includeForks: no-op — no lineage is ever emitted, every session is its own group HEAD", async () => {
+    const collect = async (includeForks?: boolean): Promise<string[]> => {
+      const ids: string[] = [];
+      for await (const m of adapter.listSessions(
+        includeForks === undefined ? {} : { includeForks },
+      )) {
+        ids.push(m.sessionId);
+      }
+      return ids.sort();
+    };
+    const all = [CHILD_ID, SESSION_ID].sort();
+    expect(await collect()).toEqual(all);
+    expect(await collect(false)).toEqual(all);
+    expect(await collect(true)).toEqual(all);
+  });
+
+  it("forward link edge cases: AgentSwarm results and unresolvable agent_id get NO sessionId", async () => {
+    const base = path.join(tmp, "forward-link");
+    const uuid = "cccccccc-0000-4000-8000-000000000003";
+    writeSession(
+      base,
+      "wd_fwd",
+      uuid,
+      {
+        agents: {
+          main: { type: "main", parentAgentId: null },
+          "agent-0": { type: "sub", parentAgentId: "main" },
+        },
+      },
+      {
+        main: [
+          // 1. AgentSwarm result: N children in one result — not expressible
+          //    in the single tool_result.sessionId slot → no forward link.
+          '{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_s1","name":"AgentSwarm","args":{"items":["a","b"]}},"time":1784541601000}',
+          '{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_s1","result":{"output":"<agent_swarm_result>\\n<summary>completed: 1</summary>\\n<subagent agent_id=\\"agent-0\\" item=\\"a\\" outcome=\\"completed\\">done</subagent>\\n</agent_swarm_result>"}},"time":1784541602000}',
+          // 2. Agent result without the agent_id header (failure shape) → no link.
+          '{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_s2","name":"Agent","args":{"prompt":"p"}},"time":1784541603000}',
+          '{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_s2","result":{"output":"Error: subagent crashed"},"is_error":true},"time":1784541604000}',
+          // 3. agent_id naming an agent with NO wire in this session dir → no link.
+          '{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_s3","name":"Agent","args":{"prompt":"p"}},"time":1784541605000}',
+          '{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_s3","result":{"output":"agent_id: agent-9\\nstatus: completed\\n\\n[summary]\\nok"}},"time":1784541606000}',
+          // 4. Well-formed Agent result naming agent-0 → forward link.
+          '{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_s4","name":"Agent","args":{"prompt":"p"}},"time":1784541607000}',
+          '{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_s4","result":{"output":"agent_id: agent-0\\nactual_subagent_type: general\\nstatus: completed\\n\\n[summary]\\nok"}},"time":1784541608000}',
+          "",
+        ].join("\n"),
+        "agent-0":
+          '{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"子任务"}],"origin":{"kind":"system_trigger"}},"time":1784541601500}\n',
+      },
+    );
+    const fwd = new KimiCodeAdapter(base);
+    const sessions = await collectSessions(fwd);
+    expect(validateSessions(sessions)).toEqual([]);
+    const main = sessions.find((s) => s.manifest.sessionId === uuid)!;
+    const byCallId = new Map(
+      main.records.filter((r) => r.type === "tool_result").map((r) => [r.toolCallId, r]),
+    );
+    expect(byCallId.get("call_s1")).not.toHaveProperty("sessionId"); // AgentSwarm: N children
+    expect(byCallId.get("call_s2")).not.toHaveProperty("sessionId"); // no agent_id header
+    expect(byCallId.get("call_s3")).not.toHaveProperty("sessionId"); // unknown agent
+    expect(byCallId.get("call_s4")).toMatchObject({ sessionId: `${uuid}/agent-0` });
   });
 
   it("AC-0002-B-2: a wire without usage.record yields no usage fields (nothing fabricated)", async () => {

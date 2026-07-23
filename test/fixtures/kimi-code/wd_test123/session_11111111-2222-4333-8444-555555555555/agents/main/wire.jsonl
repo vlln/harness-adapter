@@ -20,6 +20,8 @@
 {"type":"goal.update","status":"complete","wallClockMs":5000,"actor":"model","time":1784541609000}
 {"type":"config.update","modelAlias":"moonshot/kimi-k2-turbo","thinkingLevel":"high","time":1784541609100}
 {"type":"usage.record","model":"moonshot/kimi-k2-turbo","usage":{"inputOther":400,"output":30,"inputCacheRead":50,"inputCacheCreation":0},"usageScope":"turn","time":1784541609200}
+{"type":"context.append_loop_event","event":{"type":"tool.call","uuid":"call_k002","turnId":"1","step":2,"stepUuid":"step-2b","toolCallId":"call_k002","name":"Agent","args":{"description":"审查登录页补丁","prompt":"审查登录页补丁是否正确"}},"time":1784541609250}
+{"type":"context.append_loop_event","event":{"type":"tool.result","parentUuid":"call_k002","toolCallId":"call_k002","result":{"output":"agent_id: agent-0\nactual_subagent_type: general\nstatus: completed\n\n[summary]\n补丁正确，无回归风险。"}},"time":1784541609260}
 {"type":"plan_mode.enter","id":"quiet-fox-plan","time":1784541609300}
 {"type":"plan_mode.exit","time":1784541609400}
 {"type":"full_compaction.begin","source":"manual","time":1784541610000}

@@ -5,6 +5,8 @@ import type { AhsRecord } from "../schema/record";
 export interface SessionFilter {
   harness?: string;
   cwd?: string;
+  /** Include lineage descendants (forks/attempts). Default false: only group heads. */
+  includeForks?: boolean;
 }
 
 /**
