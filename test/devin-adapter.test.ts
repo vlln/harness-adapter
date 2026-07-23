@@ -1,8 +1,10 @@
 /**
- * Devin adapter — four-layer AC tests (see docs/plans/0007-devin-adapter).
+ * Devin adapter — four-layer AC tests (see docs/plans/0009-linear-sessions).
  *
  * Fixture: programmatically generated SQLite (test/fixtures/devin-db.ts,
  * synthetic data only). Golden: test/fixtures/devin-golden.json (reviewed).
+ * Model: ADR-0005 linear sessions + fork synthesis (per-root sessions,
+ * twin-branch skip, shared-prefix lineage anchors, group HEAD pointer).
  */
 
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -23,7 +25,7 @@ import {
   validateSessions,
   type SessionData,
 } from "../src/validate/index";
-import { createDevinFixture, T0 } from "./fixtures/devin-db";
+import { BASE_TIP_NODE, createDevinFixture, ROOT40_TIP_NODE, T0 } from "./fixtures/devin-db";
 
 let workDir: string;
 let dbPath: string;
@@ -72,13 +74,19 @@ describe("adapter shape", () => {
     expect(adapter.capabilities).toEqual({ history: "full", control: false });
   });
 
-  it("lists visible sessions only, main chain then siblings", () => {
+  it("lists group HEADs only by default; includeForks lists every session", async () => {
+    const heads: string[] = [];
+    for await (const m of adapter.listSessions()) heads.push(m.sessionId);
+    expect(heads).toEqual(["odd-cove", "quiet-pond", "sunny-forest"]);
+    // Full set: same groups, with every lineage descendant.
     expect(sessions.map((s) => s.manifest.sessionId)).toEqual([
       "odd-cove",
       "quiet-pond",
       "sunny-forest",
-      "sunny-forest#root-20",
+      "sunny-forest#fork-16",
       "sunny-forest#root-30",
+      "sunny-forest#root-40",
+      "sunny-forest#root-50",
     ]);
   });
 
@@ -92,23 +100,33 @@ describe("adapter shape", () => {
 
   it("honors the cwd filter", async () => {
     const listed: string[] = [];
-    for await (const m of adapter.listSessions({ cwd: "/work/beta" })) listed.push(m.sessionId);
+    for await (const m of adapter.listSessions({ cwd: "/work/beta", includeForks: true })) {
+      listed.push(m.sessionId);
+    }
     expect(listed).toEqual(["quiet-pond"]);
   });
 
-  it("rejects unknown session ids (incl. unknown sibling roots)", async () => {
+  it("rejects unknown session ids (incl. unknown fork/root forms)", async () => {
     await expect(async () => {
       for await (const _ of adapter.readRecords("no-such")) void _;
     }).rejects.toThrow(/session not found/);
     await expect(async () => {
       for await (const _ of adapter.readRecords("sunny-forest#root-999")) void _;
     }).rejects.toThrow(/session not found/);
+    // The dead twin produces no fork session.
+    await expect(async () => {
+      for await (const _ of adapter.readRecords("sunny-forest#fork-2")) void _;
+    }).rejects.toThrow(/session not found/);
+    // The base session has no #root-0 alias anymore.
+    await expect(async () => {
+      for await (const _ of adapter.readRecords("sunny-forest#root-0")) void _;
+    }).rejects.toThrow(/session not found/);
   });
 
-  it("reads the main chain via its explicit #root-0 form", async () => {
-    const explicit: AhsRecord[] = [];
-    for await (const rec of adapter.readRecords("sunny-forest#root-0")) explicit.push(rec);
-    expect(explicit.map((r) => r.recordId)).toEqual(session("sunny-forest").records.map((r) => r.recordId));
+  it("reads every session's own linear records", async () => {
+    const fork: AhsRecord[] = [];
+    for await (const rec of adapter.readRecords("sunny-forest#fork-16")) fork.push(rec);
+    expect(fork.map((r) => r.recordId)).toEqual(["m-user-20", "m-asst-21"]);
   });
 });
 
@@ -122,79 +140,115 @@ describe("AC-0001: output is schema-valid (layer 1)", () => {
         recordCount += 1;
       }
     }
-    expect(recordCount).toBe(18);
+    expect(recordCount).toBe(24);
   });
 
   it("AC-0001-E-1: unmappable source content is dropped, output stays valid", () => {
-    const main = session("sunny-forest");
-    const ids = main.records.map((r) => r.recordId);
-    // Unknown role, malformed JSON, empty assistant, branch-retry duplicate,
-    // duplicate tool result — none of them produce records.
-    expect(ids).not.toContain("m-unk-10");
-    expect(ids).not.toContain("m-asst-14");
-    expect(ids).not.toContain("m-tool-8");
-    expect(ids.filter((id) => id === "m-user-1")).toHaveLength(1);
-    for (const rec of main.records) AhsRecordSchema.parse(rec);
-    // No schema-external fields leaked: parse + re-serialize round-trips.
-    for (const rec of main.records) {
-      expect(AhsRecordSchema.parse(rec)).toEqual(rec);
+    const base = session("sunny-forest");
+    const ids = base.records.map((r) => r.recordId);
+    // Unknown role, malformed JSON, empty assistant, duplicate tool result —
+    // none of them produce records. The dead twin's message appears once.
+    expect(ids).not.toContain("m-unk-9");
+    expect(ids).not.toContain("m-asst-13");
+    expect(ids).not.toContain("m-tool-7");
+    expect(ids.filter((id) => id === "m-asst-2")).toHaveLength(1);
+    for (const s of sessions) {
+      ManifestSchema.parse(s.manifest);
+      for (const rec of s.records) {
+        // No schema-external fields leaked: parse + re-serialize round-trips.
+        expect(AhsRecordSchema.parse(rec)).toEqual(rec);
+      }
     }
   });
 });
 
 describe("AC-0002: output is complete (layer 2 invariants)", () => {
-  it("AC-0002-N-1/N-2/N-6: validateSessions passes on the full output", () => {
+  it("AC-0002-N-1/N-2/N-6/N-7: validateSessions passes on the full output", () => {
     expect(validateSessions(sessions)).toEqual([]);
   });
 
-  it("AC-0002-N-1: forest splits — each AHS session is linear (seq contiguous from 0)", () => {
+  it("AC-0002-N-1: every session is linear (seq contiguous from 0, first record is the root)", () => {
     for (const s of sessions) {
       expect(s.records.map((r) => r.seq)).toEqual(s.records.map((_, i) => i));
     }
-    // Main chain root resolved by walking UP from main_chain_id (a tip, 5).
-    const main = session("sunny-forest");
-    expect(main.records[0]).toMatchObject({ recordId: "m-sys-0", seq: 0 });
-    // Dedup: branch-retry duplicates of a message_id are skipped — the
-    // reply to the duplicate lands after the first occurrence.
-    const reply = main.records.find((r) => r.recordId === "m-asst-7");
-    expect(reply).toBeDefined();
+    const base = session("sunny-forest");
+    expect(base.records[0]).toMatchObject({ recordId: "m-sys-0", seq: 0 });
   });
 
-  it("AC-0002-N-7: sibling_attempt lineage edges resolve to the main session", () => {
-    const main = session("sunny-forest");
-    expect(main.manifest.lineage).toBeUndefined();
-    expect(main.manifest.invocation).toBeUndefined();
-    for (const id of ["sunny-forest#root-20", "sunny-forest#root-30"]) {
-      const sibling = session(id);
-      // TODO(Plan 02): atRecordId shared-prefix anchor (message_id reconciliation).
-      expect(sibling.manifest.lineage).toEqual({ type: "sibling_attempt", sessionId: "sunny-forest" });
-    }
+  it("AC-0002-N-2: no invocation edges — Devin CLI has no subagent sessions (vacuous)", () => {
+    for (const s of sessions) expect(s.manifest.invocation).toBeUndefined();
+  });
+
+  it("AC-0002-N-7: twin branch stays main, real fork splits with forked_from anchor", () => {
+    // Dead twin: no session; the shared message lives once in the base.
+    expect(sessions.some((s) => s.manifest.sessionId === "sunny-forest#fork-2")).toBe(false);
+    const fork = session("sunny-forest#fork-16");
+    expect(fork.manifest.lineage).toEqual({
+      type: "forked_from",
+      sessionId: "sunny-forest",
+      atRecordId: "m-asst-15/tool_call/0",
+    });
+    // Suffix-only: the twin message and the ancestor-orphaned tool_result
+    // are not stored in the fork.
+    expect(fork.records.map((r) => r.recordId)).toEqual(["m-user-20", "m-asst-21"]);
+  });
+
+  it("AC-0002-N-7: cross-root lineage anchors by message_id reconciliation + type judgment", () => {
+    // Shared system prefix → harness_message anchor → forked_from.
+    expect(session("sunny-forest#root-40").manifest.lineage).toEqual({
+      type: "forked_from",
+      sessionId: "sunny-forest",
+      atRecordId: "m-sys-0",
+    });
+    expect(session("sunny-forest#root-40").records.map((r) => r.recordId)).toEqual([
+      "m-user-41",
+      "m-asst-42",
+    ]);
+    // Shared [system, user] prefix → user_message anchor → sibling_attempt.
+    expect(session("sunny-forest#root-50").manifest.lineage).toEqual({
+      type: "sibling_attempt",
+      sessionId: "sunny-forest",
+      atRecordId: "m-user-1",
+    });
+    expect(session("sunny-forest#root-50").records.map((r) => r.recordId)).toEqual(["m-asst-52"]);
+    // Nothing shared → anchor-less retry from start.
+    expect(session("sunny-forest#root-30").manifest.lineage).toEqual({
+      type: "sibling_attempt",
+      sessionId: "sunny-forest",
+    });
+    expect(session("sunny-forest#root-30").records.map((r) => r.recordId)).toEqual(["m-sys-30"]);
+    // The base session carries no lineage.
+    expect(session("sunny-forest").manifest.lineage).toBeUndefined();
   });
 
   it("AC-0002-N-3: message counts match the source after dedup; text is verbatim", () => {
-    const main = session("sunny-forest");
-    // Source sunny-forest: 6 user-role nodes + 6 assistant-role nodes; after
-    // dedup/drops: user m-user-1, m-user-11, m-user-13 (+1 harness-impersonated
-    // routed to harness_message); assistant m-asst-2, m-asst-9, m-asst-7.
-    expect(main.records.filter((r) => r.type === "user_message")).toHaveLength(3);
-    expect(main.records.filter((r) => r.type === "assistant_message")).toHaveLength(3);
-    const m2 = main.records.find((r) => r.recordId === "m-asst-2");
+    const group = sessions.filter((s) => s.manifest.sessionId.startsWith("sunny-forest"));
+    // Distinct user-role messages in the source group: m-user-1 (+copy),
+    // m-user-10, m-user-12, m-user-18, m-user-20, m-user-41 (+ m-harness-14
+    // routed to harness_message); assistant: m-asst-2 (twins deduped),
+    // m-asst-8, m-asst-15, m-asst-21, m-asst-42, m-asst-52.
+    expect(group.flatMap((s) => s.records).filter((r) => r.type === "user_message")).toHaveLength(6);
+    expect(
+      group.flatMap((s) => s.records).filter((r) => r.type === "assistant_message"),
+    ).toHaveLength(6);
+    const base = session("sunny-forest");
+    const m2 = base.records.find((r) => r.recordId === "m-asst-2");
     expect(m2).toMatchObject({
       type: "assistant_message",
       content: [
         { type: "thinking", text: "Let me think." },
         { type: "text", text: "I'll inspect the file." },
       ],
-      timestamp: iso(20),
+      timestamp: iso(21), // the continuing twin (node 3), not the dead one
     });
     // system → harness_message; user with is_user_input=false → harness_message.
-    expect(main.records.find((r) => r.recordId === "m-sys-0")?.type).toBe("harness_message");
-    expect(main.records.find((r) => r.recordId === "m-harness-15")).toMatchObject({
+    expect(base.records.find((r) => r.recordId === "m-sys-0")?.type).toBe("harness_message");
+    expect(base.records.find((r) => r.recordId === "m-harness-14")).toMatchObject({
       type: "harness_message",
       content: [{ type: "text", text: "<system-reminder>tick</system-reminder>" }],
     });
     // Tool result content verbatim.
-    expect(main.records.find((r) => r.recordId === "m-tool-3")).toMatchObject({
+    expect(base.records.find((r) => r.recordId === "m-tool-4")).toMatchObject({
       type: "tool_result",
       toolCallId: "tc-1",
       content: "file contents here",
@@ -202,23 +256,25 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
   });
 
   it("AC-0002-N-4: record-level usage reconciles with the source totals", () => {
-    const main = session("sunny-forest");
-    // Source metrics: n2 (100/20/177w/1500ms) + n4 (50/10/800ms); cache_read null dropped.
-    expect(sumRecordUsage(main.records)).toEqual({
+    const base = session("sunny-forest");
+    // Source metrics: m-asst-2 (100/20/177w/1500ms — twins carry the same
+    // metrics, counted once) + m-asst-5 (50/10/800ms); cache_read null dropped.
+    expect(sumRecordUsage(base.records)).toEqual({
       inputTokens: 150,
       outputTokens: 30,
       cacheWriteTokens: 177,
       durationMs: 2300,
     });
     // Tool-only assistant: usage rides on the first tool_call (not lost).
-    expect(main.records.find((r) => r.recordId === "m-asst-4/tool_call/0")?.usage).toEqual({
+    expect(base.records.find((r) => r.recordId === "m-asst-5/tool_call/0")?.usage).toEqual({
       inputTokens: 50,
       outputTokens: 10,
       durationMs: 800,
     });
-    // Manifest stats aggregate this session only, plus the credit cost.
-    expect(main.manifest.stats).toEqual({
-      turnCount: 3,
+    // Manifest stats aggregate this session only; the group-level credit
+    // cost rides on the BASE session (winner-independent, B-4).
+    expect(base.manifest.stats).toEqual({
+      turnCount: 4,
       totalUsage: {
         inputTokens: 150,
         outputTokens: 30,
@@ -228,30 +284,37 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
       },
       durationMs: 3600000,
     });
-    // Sibling sessions carry no cost (no per-tree attribution).
-    expect(session("sunny-forest#root-30").manifest.stats?.totalUsage).toBeUndefined();
+    // Fork sessions carry no cost (no per-chain attribution).
+    for (const id of ["sunny-forest#fork-16", "sunny-forest#root-40"]) {
+      expect(session(id).manifest.stats?.totalUsage?.cost).toBeUndefined();
+    }
   });
 
   it("AC-0002-N-5: two runs are byte-identical", async () => {
     expect(await checkIdempotency(adapter)).toEqual([]);
   });
 
-  it("AC-0002-N-6: tool pairing XOR holds; duplicate result keeps DFS-first", () => {
-    const main = session("sunny-forest");
-    const calls = main.records.filter((r) => r.type === "tool_call");
+  it("AC-0002-N-6: tool pairing XOR holds; duplicate result keeps chain-first", () => {
+    const base = session("sunny-forest");
+    const calls = base.records.filter((r) => r.type === "tool_call");
     expect(calls.map((r) => [r.toolCallId, r.status])).toEqual([
       ["tc-1", "completed"],
       ["tc-2", "completed"],
       ["tc-3", "interrupted"],
+      ["tc-4", "completed"],
     ]);
-    const resultsForTc2 = main.records.filter((r) => r.type === "tool_result" && r.toolCallId === "tc-2");
+    const resultsForTc2 = base.records.filter(
+      (r) => r.type === "tool_result" && r.toolCallId === "tc-2",
+    );
     expect(resultsForTc2).toHaveLength(1);
-    expect(resultsForTc2[0]).toMatchObject({ recordId: "m-tool-5", content: "ok" });
+    expect(resultsForTc2[0]).toMatchObject({ recordId: "m-tool-6", content: "ok" });
   });
 
   it("AC-0002-B-1: interrupted tool_call gets no synthetic tool_result", () => {
-    const main = session("sunny-forest");
-    expect(main.records.some((r) => r.type === "tool_result" && r.toolCallId === "tc-3")).toBe(false);
+    const base = session("sunny-forest");
+    expect(base.records.some((r) => r.type === "tool_result" && r.toolCallId === "tc-3")).toBe(
+      false,
+    );
   });
 
   it("AC-0002-B-2: source without usage yields no usage fields; existing usage kept", () => {
@@ -260,6 +323,32 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
     expect(quiet.manifest.stats?.totalUsage).toBeUndefined();
     // odd-cove: invalid metadata JSON → no cost, adapter does not crash.
     expect(session("odd-cove").manifest.stats?.totalUsage).toBeUndefined();
+  });
+
+  it("AC-0002-B-4: winner flip moves only the derived HEAD, never the session set", async () => {
+    const dirA = await mkdtemp(path.join(tmpdir(), "devin-b4-a-"));
+    const dirB = await mkdtemp(path.join(tmpdir(), "devin-b4-b-"));
+    try {
+      const adapterA = new DevinAdapter(createDevinFixture(dirA, BASE_TIP_NODE));
+      const adapterB = new DevinAdapter(createDevinFixture(dirB, ROOT40_TIP_NODE));
+      const setA = stableSerialize(await collectSessions(adapterA));
+      const setB = stableSerialize(await collectSessions(adapterB));
+      expect(setA).toBe(setB);
+      const headsOf = async (a: DevinAdapter): Promise<string[]> => {
+        const ids: string[] = [];
+        for await (const m of a.listSessions()) ids.push(m.sessionId);
+        return ids;
+      };
+      expect(await headsOf(adapterA)).toEqual(["odd-cove", "quiet-pond", "sunny-forest"]);
+      expect(await headsOf(adapterB)).toEqual([
+        "odd-cove",
+        "quiet-pond",
+        "sunny-forest#root-40",
+      ]);
+    } finally {
+      await rm(dirA, { recursive: true, force: true });
+      await rm(dirB, { recursive: true, force: true });
+    }
   });
 });
 
@@ -275,9 +364,17 @@ describe("AC-0004: output is usable (layer 4 archive + consumer)", () => {
   it("AC-0004-N-1: archive round-trips and ahs-report aggregates tokens", async () => {
     const archiveDir = await mkdtemp(path.join(tmpdir(), "devin-archive-"));
     try {
-      const written = await exportSessions(adapter, archiveDir);
+      const written = await exportSessions(adapter, archiveDir, { includeForks: true });
       expect(written.map((w) => w.sessionId).sort()).toEqual(
-        ["odd-cove", "quiet-pond", "sunny-forest", "sunny-forest#root-20", "sunny-forest#root-30"].sort(),
+        [
+          "odd-cove",
+          "quiet-pond",
+          "sunny-forest",
+          "sunny-forest#fork-16",
+          "sunny-forest#root-30",
+          "sunny-forest#root-40",
+          "sunny-forest#root-50",
+        ].sort(),
       );
 
       const report = await renderReport(archiveDir, "sunny-forest");
@@ -297,9 +394,9 @@ describe("AC-0004: output is usable (layer 4 archive + consumer)", () => {
       });
       expect(report.aggregatedSessions).toEqual(["sunny-forest"]);
 
-      // Sibling sessions are archived under sanitized, resolvable dir names.
-      const siblingReport = await renderReport(archiveDir, "sunny-forest#root-30");
-      expect(siblingReport.text).toContain("[user] Try differently.");
+      // Fork sessions are archived under sanitized, resolvable dir names.
+      const forkReport = await renderReport(archiveDir, "sunny-forest#root-40");
+      expect(forkReport.text).toContain("[user] Try differently.");
     } finally {
       await rm(archiveDir, { recursive: true, force: true });
     }
@@ -308,8 +405,8 @@ describe("AC-0004: output is usable (layer 4 archive + consumer)", () => {
 
 describe("manifest mapping", () => {
   it("maps session fields; titleOrigin custom; harnessVersion unknown", () => {
-    const main = session("sunny-forest").manifest;
-    expect(main).toMatchObject({
+    const base = session("sunny-forest").manifest;
+    expect(base).toMatchObject({
       harness: "devin",
       harnessVersion: "unknown",
       cwd: "/work/alpha",
@@ -323,6 +420,9 @@ describe("manifest mapping", () => {
     expect(quiet.titleOrigin).toBeUndefined();
     expect(quiet.stats).toEqual({ turnCount: 1, durationMs: 0 });
     // odd-cove: node without message_id → recordId node-<id> fallback.
-    expect(session("odd-cove").records[0]).toMatchObject({ recordId: "node-0", type: "user_message" });
+    expect(session("odd-cove").records[0]).toMatchObject({
+      recordId: "node-0",
+      type: "user_message",
+    });
   });
 });
