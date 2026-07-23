@@ -1,0 +1,46 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/Users/test/Project/demo",
+    "git": {
+      "branch": "main"
+    },
+    "harness": "claude-code",
+    "harnessVersion": "2.1.207",
+    "lineage": {
+      "atRecordId": "eeee0009-0000-4000-8000-000000000009",
+      "sessionId": "66666666-6666-4666-8666-666666666666",
+      "type": "sibling_attempt"
+    },
+    "model": "claude-opus-4-1",
+    "sessionId": "66666666-6666-4666-8666-666666666666/fork/eeee0010-0000-4000-8000-000000000010",
+    "stats": {
+      "totalUsage": {
+        "cacheReadTokens": 1200,
+        "inputTokens": 4400,
+        "outputTokens": 30
+      },
+      "turnCount": 0
+    }
+  },
+  "records": [
+    {
+      "content": [
+        {
+          "text": "No, the timeout is hardcoded.",
+          "type": "text"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "recordId": "eeee0010-0000-4000-8000-000000000010",
+      "seq": 0,
+      "timestamp": "2026-07-20T09:03:06.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 1200,
+        "inputTokens": 4400,
+        "outputTokens": 30
+      }
+    }
+  ]
+}

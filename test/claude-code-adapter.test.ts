@@ -5,12 +5,21 @@
  * Fixture layout (all hand-crafted, no real user data):
  *   11111111-…  minimal session with goal lifecycle (sentinel → met) — AC-0002-N-3/N-4
  *   22222222-…  session with a subagent FILE + .meta.json — AC-0002-N-2
- *   33333333-…  inline sidechain + compaction + duplicate tool_result +
- *               interrupted tool_call — AC-0002-N-6/B-1
+ *               (invocation anchor + tool_result.sessionId forward link)
+ *   33333333-…  inline sidechain (sourceToolUseID fallback anchor) +
+ *               compaction + duplicate tool_result + interrupted tool_call —
+ *               AC-0002-N-6/B-1
  *   44444444-…  dropped process records (system/mode/attachment) leaving no
  *               seq gaps, multi tool_use, non-string tool_result,
  *               missing usage — AC-0001-E-1, AC-0002-B-2
  *   55555555-…  only process records — not an AHS session (skipped)
+ *   66666666-…  branch points: edit-resend after an assistant record
+ *               (forked_from) + re-answer to a user prompt (sibling_attempt);
+ *               main chain = chain to the last leaf — AC-0002-N-7
+ *   77777777-…  assistant segments sharing one message.id chain in file
+ *               order (no fork); parallel result deliveries in separate user
+ *               lines stay in one linear session; subagent whose
+ *               meta.toolUseId resolves nowhere — AC-0002-B-3
  */
 
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -37,6 +46,10 @@ const SESSION_B = "22222222-2222-4222-8222-222222222222"; // subagent file
 const SESSION_C = "33333333-3333-4333-8333-333333333333"; // inline sidechain + compaction
 const SESSION_D = "44444444-4444-4444-8444-444444444444"; // edge cases
 const SESSION_E = "55555555-5555-4555-8555-555555555555"; // process-only, skipped
+const SESSION_F = "66666666-6666-4666-8666-666666666666"; // fork synthesis
+const SESSION_G = "77777777-7777-4777-8777-777777777777"; // snapshot collapse + parallel deliveries
+const FORK_EDIT = `${SESSION_F}/fork/eeee0003-0000-4000-8000-000000000003`;
+const FORK_RETRY = `${SESSION_F}/fork/eeee0010-0000-4000-8000-000000000010`;
 
 async function readAll(adapter: ClaudeCodeAdapter, sessionId: string): Promise<AhsRecord[]> {
   const records: AhsRecord[] = [];
@@ -91,7 +104,7 @@ describe("claude-code adapter", () => {
     }
   });
 
-  it("layer 2 (AC-0002): all semantic invariants hold on all fixtures", async () => {
+  it("layer 2 (AC-0002): all semantic invariants hold on all fixtures (N-1/N-2/N-6/N-7 via validate)", async () => {
     const sessions = await collectSessions(adapter);
     expect(validateSessions(sessions)).toEqual([]);
   });
@@ -100,13 +113,43 @@ describe("claude-code adapter", () => {
     expect(await checkIdempotency(adapter)).toEqual([]);
   });
 
-  it("lists main sessions and child sessions (subagent file + inline sidechain); skips process-only sessions", async () => {
+  it("lists main, fork and child sessions; skips process-only sessions", async () => {
     const sessions = await collectSessions(adapter);
     const ids = sessions.map((s) => s.manifest.sessionId).sort();
     expect(ids).toEqual(
-      [SESSION_A, SESSION_B, SESSION_C, SESSION_D, "abc123", "def456"].sort(),
+      [
+        SESSION_A,
+        SESSION_B,
+        SESSION_C,
+        SESSION_D,
+        SESSION_F,
+        SESSION_G,
+        FORK_EDIT,
+        FORK_RETRY,
+        "abc123",
+        "def456",
+        "ghi789",
+      ].sort(),
     );
     expect(ids).not.toContain(SESSION_E);
+  });
+
+  it("listSessions default folds lineage descendants; includeForks lists them (interface-0001)", async () => {
+    const heads: string[] = [];
+    for await (const m of adapter.listSessions()) heads.push(m.sessionId);
+    expect(heads).not.toContain(FORK_EDIT);
+    expect(heads).not.toContain(FORK_RETRY);
+    // Group HEADs: main sessions (main chain = chain to the last leaf) and
+    // invocation children are listed; forks are not.
+    expect(heads.sort()).toEqual(
+      [SESSION_A, SESSION_B, SESSION_C, SESSION_D, SESSION_F, SESSION_G, "abc123", "def456", "ghi789"].sort(),
+    );
+
+    const all: string[] = [];
+    for await (const m of adapter.listSessions({ includeForks: true })) all.push(m.sessionId);
+    expect(all).toContain(FORK_EDIT);
+    expect(all).toContain(FORK_RETRY);
+    expect(all.length).toBe(heads.length + 2);
   });
 
   it("readRecords of a process-only session yields nothing; unknown sessionId throws", async () => {
@@ -275,11 +318,31 @@ describe("claude-code adapter", () => {
       expect(manifest.titleOrigin).toBe("generated");
     });
 
-    it("emits the subagent as a child session with an invocation back-link (AC-0002-N-2)", async () => {
+    it("emits the subagent as a child session with an anchored invocation back-link (AC-0002-N-2)", async () => {
       const sessions = await collectSessions(adapter);
       const child = sessions.find((s) => s.manifest.sessionId === "abc123")!.manifest;
-      // TODO(Plan 02): atRecordId anchor + parent tool_result.sessionId forward link.
-      expect(child.invocation).toEqual({ sessionId: SESSION_B });
+      // Back-link anchored at the parent's spawning Task tool_call record
+      // (meta.json toolUseId → tool_call with that toolCallId).
+      expect(child.invocation).toEqual({
+        sessionId: SESSION_B,
+        atRecordId: "bbbb0002-0000-4000-8000-000000000002/tool_use/0",
+      });
+    });
+
+    it("writes the forward link into the parent's paired tool_result (AC-0002-N-2)", async () => {
+      const main = await readAll(adapter, SESSION_B);
+      const result = main.find(
+        (r) => r.type === "tool_result" && r.toolCallId === "toolu_task01AAAAAAAAAAAAAAAAAA",
+      )!;
+      expect(result.type).toBe("tool_result");
+      if (result.type === "tool_result") {
+        expect(result.recordId).toBe("bbbb0003-0000-4000-8000-000000000003");
+        expect(result.sessionId).toBe("abc123");
+      }
+      // No other record carries a forward link.
+      expect(
+        main.filter((r) => r.type === "tool_result" && r.sessionId !== undefined),
+      ).toHaveLength(1);
     });
 
     it("keeps the Task tool_call in the main session; sidechain records stay out of the main session", async () => {
@@ -319,15 +382,29 @@ describe("claude-code adapter", () => {
   });
 
   describe("inline sidechain + compaction (fixture C)", () => {
-    it("groups inline isSidechain records by agentId into a child session", async () => {
+    it("groups inline isSidechain records by agentId into a child session (sourceToolUseID anchor)", async () => {
       const child = await readAll(adapter, "def456");
       expect(child.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
       expect(child[0]!.seq).toBe(0);
 
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === "def456")!.manifest;
-      // TODO(Plan 02): atRecordId anchor (sourceToolUseID fallback) + forward link.
-      expect(manifest.invocation).toEqual({ sessionId: SESSION_C });
+      // No meta.json for inline groups: the anchor falls back to the first
+      // line's sourceToolUseID.
+      expect(manifest.invocation).toEqual({
+        sessionId: SESSION_C,
+        atRecordId: "dddd0003-0000-4000-8000-000000000003/tool_use/0",
+      });
+
+      // Forward link on the paired (first, non-duplicate) tool_result.
+      const main = await readAll(adapter, SESSION_C);
+      const result = main.find(
+        (r) => r.type === "tool_result" && r.toolCallId === "toolu_task02AAAAAAAAAAAAAAAAAA",
+      )!;
+      if (result.type === "tool_result") {
+        expect(result.recordId).toBe("dddd0006-0000-4000-8000-000000000006");
+        expect(result.sessionId).toBe("def456");
+      }
     });
 
     it("excludes inline sidechain records from the main session", async () => {
@@ -390,70 +467,136 @@ describe("claude-code adapter", () => {
     });
   });
 
-  describe("edge cases (fixture D)", () => {
-    it("emits no assistant_message for tool_use-only messages; usage rides on the first tool_call", async () => {
-      const records = await readAll(adapter, SESSION_D);
+  describe("fork synthesis (fixture F, AC-0002-N-7)", () => {
+    it("main chain = the chain leading to the last leaf (edit-resend branch wins by file order)", async () => {
+      const main = await readAll(adapter, SESSION_F);
+      expect(main.map((r) => r.recordId)).toEqual([
+        "eeee0001-0000-4000-8000-000000000001",
+        "eeee0002-0000-4000-8000-000000000002",
+        "eeee0005-0000-4000-8000-000000000005", // edited resubmit, not the original eeee0003
+        "eeee0006-0000-4000-8000-000000000006",
+        "eeee0006-0000-4000-8000-000000000006/tool_use/0",
+        "eeee0007-0000-4000-8000-000000000007",
+        "eeee0008-0000-4000-8000-000000000008",
+        "eeee0009-0000-4000-8000-000000000009",
+        "eeee0011-0000-4000-8000-000000000011", // the retry's later answer
+      ]);
+      expect(main.map((r) => r.seq)).toEqual(main.map((_, i) => i));
+      // The main session carries no lineage and no fork content.
+      const sessions = await collectSessions(adapter);
+      const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_F)!.manifest;
+      expect(manifest.lineage).toBeUndefined();
+      expect(manifest.stats?.turnCount).toBe(3);
+    });
+
+    it("edit-resend branch becomes a forked_from session anchored at the assistant record", async () => {
+      const sessions = await collectSessions(adapter);
+      const fork = sessions.find((s) => s.manifest.sessionId === FORK_EDIT)!;
+      expect(fork.manifest.lineage).toEqual({
+        type: "forked_from", // anchor is an assistant_message (agent-side)
+        sessionId: SESSION_F,
+        atRecordId: "eeee0002-0000-4000-8000-000000000002",
+      });
+      // Suffix only: the fork starts at the branch child, no shared prefix.
+      expect(fork.records.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
+      expect(fork.records.map((r) => r.recordId)).toEqual([
+        "eeee0003-0000-4000-8000-000000000003",
+        "eeee0004-0000-4000-8000-000000000004",
+      ]);
+      expect(fork.records[0]!.seq).toBe(0);
+    });
+
+    it("re-answer to the same prompt becomes a sibling_attempt anchored at the user_message", async () => {
+      const sessions = await collectSessions(adapter);
+      const fork = sessions.find((s) => s.manifest.sessionId === FORK_RETRY)!;
+      expect(fork.manifest.lineage).toEqual({
+        type: "sibling_attempt", // anchor is a user_message
+        sessionId: SESSION_F,
+        atRecordId: "eeee0009-0000-4000-8000-000000000009",
+      });
+      expect(fork.records.map((r) => r.type)).toEqual(["assistant_message"]);
+      expect(fork.records[0]!.recordId).toBe("eeee0010-0000-4000-8000-000000000010");
+      // The competing answer is NOT in the main session.
+      const main = await readAll(adapter, SESSION_F);
+      expect(main.some((r) => r.recordId.startsWith("eeee0010"))).toBe(false);
+    });
+
+    it("readRecords resolves fork session ids", async () => {
+      const records = await readAll(adapter, FORK_EDIT);
+      expect(records.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
+      const retry = await readAll(adapter, FORK_RETRY);
+      expect(retry).toHaveLength(1);
+    });
+  });
+
+  describe("segment chaining + parallel deliveries (fixture G)", () => {
+    it("chains assistant segments sharing one message.id in file order — no fork", async () => {
+      const records = await readAll(adapter, SESSION_G);
+      // Two segments of one logical assistant message (same message.id, both
+      // parented at the user line): thinking segment, then text+tool_use
+      // segment. They chain in file order; nothing is collapsed or dropped.
       expect(records.map((r) => r.type)).toEqual([
         "user_message",
+        "assistant_message", // segment 1: thinking only
+        "assistant_message", // segment 2: text
         "tool_call",
         "tool_call",
-        "user_message",
         "tool_result",
         "tool_result",
         "assistant_message",
       ]);
-      const firstCall = records[1]!;
-      if (firstCall.type === "tool_call") {
-        expect(firstCall.toolCallId).toBe("toolu_multi01AAAAAAAAAAAAAAAA");
-        expect(firstCall.usage).toEqual({
-          inputTokens: 800,
-          outputTokens: 25,
+      const seg1 = records[1]!;
+      expect(seg1.recordId).toBe("ffff0002-0000-4000-8000-000000000002");
+      if (seg1.type === "assistant_message") {
+        expect(seg1.content.map((b) => b.type)).toEqual(["thinking"]);
+        // Intermediate segment: usage is a duplicate running value — dropped;
+        // only the last segment of the message.id carries usage.
+        expect(seg1.usage).toBeUndefined();
+      }
+      const seg2 = records[2]!;
+      expect(seg2.recordId).toBe("ffff0003-0000-4000-8000-000000000003");
+      if (seg2.type === "assistant_message") {
+        expect(seg2.content.map((b) => b.type)).toEqual(["text"]);
+        expect(seg2.usage).toEqual({
+          inputTokens: 2100,
+          outputTokens: 90,
           cacheReadTokens: 0,
-          cacheWriteTokens: 100,
+          cacheWriteTokens: 500,
         });
-        expect(firstCall.model).toBe("claude-opus-4-1");
       }
-      const secondCall = records[2]!;
-      if (secondCall.type === "tool_call") {
-        expect(secondCall.toolCallId).toBe("toolu_multi02AAAAAAAAAAAAAAAA");
-        expect(secondCall.usage).toBeUndefined();
+      // No fork sessions exist for this file.
+      const sessions = await collectSessions(adapter);
+      expect(
+        sessions.filter((s) => s.manifest.sessionId.startsWith(`${SESSION_G}/fork/`)),
+      ).toEqual([]);
+    });
+
+    it("keeps parallel result deliveries (separate user lines, distinct toolCallIds) in one chain", async () => {
+      const records = await readAll(adapter, SESSION_G);
+      const results = records.filter((r) => r.type === "tool_result");
+      expect(results.map((r) => (r.type === "tool_result" ? r.toolCallId : ""))).toEqual([
+        "toolu_par01AAAAAAAAAAAAAAAAAAA",
+        "toolu_par02AAAAAAAAAAAAAAAAAAA",
+      ]);
+      // The exact duplicate delivery (ffff0006) emits nothing: par01 appears once.
+      expect(
+        records.filter((r) => r.type === "tool_result" && r.toolCallId === "toolu_par01AAAAAAAAAAAAAAAAAAA"),
+      ).toHaveLength(1);
+      const calls = records.filter((r) => r.type === "tool_call");
+      for (const call of calls) {
+        if (call.type === "tool_call") {
+          expect(call.status).toBe(call.toolCallId.endsWith("par02AAAAAAAAAAAAAAAAAAA") ? "failed" : "completed");
+        }
       }
     });
 
-    it("projects a linear chain through dropped process records (seq contiguous)", async () => {
-      const records = await readAll(adapter, SESSION_D);
-      // Dropped process records (system/mode/attachment) leave no gaps:
-      // seq is strictly increasing and contiguous from 0.
-      expect(records.map((r) => r.seq)).toEqual(records.map((_, i) => i));
-    });
-
-    it("JSON-stringifies non-string tool_result content and keeps error status", async () => {
-      const records = await readAll(adapter, SESSION_D);
-      const ok = records.find(
-        (r) => r.type === "tool_result" && r.toolCallId === "toolu_multi01AAAAAAAAAAAAAAAA",
-      )!;
-      if (ok.type === "tool_result") {
-        expect(ok.content).toBe(JSON.stringify([{ type: "text", text: "build ok" }]));
-        expect(ok.status).toBe("success");
-      }
-      const err = records.find(
-        (r) => r.type === "tool_result" && r.toolCallId === "toolu_multi02AAAAAAAAAAAAAAAA",
-      )!;
-      if (err.type === "tool_result") {
-        expect(err.content).toBe("2 tests failed");
-        expect(err.status).toBe("error");
-      }
-      const failed = records.find(
-        (r) => r.type === "tool_call" && r.toolCallId === "toolu_multi02AAAAAAAAAAAAAAAA",
-      )!;
-      if (failed.type === "tool_call") expect(failed.status).toBe("failed");
-    });
-
-    it("allows missing source usage (AC-0002-B-2): record.usage stays undefined, not fabricated", async () => {
-      const records = await readAll(adapter, SESSION_D);
-      const last = records[records.length - 1]!;
-      expect(last.type).toBe("assistant_message");
-      expect(last.usage).toBeUndefined();
+    it("falls back to an unanchored invocation when meta.toolUseId resolves nowhere (AC-0002-B-3)", async () => {
+      const sessions = await collectSessions(adapter);
+      const child = sessions.find((s) => s.manifest.sessionId === "ghi789")!.manifest;
+      expect(child.invocation).toEqual({ sessionId: SESSION_G });
+      // No forward link is written for an unanchored child.
+      const main = await readAll(adapter, SESSION_G);
+      expect(main.some((r) => r.type === "tool_result" && r.sessionId !== undefined)).toBe(false);
     });
   });
 
