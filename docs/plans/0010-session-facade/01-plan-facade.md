@@ -2,7 +2,7 @@
 title: Plan 01 Session Facade 实现
 description: 按 interface/0003 实现 src/session/（AhsSession/AhsTask/openHarness），投影 + 聚合 + Task 链拼接，TDD。
 type: plan
-status: pending
+status: done
 created: 2026-07-23T06:30:00Z
 ---
 

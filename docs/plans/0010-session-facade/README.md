@@ -8,7 +8,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| [01-plan-facade.md](01-plan-facade.md) | src/session/ facade 实现 + openHarness 注册 + 测试 | pending | — |
+| [01-plan-facade.md](01-plan-facade.md) | src/session/ facade 实现 + openHarness 注册 + 测试 | done | [01-report-facade.md](01-report-facade.md) |
 
 ## 完成判据
 
