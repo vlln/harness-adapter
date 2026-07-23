@@ -8,6 +8,8 @@ created: 2026-07-23T05:18:21Z
 
 # ADR-0005: 线性 Session 与两维关系
 
+> **修订记录（2026-07-23）**：① 正链 `tool_result.sessionId` → `sessionIds: string[]`——支持一次调用产多个子 session（Kimi AgentSwarm 真实数据，单产子写单元素数组）；② `lineage.atRecordId` 三态——有值 = 锚定、`null` = 锚点源端不可得、缺省 = 从起点重试（此前 null 与缺省混用，存在歧义）。
+
 > 本 ADR **部分 supersede [ADR-0002](0002-session-relation-model.md)**：被取代的是"session 历史为单根 tree、分叉允许多子节点"、"Relation 三种类型中的 sibling_attempt 旧定义"、Manifest `isMainChain` 字段。被保留的是"subagent 是独立 session"、"存储层只有 Session 和 Relation 两类实体"的精神。
 
 ---
@@ -42,7 +44,7 @@ lineage?: { type: "forked_from" | "sibling_attempt", sessionId: string, atRecord
 - **fork 与 sibling_attempt 的判据（数据判据，与发起者无关）**：看锚点 record 的 role——
   - `forked_from`：锚在 agent 侧 record（assistant/tool 等）之后。分叉后的首条新 record 是一条**新的 user 输入**——在已完成的一轮之后选择了新方向（编辑重发也归此类：编辑产生新 u′，锚点仍在之前的 a 上）。
   - `sibling_attempt`：锚在 `user_message` 之后。分叉后的首条新 record 是 **agent 对同一个 prompt 的重新作答**——同一个问题被回答多次，互为竞争（Devin 的 agent 发起重试、用户的手动重试均归此类）。
-- 锚点 `atRecordId` 为 null 表示从起点重试（fork 自带 prompt 副本）。
+- 锚点 `atRecordId` 三态：有值 = 锚定；`null` = 锚点本应存在但源端不可得；缺省 = 从起点重试（fork 自带 prompt 副本）。
 - fork 的 invocation 沿 lineage **传递继承**（fork-of-subagent 的调起者 = 血统源头的调起者），不显式复制。
 
 ### 3. invocation（调用维）：正链 + 回链
