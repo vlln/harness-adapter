@@ -20,6 +20,8 @@ import type { AhsRecord } from "../schema/record";
 export interface SessionFilter {
   harness?: string;
   cwd?: string;
+  /** Include lineage descendants (forks/attempts). Default false: only group heads. */
+  includeForks?: boolean;
 }
 
 export interface HarnessAdapter {
@@ -51,6 +53,7 @@ export interface HarnessAdapter {
 |------|------|------|------|
 | `filter.harness` | string | 否 | 按 harness 标识过滤 |
 | `filter.cwd` | string | 否 | 按工作目录过滤 |
+| `filter.includeForks` | boolean | 否 | 默认 false：只列出各 lineage 组的 HEAD session（用户视角默认视图）；true 时含全部 fork/attempt（评测/回溯视角） |
 
 **响应：** `AsyncIterable<Manifest>`——每个元素是一个 session 的 Manifest（字段见 Spec 第四节 Manifest 字段详表）。
 
