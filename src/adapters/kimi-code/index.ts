@@ -23,6 +23,18 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * so children get a Manifest invocation back-link (parent session) with NO
  * atRecordId anchor (AC-0002-B-3).
  *
+ * INVOCATION FORWARD LINK (ADR-0005): an `Agent` tool result in the parent
+ * wire starts with an `agent_id: <name>` header line (verified on real
+ * data), which identifies the spawned child wire. When that name resolves to
+ * an agent of the same session directory, the paired tool_result record
+ * carries `sessionId: <uuid>/<name>` — the forward link reconciling with the
+ * child's invocation back-link. `AgentSwarm` results instead wrap MULTIPLE
+ * `<subagent agent_id="...">` entries (one call spawns N children); the
+ * single tool_result.sessionId slot cannot express N children, so swarm
+ * results carry NO forward link (contract friction, reported against the
+ * spec). Agent results without the agent_id header (e.g. failures) likewise
+ * get none (source-unavailable).
+ *
  * DEDUP POLICY: turn.prompt / turn.steer are NOT emitted — their content is
  * duplicated by an immediately following context.append_message with
  * identical text (verified 1814/1814 exact matches on real data in the
@@ -80,9 +92,14 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   the last stream record's time. Documented as a file-side projection —
  *   the stream position of plan writing is not recoverable (plan_mode.enter
  *   only carries the slug).
- * - forked events ({type:"forked", time}) mark a session fork but carry NO
- *   source session id, so a forked_from lineage cannot be populated:
- *   DROPPED (source-unavailable; flagged for ADR-0002).
+ * - forked events ({type:"forked", time}) mark that this session directory
+ *   is a fork of an earlier session (real-data shape: the new directory
+ *   holds a FULL copy of the pre-fork history and the event marks the fork
+ *   point inside the wire). The event carries NO source session id, so a
+ *   forked_from lineage cannot be populated (ADR-0005): the event is
+ *   DROPPED and the fork is projected as a standalone, content-complete
+ *   linear session (source-unavailable; the duplicated shared prefix is a
+ *   known fidelity/storage gap reported against the spec).
  * - Dropped as process mechanics/telemetry: metadata (protocol_version —
  *   there is no CLI version in the source, so Manifest.harnessVersion is
  *   "unknown"), llm.request / llm.tools_snapshot (raw request logs, prompt
@@ -217,16 +234,35 @@ type RecordPayload<T, K extends keyof T> = T extends unknown ? Omit<T, K> : neve
 type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "seq" | "timestamp">;
 
 /**
+ * Sub-agent forward-link context for one session directory (ADR-0005):
+ * `rootSessionId` is the session uuid (child ids are `<uuid>/<agent-name>`);
+ * `agentNames` is the session's agent roster, used to only link results that
+ * resolve to a real child wire.
+ */
+export interface SubAgentLink {
+  rootSessionId: string;
+  agentNames: ReadonlySet<string>;
+}
+
+/** Matches the `agent_id: <name>` header line of an `Agent` tool result. */
+const AGENT_ID_HEADER = /^agent_id:\s*(\S+)(?:\r?\n|$)/;
+
+/**
  * Project ONE agent's wire.jsonl (+ its plans/ directory) into an AHS
  * record list (a synthesized linear chain). `sessionId` scopes recordIds.
+ * When `link` is given, a tool_result paired with an `Agent` tool_call whose
+ * output names a known sub-agent carries the invocation forward link
+ * (`sessionId` → the child session).
  */
 export function projectRecords(
   sessionId: string,
   lines: RawLine[],
   planTexts: string[] = [],
+  link?: SubAgentLink,
 ): AhsRecord[] {
   const records: AhsRecord[] = [];
   const seenResultIds = new Set<string>();
+  const callNames = new Map<string, string>();
   let lastModel: string | undefined;
   let pendingUsage: Usage | undefined;
   let pendingParts: ContentBlock[] = [];
@@ -299,6 +335,7 @@ export function projectRecords(
         }
       } else if (e.type === "tool.call") {
         flushParts(timestamp);
+        callNames.set(e.toolCallId ?? "", e.name ?? "");
         emit(timestamp, {
           type: "tool_call",
           toolCallId: e.toolCallId ?? "",
@@ -314,6 +351,16 @@ export function projectRecords(
         seenResultIds.add(callId);
         const output = e.result?.output;
         const isError = e.is_error === true || e.result?.is_error === true;
+        // Invocation forward link (ADR-0005): an Agent tool result names the
+        // spawned child wire in its agent_id header. AgentSwarm results name
+        // N children — not expressible in one sessionId slot, never linked.
+        let childSessionId: string | undefined;
+        if (link !== undefined && callNames.get(callId) === "Agent" && typeof output === "string") {
+          const m = AGENT_ID_HEADER.exec(output);
+          if (m !== null && link.agentNames.has(m[1]!)) {
+            childSessionId = `${link.rootSessionId}/${m[1]}`;
+          }
+        }
         emit(timestamp, {
           type: "tool_result",
           toolCallId: callId,
@@ -324,6 +371,7 @@ export function projectRecords(
                 ? ""
                 : JSON.stringify(output),
           status: isError ? "error" : "success",
+          ...(childSessionId !== undefined ? { sessionId: childSessionId } : {}),
         });
       }
       // step.begin / step.end are flattened (dropped) per ADR-0001.
@@ -526,7 +574,8 @@ export class KimiCodeAdapter implements HarnessAdapter {
           let invocation: AgentSource["invocation"];
           if (!isMain) {
             // Agent-level parent link only (AC-0002-B-3: no atRecordId anchor).
-            // TODO(Plan 02): forward link via the parent's tool_result.sessionId.
+            // The forward link lives on the parent's Agent tool_result
+            // (projected in projectRecords via SubAgentLink).
             const parentName = state.agents?.[name]?.parentAgentId;
             const parentSessionId =
               parentName === undefined || parentName === null || parentName === "main"
@@ -584,10 +633,17 @@ export class KimiCodeAdapter implements HarnessAdapter {
 
   async *listSessions(filter?: SessionFilter): AsyncIterable<Manifest> {
     if (filter?.harness !== undefined && filter.harness !== this.harness) return;
+    // includeForks: this adapter NEVER emits lineage (kimi forked events
+    // carry no source session id — source-unavailable), so every session is
+    // its own lineage group's HEAD and the default view equals includeForks.
     for (const session of await this.discover()) {
+      const link: SubAgentLink = {
+        rootSessionId: session.sessionId,
+        agentNames: new Set(session.agents.map((a) => a.name)),
+      };
       for (const agent of session.agents) {
         const lines = await this.loadWire(agent);
-        const records = projectRecords(agent.sessionId, lines, await this.loadPlans(agent));
+        const records = projectRecords(agent.sessionId, lines, await this.loadPlans(agent), link);
         // Wires with zero projectable content are not AHS sessions — skip.
         if (records.length === 0) continue;
         const manifest = buildManifest(agent, session.state, lines, records);
@@ -599,12 +655,17 @@ export class KimiCodeAdapter implements HarnessAdapter {
 
   async *readRecords(sessionId: string): AsyncIterable<AhsRecord> {
     for (const session of await this.discover()) {
+      const link: SubAgentLink = {
+        rootSessionId: session.sessionId,
+        agentNames: new Set(session.agents.map((a) => a.name)),
+      };
       for (const agent of session.agents) {
         if (agent.sessionId === sessionId) {
           yield* projectRecords(
             agent.sessionId,
             await this.loadWire(agent),
             await this.loadPlans(agent),
+            link,
           );
           return;
         }

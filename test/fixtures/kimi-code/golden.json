@@ -132,8 +132,31 @@
         }
       },
       {
+        "args": {
+          "description": "审查登录页补丁",
+          "prompt": "审查登录页补丁是否正确"
+        },
+        "name": "Agent",
         "recordId": "11111111-2222-4333-8444-555555555555:9",
         "seq": 9,
+        "status": "completed",
+        "timestamp": "2026-07-20T10:00:09.250Z",
+        "toolCallId": "call_k002",
+        "type": "tool_call"
+      },
+      {
+        "content": "agent_id: agent-0\nactual_subagent_type: general\nstatus: completed\n\n[summary]\n补丁正确，无回归风险。",
+        "recordId": "11111111-2222-4333-8444-555555555555:10",
+        "seq": 10,
+        "sessionId": "11111111-2222-4333-8444-555555555555/agent-0",
+        "status": "success",
+        "timestamp": "2026-07-20T10:00:09.260Z",
+        "toolCallId": "call_k002",
+        "type": "tool_result"
+      },
+      {
+        "recordId": "11111111-2222-4333-8444-555555555555:11",
+        "seq": 11,
         "summary": "## 前文摘要\n用户要求修复登录页空指针，已定位到 login.ts:42。",
         "timestamp": "2026-07-20T10:00:10.500Z",
         "type": "compaction"
@@ -145,8 +168,8 @@
             "type": "text"
           }
         ],
-        "recordId": "11111111-2222-4333-8444-555555555555:10",
-        "seq": 10,
+        "recordId": "11111111-2222-4333-8444-555555555555:12",
+        "seq": 12,
         "timestamp": "2026-07-20T10:00:11.001Z",
         "type": "harness_message"
       },
@@ -156,8 +179,8 @@
         },
         "kind": "shell",
         "name": "Bash",
-        "recordId": "11111111-2222-4333-8444-555555555555:11",
-        "seq": 11,
+        "recordId": "11111111-2222-4333-8444-555555555555:13",
+        "seq": 13,
         "status": "interrupted",
         "timestamp": "2026-07-20T10:00:12.000Z",
         "toolCallId": "call_k003",
@@ -170,8 +193,8 @@
             "type": "text"
           }
         ],
-        "recordId": "11111111-2222-4333-8444-555555555555:12",
-        "seq": 12,
+        "recordId": "11111111-2222-4333-8444-555555555555:14",
+        "seq": 14,
         "timestamp": "2026-07-20T10:00:12.000Z",
         "type": "assistant_message"
       }
