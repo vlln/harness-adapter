@@ -80,14 +80,14 @@ export function toolResult(
   seq: number,
   toolCallId: string,
   content: string,
-  extras: RecordExtras & { sessionId?: string } = {},
+  extras: RecordExtras & { sessionIds?: string[] } = {},
 ): AhsRecord {
   return {
     ...base(seq, extras),
     type: "tool_result",
     toolCallId,
     content,
-    ...(extras.sessionId !== undefined ? { sessionId: extras.sessionId } : {}),
+    ...(extras.sessionIds !== undefined ? { sessionIds: extras.sessionIds } : {}),
   };
 }
 

@@ -40,7 +40,7 @@ const parent = makeSession("sess-parent", [
   userMessage(0, "build the feature"),
   assistantMessage(1, "delegating", { usage: PARENT_USAGE }),
   toolCall(2, "tc-task", { name: "Task", status: "completed", recordId: "p-call" }),
-  toolResult(3, "tc-task", "child finished", { sessionId: "sess-child" }),
+  toolResult(3, "tc-task", "child finished", { sessionIds: ["sess-child"] }),
   assistantMessage(4, "all done", { usage: PARENT_USAGE_2 }),
 ]);
 const child = makeSession(
@@ -243,7 +243,7 @@ describe("ahs-report Task view (ADR-0005 §5)", () => {
     const parent = makeSession("p", [
       userMessage(0, "top task", { timestamp: T1 }),
       toolCall(1, "tc-task", { name: "Task", status: "completed", recordId: "p-call" }),
-      toolResult(2, "tc-task", "sub done", { sessionId: "s", timestamp: T1 }),
+      toolResult(2, "tc-task", "sub done", { sessionIds: ["s"], timestamp: T1 }),
       assistantMessage(3, "done", { timestamp: T1, usage: { inputTokens: 10, outputTokens: 1 } }),
     ]);
     const sub = makeSession(

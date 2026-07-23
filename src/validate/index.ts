@@ -60,8 +60,9 @@ function checkLinear(session: SessionData, errors: InvariantError[]): void {
  * - the parent session must exist in the session set;
  * - if atRecordId is present, it must resolve to an existing tool_call
  *   record in the parent;
- * - the parent's tool_result paired with that tool_call must carry
- *   sessionId === the child's sessionId (forward/back-link reconciliation).
+ * - the parent's tool_result paired with that tool_call must INCLUDE the
+ *   child's sessionId in its `sessionIds` array (forward/back-link
+ *   reconciliation; one call may produce several child sessions).
  * AC-0002-B-3 form (atRecordId omitted, e.g. Kimi): the anchor and
  * reconciliation checks are skipped; the parent must still exist.
  */
@@ -93,11 +94,15 @@ function checkInvocations(sessions: SessionData[], errors: InvariantError[]): vo
     const paired = parent.records.find(
       (r) => r.type === "tool_result" && r.toolCallId === anchor.toolCallId,
     );
-    if (paired === undefined || paired.type !== "tool_result" || paired.sessionId !== sid) {
+    if (
+      paired === undefined ||
+      paired.type !== "tool_result" ||
+      !(paired.sessionIds ?? []).includes(sid)
+    ) {
       errors.push({
         code: "invocation-mismatch",
         sessionId: sid,
-        message: `parent tool_result paired with tool_call ${anchor.toolCallId} does not carry sessionId ${sid} (forward/back-link reconciliation failed)`,
+        message: `parent tool_result paired with tool_call ${anchor.toolCallId} does not include sessionId ${sid} in its sessionIds (forward/back-link reconciliation failed)`,
       });
     }
   }
@@ -106,11 +111,14 @@ function checkInvocations(sessions: SessionData[], errors: InvariantError[]): vo
 /**
  * AC-0002-N-7 (cross-session): lineage anchor resolution + type judgment.
  * For every manifest with `lineage`:
- * - the parent session must exist in the session set;
- * - atRecordId (when present — absent means retry-from-start) must resolve
- *   to an existing record in the parent;
- * - type judgment: anchored record is a user_message ⇔ sibling_attempt;
- *   anything else ⇔ forked_from.
+ * - atRecordId tri-state (ADR-0005 amendment): null = anchor
+ *   source-unavailable → ALL lineage checks are skipped (the parent itself
+ *   may be missing from the store); absent = retry from start → only the
+ *   parent-existence check applies;
+ * - otherwise (anchored): the parent session must exist in the session set,
+ *   atRecordId must resolve to an existing record in the parent, and the
+ *   type judgment must hold: anchored record is a user_message ⇔
+ *   sibling_attempt; anything else ⇔ forked_from.
  */
 function checkLineages(sessions: SessionData[], errors: InvariantError[]): void {
   const byId = new Map(sessions.map((s) => [s.manifest.sessionId, s]));
@@ -118,6 +126,7 @@ function checkLineages(sessions: SessionData[], errors: InvariantError[]): void 
     const lineage = session.manifest.lineage;
     if (lineage === undefined) continue;
     const sid = session.manifest.sessionId;
+    if (lineage.atRecordId === null) continue; // anchor source-unavailable
     const parent = byId.get(lineage.sessionId);
     if (parent === undefined) {
       errors.push({

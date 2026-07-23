@@ -337,11 +337,11 @@ describe("claude-code adapter", () => {
       expect(result.type).toBe("tool_result");
       if (result.type === "tool_result") {
         expect(result.recordId).toBe("bbbb0003-0000-4000-8000-000000000003");
-        expect(result.sessionId).toBe("abc123");
+        expect(result.sessionIds).toEqual(["abc123"]);
       }
       // No other record carries a forward link.
       expect(
-        main.filter((r) => r.type === "tool_result" && r.sessionId !== undefined),
+        main.filter((r) => r.type === "tool_result" && r.sessionIds !== undefined),
       ).toHaveLength(1);
     });
 
@@ -403,7 +403,7 @@ describe("claude-code adapter", () => {
       )!;
       if (result.type === "tool_result") {
         expect(result.recordId).toBe("dddd0006-0000-4000-8000-000000000006");
-        expect(result.sessionId).toBe("def456");
+        expect(result.sessionIds).toEqual(["def456"]);
       }
     });
 
@@ -596,7 +596,7 @@ describe("claude-code adapter", () => {
       expect(child.invocation).toEqual({ sessionId: SESSION_G });
       // No forward link is written for an unanchored child.
       const main = await readAll(adapter, SESSION_G);
-      expect(main.some((r) => r.type === "tool_result" && r.sessionId !== undefined)).toBe(false);
+      expect(main.some((r) => r.type === "tool_result" && r.sessionIds !== undefined)).toBe(false);
     });
   });
 

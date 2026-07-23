@@ -148,7 +148,9 @@
         "content": "agent_id: agent-0\nactual_subagent_type: general\nstatus: completed\n\n[summary]\n补丁正确，无回归风险。",
         "recordId": "11111111-2222-4333-8444-555555555555:10",
         "seq": 10,
-        "sessionId": "11111111-2222-4333-8444-555555555555/agent-0",
+        "sessionIds": [
+          "11111111-2222-4333-8444-555555555555/agent-0"
+        ],
         "status": "success",
         "timestamp": "2026-07-20T10:00:09.260Z",
         "toolCallId": "call_k002",

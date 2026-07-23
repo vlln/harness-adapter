@@ -73,7 +73,7 @@ describe("records", () => {
       type: "tool_result",
       toolCallId: "tc1",
       content: "done",
-      sessionId: "child-session-1",
+      sessionIds: ["child-session-1"],
     },
     {
       ...base,
@@ -117,6 +117,18 @@ describe("lineage / invocation", () => {
   it("parses a sibling_attempt lineage without anchor (retry from start)", () => {
     const lin = { type: "sibling_attempt", sessionId: "root-1" };
     expect(LineageSchema.parse(lin)).toEqual(lin);
+  });
+
+  it("parses a lineage with atRecordId null (anchor source-unavailable, tri-state)", () => {
+    const lin = { type: "forked_from", sessionId: "parent-1", atRecordId: null };
+    expect(LineageSchema.parse(lin)).toEqual(lin);
+  });
+
+  it("rejects an empty sessionIds array on tool_result (min 1 when present)", () => {
+    const bad = { ...base, type: "tool_result", toolCallId: "tc1", content: "ok", sessionIds: [] };
+    expect(AhsRecordSchema.safeParse(bad).success).toBe(false);
+    const one = { ...base, type: "tool_result", toolCallId: "tc1", content: "ok", sessionIds: ["c"] };
+    expect(AhsRecordSchema.safeParse(one).success).toBe(true);
   });
 
   it("rejects an unknown lineage type", () => {

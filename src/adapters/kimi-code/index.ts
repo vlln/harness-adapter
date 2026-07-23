@@ -23,17 +23,17 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * so children get a Manifest invocation back-link (parent session) with NO
  * atRecordId anchor (AC-0002-B-3).
  *
- * INVOCATION FORWARD LINK (ADR-0005): an `Agent` tool result in the parent
- * wire starts with an `agent_id: <name>` header line (verified on real
- * data), which identifies the spawned child wire. When that name resolves to
- * an agent of the same session directory, the paired tool_result record
- * carries `sessionId: <uuid>/<name>` — the forward link reconciling with the
- * child's invocation back-link. `AgentSwarm` results instead wrap MULTIPLE
- * `<subagent agent_id="...">` entries (one call spawns N children); the
- * single tool_result.sessionId slot cannot express N children, so swarm
- * results carry NO forward link (contract friction, reported against the
- * spec). Agent results without the agent_id header (e.g. failures) likewise
- * get none (source-unavailable).
+ * INVOCATION FORWARD LINK (ADR-0005, amended multi-value): an `Agent` tool
+ * result in the parent wire starts with an `agent_id: <name>` header line
+ * (verified on real data), which identifies the spawned child wire. When
+ * that name resolves to an agent of the same session directory, the paired
+ * tool_result record carries `sessionIds: [<uuid>/<name>]` — the forward
+ * link reconciling with the child's invocation back-link. `AgentSwarm`
+ * results wrap MULTIPLE `<subagent agent_id="...">` entries (one call
+ * spawns N children); ALL entries resolving to agents of the session dir
+ * are listed in `sessionIds` (verified on real data). Agent results
+ * without the agent_id header (e.g. failures) get none
+ * (source-unavailable).
  *
  * DEDUP POLICY: turn.prompt / turn.steer are NOT emitted — their content is
  * duplicated by an immediately following context.append_message with
@@ -247,12 +247,16 @@ export interface SubAgentLink {
 /** Matches the `agent_id: <name>` header line of an `Agent` tool result. */
 const AGENT_ID_HEADER = /^agent_id:\s*(\S+)(?:\r?\n|$)/;
 
+/** Matches one `<subagent agent_id="..."` entry of an `AgentSwarm` result. */
+const SWARM_SUBAGENT_ID = /<subagent\s+agent_id="([^"]+)"/g;
+
 /**
  * Project ONE agent's wire.jsonl (+ its plans/ directory) into an AHS
  * record list (a synthesized linear chain). `sessionId` scopes recordIds.
- * When `link` is given, a tool_result paired with an `Agent` tool_call whose
- * output names a known sub-agent carries the invocation forward link
- * (`sessionId` → the child session).
+ * When `link` is given, a tool_result paired with an `Agent` tool_call
+ * whose output names a known sub-agent carries the invocation forward link
+ * (`sessionIds` → the child session(s); AgentSwarm results list ALL
+ * resolved children).
  */
 export function projectRecords(
   sessionId: string,
@@ -351,14 +355,26 @@ export function projectRecords(
         seenResultIds.add(callId);
         const output = e.result?.output;
         const isError = e.is_error === true || e.result?.is_error === true;
-        // Invocation forward link (ADR-0005): an Agent tool result names the
-        // spawned child wire in its agent_id header. AgentSwarm results name
-        // N children — not expressible in one sessionId slot, never linked.
-        let childSessionId: string | undefined;
-        if (link !== undefined && callNames.get(callId) === "Agent" && typeof output === "string") {
-          const m = AGENT_ID_HEADER.exec(output);
-          if (m !== null && link.agentNames.has(m[1]!)) {
-            childSessionId = `${link.rootSessionId}/${m[1]}`;
+        // Invocation forward link (ADR-0005, amended multi-value): an Agent
+        // tool result names the spawned child wire in its agent_id header;
+        // an AgentSwarm result wraps N `<subagent agent_id="...">` entries —
+        // ALL that resolve to wires of this session dir are listed.
+        let childSessionIds: string[] | undefined;
+        if (link !== undefined && typeof output === "string") {
+          const toolName = callNames.get(callId);
+          if (toolName === "Agent") {
+            const m = AGENT_ID_HEADER.exec(output);
+            if (m !== null && link.agentNames.has(m[1]!)) {
+              childSessionIds = [`${link.rootSessionId}/${m[1]}`];
+            }
+          } else if (toolName === "AgentSwarm") {
+            const ids: string[] = [];
+            for (const m of output.matchAll(SWARM_SUBAGENT_ID)) {
+              if (link.agentNames.has(m[1]!) && !ids.includes(m[1]!)) ids.push(m[1]!);
+            }
+            if (ids.length > 0) {
+              childSessionIds = ids.map((name) => `${link.rootSessionId}/${name}`);
+            }
           }
         }
         emit(timestamp, {
@@ -371,7 +387,7 @@ export function projectRecords(
                 ? ""
                 : JSON.stringify(output),
           status: isError ? "error" : "success",
-          ...(childSessionId !== undefined ? { sessionId: childSessionId } : {}),
+          ...(childSessionIds !== undefined ? { sessionIds: childSessionIds } : {}),
         });
       }
       // step.begin / step.end are flattened (dropped) per ADR-0001.
