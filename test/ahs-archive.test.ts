@@ -61,7 +61,7 @@ const PARENT_RECORDS = [
   userMessage(0, "go", { usage: { inputTokens: 10, outputTokens: 5 } }),
   assistantMessage(1, "working"),
   toolCall(2, "tc1", { status: "completed" }),
-  toolResult(3, "tc1", "done", { sessionId: "child" }),
+  toolResult(3, "tc1", "done", { sessionIds: ["child"] }),
 ];
 
 describe("archive round-trip", () => {

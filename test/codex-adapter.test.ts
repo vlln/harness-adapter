@@ -154,7 +154,7 @@ describe("codex adapter", () => {
     const callId = anchor!.type === "tool_call" ? anchor!.toolCallId : "";
     const paired = parent.records.find((r) => r.type === "tool_result" && r.toolCallId === callId);
     expect(paired).toBeDefined();
-    expect(paired!.type === "tool_result" && paired!.sessionId).toBe(B2);
+    expect(paired!.type === "tool_result" && paired!.sessionIds).toEqual([B2]);
   });
 
   it("AC-0002-N-7: lineage anchors resolve and the type is judged by the anchor record", () => {
@@ -455,5 +455,63 @@ describe("codex adapter", () => {
     }
     expect(records).toHaveLength(1);
     expect(() => AhsRecordSchema.parse(records[0]!)).not.toThrow();
+  });
+
+  it("atRecordId null when the lineage ancestor file is missing (tri-state, AC-0002-N-7)", async () => {
+    // The ancestor session_meta header names a session with NO rollout file
+    // in this store: the anchor should exist but is source-unavailable →
+    // lineage kept with atRecordId null (not omitted — omission now means
+    // retry-from-start).
+    const dir = path.join(tmp, "missing-ancestor", "2026", "07", "23");
+    mkdirSync(dir, { recursive: true });
+    const lines = [
+      {
+        timestamp: "2026-07-23T10:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "019f8000-0000-7000-8000-0000000000h8",
+          timestamp: "2026-07-23T10:00:00.000Z",
+          cwd: "/workspace/demo",
+          cli_version: "0.142.5",
+          source: "cli",
+        },
+      },
+      {
+        timestamp: "2026-07-20T09:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "019f8000-0000-7000-8000-00000000ff00", // no file in this store
+          timestamp: "2026-07-20T09:00:00.000Z",
+          cwd: "/workspace/demo",
+          cli_version: "0.142.5",
+          source: "cli",
+        },
+      },
+      {
+        timestamp: "2026-07-23T10:00:01.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "resumed from a pruned thread" }],
+        },
+      },
+    ];
+    writeFileSync(
+      path.join(dir, "rollout-2026-07-23T10-00-00-019f8000-0000-7000-8000-0000000000h8.jsonl"),
+      lines.map((l) => JSON.stringify(l)).join("\n") + "\n",
+    );
+    const sessions = await collectSessions(
+      new CodexAdapter(path.join(tmp, "missing-ancestor")),
+    );
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]!.manifest.lineage).toEqual({
+      type: "forked_from",
+      sessionId: "019f8000-0000-7000-8000-00000000ff00",
+      atRecordId: null,
+    });
+    // N-7 skips all lineage checks for a null anchor: no invariant error
+    // even though the parent session is not in the store.
+    expect(validateSessions(sessions)).toEqual([]);
   });
 });

@@ -59,7 +59,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   parent's event_msg `sub_agent_activity` carries event_id = the parent's
  *   spawn_agent function_call call_id and agent_thread_id = the child thread
  *   id, so the anchor is the recordId of that tool_call in the parent; the
- *   forward link is written as `sessionId` on the parent's paired
+ *   forward link is written as `sessionIds` on the parent's paired
  *   tool_result (from the same sub_agent_activity data, inside the parent's
  *   own projection). If the parent file or the correlation event is missing,
  *   the anchor is omitted (source-unavailable; the back-link still stands).
@@ -70,7 +70,8 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   (the child stores only the post-fork suffix); the type is judged by the
  *   anchor record: user_message → sibling_attempt, anything else →
  *   forked_from (AC-0002-N-7). If the ancestor file is absent/empty in this
- *   store, the lineage is kept without atRecordId (anchor source-unavailable).
+ *   store, the lineage is kept with `atRecordId: null` (anchor
+ *   source-unavailable, tri-state per the ADR-0005 amendment).
  *   A sub-agent file has lineage headers too, but invocation wins.
  *
  * Specific mappings:
@@ -458,7 +459,7 @@ export function projectRecords(
       }
       // event_msg user_message / agent_message are duplicates of
       // response_item messages — skipped. sub_agent_activity feeds the
-      // invocation forward link (tool_result.sessionId), not records of its
+      // invocation forward link (tool_result.sessionIds), not records of its
       // own. All other subtypes (exec_command_end, patch_apply_end, ...) are
       // process/telemetry — dropped per spec.
       if (p.type === "sub_agent_activity") {
@@ -522,7 +523,7 @@ export function projectRecords(
     if (rec.type !== "tool_result") continue;
     const child = spawnLinks.get(rec.toolCallId);
     if (child !== undefined) {
-      records[i] = { ...rec, sessionId: child };
+      records[i] = { ...rec, sessionIds: [child] };
     }
   }
 
@@ -614,7 +615,10 @@ function buildManifest(
             sessionId: source.ancestorId,
             atRecordId: last.recordId,
           }
-        : { type: "forked_from", sessionId: source.ancestorId };
+        : // Ancestor file absent/empty in this store: the anchor should exist
+          // but is source-unavailable → atRecordId null (tri-state, ADR-0005
+          // amendment; distinct from absent = retry-from-start).
+          { type: "forked_from", sessionId: source.ancestorId, atRecordId: null };
   }
 
   return {

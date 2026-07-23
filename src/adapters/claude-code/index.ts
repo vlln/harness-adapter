@@ -92,7 +92,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   projected from the same main file. The link is only anchored when the
  *   paired tool_result exists in the SAME session (an interrupted Task call
  *   has nothing to carry the forward link; AC-0002-B-3 form is used then).
- * - Forward link: that paired tool_result gets `sessionId: <child agentId>`.
+ * - Forward link: that paired tool_result gets `sessionIds: [<child agentId>]`.
  *
  * Usage: coarse totals only (input/output/cache read/cache write); the
  * ephemeral 1h/5m tiers, service_tier, inference_geo, server_tool_use are
@@ -996,8 +996,8 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
         // Forward link: the paired tool_result carries the child sessionId.
         const parent = sessions.get(anchor.sessionId)!;
         parent.records = parent.records.map((rec) =>
-          rec.type === "tool_result" && rec.toolCallId === toolUseId && rec.sessionId === undefined
-            ? { ...rec, sessionId: agentId }
+          rec.type === "tool_result" && rec.toolCallId === toolUseId && rec.sessionIds === undefined
+            ? { ...rec, sessionIds: [agentId] }
             : rec,
         );
       }

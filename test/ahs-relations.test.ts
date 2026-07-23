@@ -55,7 +55,7 @@ function fixtureSessions(): SessionData[] {
   const root = makeSession("root", [
     userMessage(0, "do the task", { timestamp: T1 }),
     toolCall(1, "tc-task", { name: "Task", status: "completed", recordId: "root-call" }),
-    toolResult(2, "tc-task", "sub-agent done", { sessionId: "sub", timestamp: T1 }),
+    toolResult(2, "tc-task", "sub-agent done", { sessionIds: ["sub"], timestamp: T1 }),
     assistantMessage(3, "wrapped up", { timestamp: T2 }),
   ]);
   const sub = makeSession(
@@ -133,6 +133,22 @@ describe("buildRelations", () => {
       lineageType: "sibling_attempt",
     });
     expect(lineageParentEdge(relations, "sub/fork-1")?.from).toBe("sub");
+  });
+
+  it("preserves the atRecordId tri-state on lineage edges (null = source-unavailable)", () => {
+    const sessions: SessionData[] = [
+      makeSession("p", [userMessage(0, "q", { timestamp: T1 })]),
+      makeSession("f-null", [userMessage(0, "v2", { timestamp: T2 })], {
+        lineage: { type: "forked_from", sessionId: "p", atRecordId: null },
+      }),
+      makeSession("f-retry", [userMessage(0, "v3", { timestamp: T2 })], {
+        lineage: { type: "sibling_attempt", sessionId: "p" },
+      }),
+    ];
+    const rel = buildRelations(sessions);
+    // null (source-unavailable) is preserved, distinct from absent (retry-from-start).
+    expect(lineageParentEdge(rel, "f-null")).toMatchObject({ atRecordId: null });
+    expect(lineageParentEdge(rel, "f-retry")).not.toHaveProperty("atRecordId");
   });
 
   it("groups lineage-connected sessions (union-find) and picks HEAD by recency", () => {

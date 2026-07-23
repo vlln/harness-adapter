@@ -258,14 +258,18 @@ export async function renderReport(
 
       // Slice: the shared-prefix part this session contributes to the HEAD
       // chain. Ends at the next segment's lineage anchor (inclusive); a
-      // retry-from-start child (no atRecordId) means this session
-      // contributes nothing. A dangling anchor falls back to the full
-      // session (defensive — AC-0002-N-7 guarantees resolution).
+      // retry-from-start child (atRecordId absent) means this session
+      // contributes nothing; a null anchor (source-unavailable) means the
+      // cut point is unknown — keep the full session (defensive). A
+      // dangling anchor falls back to the full session (defensive —
+      // AC-0002-N-7 guarantees resolution).
       let end = records.length;
       if (i + 1 < chain.length) {
         const childEdge = lineageParentEdge(relations, chain[i + 1]!);
         if (childEdge?.atRecordId === undefined) {
           end = 0;
+        } else if (childEdge.atRecordId === null) {
+          end = records.length;
         } else {
           const idx = records.findIndex((r) => r.recordId === childEdge.atRecordId);
           end = idx >= 0 ? idx + 1 : records.length;
@@ -342,7 +346,11 @@ export async function renderReport(
         lines.push(`- ${member}${marker} (group root)`);
       } else {
         const anchor =
-          edge.atRecordId !== undefined ? ` @ ${edge.atRecordId}` : " (retry from start)";
+          edge.atRecordId === null
+            ? " (anchor source-unavailable)"
+            : edge.atRecordId !== undefined
+              ? ` @ ${edge.atRecordId}`
+              : " (retry from start)";
         lines.push(`- ${member}${marker} ${edge.lineageType ?? ""} ${edge.from}${anchor}`);
       }
     }

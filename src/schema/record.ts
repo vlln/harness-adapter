@@ -76,11 +76,13 @@ export const AhsRecordSchema = z.discriminatedUnion("type", [
     content: z.union([z.string(), BlobRefSchema]),
     status: z.enum(["success", "error"]).optional(),
     /**
-     * Forward invocation link (ADR-0005): set when this call produced a
-     * child session (subagent). The child manifest carries the back-link
-     * via `invocation`; the two are reconciled by AC-0002-N-2.
+     * Forward invocation link (ADR-0005, amended): set when this call
+     * produced child session(s) (subagent). Multi-value: one call may
+     * produce several child sessions (e.g. Kimi AgentSwarm); a single
+     * child is a single-element array. The child manifest carries the
+     * back-link via `invocation`; the two are reconciled by AC-0002-N-2.
      */
-    sessionId: z.string().optional(),
+    sessionIds: z.array(z.string()).min(1).optional(),
   }),
   // State records
   BaseRecordSchema.extend({

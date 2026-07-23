@@ -71,7 +71,9 @@
       "content": "Agent completed: found 3 parser files (src/parser.ts, src/generics.ts, src/ast.ts)",
       "recordId": "bbbb0003-0000-4000-8000-000000000003",
       "seq": 3,
-      "sessionId": "abc123",
+      "sessionIds": [
+        "abc123"
+      ],
       "status": "success",
       "timestamp": "2026-07-15T09:00:30.000Z",
       "toolCallId": "toolu_task01AAAAAAAAAAAAAAAAAA",

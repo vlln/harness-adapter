@@ -191,7 +191,7 @@ describe("kimi-code adapter", () => {
     expect(result).toMatchObject({
       type: "tool_result",
       status: "success",
-      sessionId: CHILD_ID,
+      sessionIds: [CHILD_ID],
     });
     // The result content is preserved verbatim (agent_id header included).
     expect(result).toMatchObject({
@@ -302,7 +302,7 @@ describe("kimi-code adapter", () => {
     expect(await collect(true)).toEqual(all);
   });
 
-  it("forward link edge cases: AgentSwarm results and unresolvable agent_id get NO sessionId", async () => {
+  it("forward link edge cases: single/swarm Agent results, unresolvable agent_id", async () => {
     const base = path.join(tmp, "forward-link");
     const uuid = "cccccccc-0000-4000-8000-000000000003";
     writeSession(
@@ -317,8 +317,8 @@ describe("kimi-code adapter", () => {
       },
       {
         main: [
-          // 1. AgentSwarm result: N children in one result — not expressible
-          //    in the single tool_result.sessionId slot → no forward link.
+          // 1. AgentSwarm result with ONE resolvable subagent entry →
+          //    single-element sessionIds (multi-value forward link).
           '{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_s1","name":"AgentSwarm","args":{"items":["a","b"]}},"time":1784541601000}',
           '{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_s1","result":{"output":"<agent_swarm_result>\\n<summary>completed: 1</summary>\\n<subagent agent_id=\\"agent-0\\" item=\\"a\\" outcome=\\"completed\\">done</subagent>\\n</agent_swarm_result>"}},"time":1784541602000}',
           // 2. Agent result without the agent_id header (failure shape) → no link.
@@ -343,10 +343,54 @@ describe("kimi-code adapter", () => {
     const byCallId = new Map(
       main.records.filter((r) => r.type === "tool_result").map((r) => [r.toolCallId, r]),
     );
-    expect(byCallId.get("call_s1")).not.toHaveProperty("sessionId"); // AgentSwarm: N children
-    expect(byCallId.get("call_s2")).not.toHaveProperty("sessionId"); // no agent_id header
-    expect(byCallId.get("call_s3")).not.toHaveProperty("sessionId"); // unknown agent
-    expect(byCallId.get("call_s4")).toMatchObject({ sessionId: `${uuid}/agent-0` });
+    expect(byCallId.get("call_s1")).toMatchObject({ sessionIds: [`${uuid}/agent-0`] }); // swarm, 1 resolved
+    expect(byCallId.get("call_s2")).not.toHaveProperty("sessionIds"); // no agent_id header
+    expect(byCallId.get("call_s3")).not.toHaveProperty("sessionIds"); // unknown agent
+    expect(byCallId.get("call_s4")).toMatchObject({ sessionIds: [`${uuid}/agent-0`] });
+  });
+
+  it("AgentSwarm with MULTIPLE children lists ALL resolved session ids in sessionIds (AC-0002-N-2)", async () => {
+    const base = path.join(tmp, "swarm-multi");
+    const uuid = "cccccccc-0000-4000-8000-000000000004";
+    writeSession(
+      base,
+      "wd_swarm",
+      uuid,
+      {
+        agents: {
+          main: { type: "main", parentAgentId: null },
+          "agent-0": { type: "sub", parentAgentId: "main" },
+          "agent-1": { type: "sub", parentAgentId: "main" },
+          "agent-2": { type: "sub", parentAgentId: "main" },
+        },
+      },
+      {
+        main: [
+          // Three subagent entries, one of which (agent-9) has no wire in
+          // this session dir → only the two resolved children are listed,
+          // in output order.
+          '{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_sw","name":"AgentSwarm","args":{"items":["a","b","c"]}},"time":1784541601000}',
+          '{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_sw","result":{"output":"<agent_swarm_result>\\n<summary>completed: 2, failed: 1</summary>\\n<subagent agent_id=\\"agent-1\\" item=\\"b\\" outcome=\\"completed\\">done-b</subagent>\\n<subagent agent_id=\\"agent-9\\" item=\\"x\\" outcome=\\"failed\\">lost</subagent>\\n<subagent agent_id=\\"agent-0\\" item=\\"a\\" outcome=\\"completed\\">done-a</subagent>\\n</agent_swarm_result>"}},"time":1784541602000}',
+          "",
+        ].join("\n"),
+        "agent-0":
+          '{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"任务A"}],"origin":{"kind":"system_trigger"}},"time":1784541601500}\n',
+        "agent-1":
+          '{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"任务B"}],"origin":{"kind":"system_trigger"}},"time":1784541601501}\n',
+        "agent-2":
+          '{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"任务C"}],"origin":{"kind":"system_trigger"}},"time":1784541601502}\n',
+      },
+    );
+    const swarm = new KimiCodeAdapter(base);
+    const sessions = await collectSessions(swarm);
+    expect(validateSessions(sessions)).toEqual([]);
+    const main = sessions.find((s) => s.manifest.sessionId === uuid)!;
+    const result = main.records.find(
+      (r) => r.type === "tool_result" && r.toolCallId === "call_sw",
+    )!;
+    expect(result).toMatchObject({
+      sessionIds: [`${uuid}/agent-1`, `${uuid}/agent-0`], // output order, unresolved dropped
+    });
   });
 
   it("AC-0002-B-2: a wire without usage.record yields no usage fields (nothing fabricated)", async () => {

@@ -18,7 +18,7 @@ import type { AhsRecord } from "../schema/record";
  * - edges: bidirectional session-to-session navigation for both dimensions.
  *   lineage edges come from manifest lineage back-links (fork source);
  *   invocation edges come from manifest invocation back-links, reconciled
- *   with tool_result.sessionId forward links found in the records (an edge
+ *   with tool_result.sessionIds forward links found in the records (an edge
  *   seen from both sides is stored once). One edge entry serves both
  *   directions (parent→children and child→parent are index lookups).
  * - groups: lineage groups (union-find over lineage edges) with the group
@@ -47,10 +47,11 @@ export interface RelationEdge {
   to: string;
   /**
    * Anchor record in the parent: the spawning tool_call (invocation) or the
-   * divergence point (lineage). Omitted when the source has no anchor
-   * (Kimi agent-level links, retry-from-start forks).
+   * divergence point (lineage). Tri-state for lineage (ADR-0005 amendment):
+   * a value = anchored; null = anchor source-unavailable; absent = no
+   * anchor (Kimi agent-level invocation links, retry-from-start forks).
    */
-  atRecordId?: string;
+  atRecordId?: string | null;
   /** lineage only: forked_from | sibling_attempt (ADR-0005 type judgment). */
   lineageType?: "forked_from" | "sibling_attempt";
 }
@@ -87,7 +88,10 @@ const EdgeLineSchema = z.object({
   type: z.enum(["invocation", "lineage"]),
   from: z.string(),
   to: z.string(),
-  atRecordId: z.string().optional(),
+  // Tri-state like the lineage manifest slot (ADR-0005 amendment): value =
+  // anchored, null = anchor source-unavailable, absent = no anchor
+  // (retry-from-start for lineage, agent-level link for invocation).
+  atRecordId: z.string().nullable().optional(),
   lineageType: z.enum(["forked_from", "sibling_attempt"]).optional(),
 });
 
@@ -130,7 +134,7 @@ function sortKeys(value: unknown): unknown {
   return value;
 }
 
-function compareStrings(a: string | undefined, b: string | undefined): number {
+function compareStrings(a: string | null | undefined, b: string | null | undefined): number {
   return (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
 }
 
@@ -149,7 +153,7 @@ export function buildRelations(sessions: RelationSession[]): Relations {
   const edges = new Map<string, RelationEdge>();
   const addEdge = (edge: RelationEdge): void => {
     // Dedupe a link seen from both sides (manifest back-link + forward
-    // tool_result.sessionId): first writer wins; both describe the same edge.
+    // tool_result.sessionIds): first writer wins; both describe the same edge.
     const key = JSON.stringify([edge.type, edge.from, edge.to]);
     if (!edges.has(key)) edges.set(key, edge);
   };
@@ -164,6 +168,8 @@ export function buildRelations(sessions: RelationSession[]): Relations {
         type: "lineage",
         from: lineage.sessionId,
         to: sid,
+        // Tri-state preserved: null = anchor source-unavailable (distinct
+        // from absent = retry-from-start).
         ...(lineage.atRecordId !== undefined ? { atRecordId: lineage.atRecordId } : {}),
         lineageType: lineage.type,
       });
@@ -177,7 +183,7 @@ export function buildRelations(sessions: RelationSession[]): Relations {
       });
     }
   }
-  // Forward links: tool_result.sessionId in the parent's records.
+  // Forward links: tool_result.sessionIds in the parent's records.
   for (const session of byId.values()) {
     const sid = session.manifest.sessionId;
     const callByToolCallId = new Map<string, string>(); // toolCallId → tool_call recordId
@@ -187,15 +193,17 @@ export function buildRelations(sessions: RelationSession[]): Relations {
       }
     }
     for (const rec of session.records) {
-      if (rec.type !== "tool_result" || rec.sessionId === undefined) continue;
-      if (!byId.has(rec.sessionId) || rec.sessionId === sid) continue;
+      if (rec.type !== "tool_result" || rec.sessionIds === undefined) continue;
       const anchor = callByToolCallId.get(rec.toolCallId);
-      addEdge({
-        type: "invocation",
-        from: sid,
-        to: rec.sessionId,
-        ...(anchor !== undefined ? { atRecordId: anchor } : {}),
-      });
+      for (const childId of rec.sessionIds) {
+        if (!byId.has(childId) || childId === sid) continue;
+        addEdge({
+          type: "invocation",
+          from: sid,
+          to: childId,
+          ...(anchor !== undefined ? { atRecordId: anchor } : {}),
+        });
+      }
     }
   }
 
@@ -280,7 +288,8 @@ export function buildRelations(sessions: RelationSession[]): Relations {
           inheritedFrom: cur,
           invocation: {
             sessionId: invoked.from,
-            ...(invoked.atRecordId !== undefined ? { atRecordId: invoked.atRecordId } : {}),
+            // Invocation edges never carry null anchors; narrow for the type.
+            ...(invoked.atRecordId != null ? { atRecordId: invoked.atRecordId } : {}),
           },
         });
         break;
@@ -383,7 +392,7 @@ export function effectiveInvocation(
   if (own !== undefined) {
     return {
       sessionId: own.from,
-      ...(own.atRecordId !== undefined ? { atRecordId: own.atRecordId } : {}),
+      ...(own.atRecordId != null ? { atRecordId: own.atRecordId } : {}),
     };
   }
   const inherited = relations.closures.find((c) => c.sessionId === sessionId);

@@ -56,7 +56,7 @@ describe("AC-0002-N-2 invocation completeness (forward/back-link reconciliation)
   const parent = makeSession("parent", [
     userMessage(0, "go"),
     toolCall(1, "tc-task", { name: "Task", recordId: "p-call" }),
-    toolResult(2, "tc-task", "done", { recordId: "p-result", sessionId: "child" }),
+    toolResult(2, "tc-task", "done", { recordId: "p-result", sessionIds: ["child"] }),
   ]);
 
   it("passes when the parent, tool_call anchor and forward link reconcile", () => {
@@ -64,6 +64,21 @@ describe("AC-0002-N-2 invocation completeness (forward/back-link reconciliation)
       invocation: { sessionId: "parent", atRecordId: "p-call" },
     });
     expect(validateSessions([parent, child])).toEqual([]);
+  });
+
+  it("passes when one call lists MULTIPLE children in sessionIds (each reconciles)", () => {
+    const swarm = makeSession("parent", [
+      userMessage(0, "go"),
+      toolCall(1, "tc-task", { name: "AgentSwarm", recordId: "p-call" }),
+      toolResult(2, "tc-task", "done", { recordId: "p-result", sessionIds: ["c1", "c2"] }),
+    ]);
+    const c1 = makeSession("c1", undefined, {
+      invocation: { sessionId: "parent", atRecordId: "p-call" },
+    });
+    const c2 = makeSession("c2", undefined, {
+      invocation: { sessionId: "parent", atRecordId: "p-call" },
+    });
+    expect(validateSessions([swarm, c1, c2])).toEqual([]);
   });
 
   it("passes when atRecordId is omitted (AC-0002-B-3: agent-level link only)", () => {
@@ -113,7 +128,7 @@ describe("AC-0002-N-2 invocation completeness (forward/back-link reconciliation)
     const wrongTarget = makeSession("parent", [
       userMessage(0, "go"),
       toolCall(1, "tc-task", { name: "Task", recordId: "p-call" }),
-      toolResult(2, "tc-task", "done", { recordId: "p-result", sessionId: "other-child" }),
+      toolResult(2, "tc-task", "done", { recordId: "p-result", sessionIds: ["other-child"] }),
     ]);
     expect(validateSessions([wrongTarget, child]).map((e) => e.code)).toContain(
       "invocation-mismatch",
@@ -146,6 +161,21 @@ describe("AC-0002-N-7 lineage completeness (anchor resolution + type judgment)",
       lineage: { type: "sibling_attempt", sessionId: "parent" },
     });
     expect(validateSessions([parent, retry])).toEqual([]);
+  });
+
+  it("skips ALL lineage checks when atRecordId is null (anchor source-unavailable)", () => {
+    // Even with the parent missing from the session set, a null anchor
+    // (source-unavailable) produces no error — there is nothing to resolve.
+    const fork = makeSession("fork", undefined, {
+      lineage: { type: "forked_from", sessionId: "ghost-parent", atRecordId: null },
+    });
+    expect(validateSessions([parent, fork])).toEqual([]);
+    // Contrast: the same shape WITHOUT the null (anchor absent) still
+    // requires the parent to exist (retry-from-start keeps that check).
+    const flagged = makeSession("fork2", undefined, {
+      lineage: { type: "forked_from", sessionId: "ghost-parent" },
+    });
+    expect(validateSessions([parent, flagged]).map((e) => e.code)).toContain("lineage-session");
   });
 
   it("flags a lineage pointing at an unknown session (lineage-session)", () => {
