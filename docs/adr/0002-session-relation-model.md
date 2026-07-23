@@ -8,6 +8,8 @@ created: 2026-07-21T11:48:45Z
 
 # ADR-0002: Session/Relation 两实体模型
 
+> **修订记录（2026-07-23）**：本 ADR 部分条款被 [ADR-0005](0005-linear-sessions.md) supersede——"session 历史为单根 tree、分叉允许多子节点"、sibling_attempt 旧定义、Manifest `isMainChain` 字段失效；session 一律线性，fork 一律成 session，关系拆为 lineage/invocation 两维。"subagent 是独立 session"与两实体精神保留。
+
 ---
 
 ## 背景
