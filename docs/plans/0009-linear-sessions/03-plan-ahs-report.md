@@ -2,7 +2,7 @@
 title: Plan 03 关系存储 + ahs-report 双视图 + 统一 sweep
 description: src/ahs 派生 relations.jsonl（双向边 + 组指针 + 传递闭包）；ahs-report 支持 Task 视图（HEAD 链 + 前缀拼接）；统一 sweep 对照 0008 基线。
 type: plan
-status: pending
+status: done
 created: 2026-07-23T05:40:00Z
 ---
 
