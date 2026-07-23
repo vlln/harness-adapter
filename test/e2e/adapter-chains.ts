@@ -6,10 +6,14 @@
  *   2. exportSessions writes an AHS archive into a temp dir,
  *   3. examples/ahs-report.ts runs as a REAL CLI subprocess (vite-node,
  *      exactly as a user would invoke it) against the archive root,
- *   4. assertions: exit code 0, transcript structure in stdout (tool-call
- *      lines, indented child sessions for fixtures with sub-agents), and
- *      the aggregated usage numbers equal the record-level sums computed
- *      independently from the archive's records.jsonl files.
+ *   4. assertions: exit code 0, Task-view transcript structure in stdout
+ *      (HEAD-chain rendering with stitched prefixes, indented invocation
+ *      children, fork folding), and the aggregated usage numbers equal the
+ *      record-level sums over the rendered slices computed independently
+ *      from the archive's records.jsonl files.
+ *
+ * The devin fixture has lineage forks: the default view must fold them
+ * (HEAD chain only) and `--all` must list them as alternate versions.
  *
  * Run with: npm run test:e2e (after test/e2e/smoke.ts)
  */
@@ -52,8 +56,15 @@ interface ArchivedSession {
   dir: string;
   manifest: {
     sessionId: string;
+    lineage?: { type: string; sessionId: string; atRecordId?: string };
     invocation?: { sessionId: string; atRecordId?: string };
   };
+  records: {
+    recordId: string;
+    type: string;
+    timestamp: string;
+    usage?: Record<string, number>;
+  }[];
 }
 
 function loadArchive(archiveRoot: string): Map<string, ArchivedSession> {
@@ -63,7 +74,11 @@ function loadArchive(archiveRoot: string): Map<string, ArchivedSession> {
     const dir = path.join(archiveRoot, entry.name);
     try {
       const manifest = JSON.parse(readFileSync(path.join(dir, "manifest.json"), "utf8"));
-      sessions.set(manifest.sessionId, { dir, manifest });
+      const records = readFileSync(path.join(dir, "records.jsonl"), "utf8")
+        .split("\n")
+        .filter((l) => l.trim() !== "")
+        .map((l) => JSON.parse(l));
+      sessions.set(manifest.sessionId, { dir, manifest, records });
     } catch {
       // not a session dir
     }
@@ -72,21 +87,77 @@ function loadArchive(archiveRoot: string): Map<string, ArchivedSession> {
 }
 
 /**
- * Independently recompute what the report's `total:` line must show: walk
- * the invocation graph from the root and sum usage over every record in
- * each visited session's records.jsonl.
+ * Independently recompute what the report's `total:` line must show under
+ * the Task view (ADR-0005 §5): resolve the root session's lineage group and
+ * HEAD pointer, walk the HEAD chain (stitched prefix slices + fork
+ * suffixes), recurse into invocation children (manifest back-links, with
+ * fork-of-subagent inheritance resolved by walking lineage ancestors), and
+ * sum usage over exactly the rendered record slices. Implemented from raw
+ * manifests + records.jsonl only — no src/ahs/relations code.
  */
 function expectedTotals(
   archive: Map<string, ArchivedSession>,
   rootId: string,
 ): { tokens: Record<string, number>; sessionCount: number } {
-  const childrenOf = new Map<string, string[]>();
+  // Lineage groups via union-find over manifest lineage back-links.
+  const parent = new Map<string, string>();
+  const find = (x: string): string => {
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    let cur = x;
+    while (parent.get(cur) !== cur) {
+      const next = parent.get(cur)!;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  for (const id of archive.keys()) parent.set(id, id);
   for (const s of archive.values()) {
-    if (s.manifest.invocation === undefined) continue;
-    const list = childrenOf.get(s.manifest.invocation.sessionId) ?? [];
-    list.push(s.manifest.sessionId);
-    childrenOf.set(s.manifest.invocation.sessionId, list);
+    const lin = s.manifest.lineage;
+    if (lin === undefined || !archive.has(lin.sessionId)) continue;
+    const ra = find(s.manifest.sessionId);
+    const rb = find(lin.sessionId);
+    if (ra !== rb) parent.set(ra, rb);
   }
+  const groupMembers = new Map<string, string[]>();
+  for (const id of archive.keys()) {
+    const root = find(id);
+    const list = groupMembers.get(root) ?? [];
+    list.push(id);
+    groupMembers.set(root, list);
+  }
+  // HEAD: most recently updated member (last record timestamp; tie → smaller id).
+  const lastTs = (id: string): string => {
+    const records = archive.get(id)!.records;
+    return records.length > 0 ? records[records.length - 1]!.timestamp : "";
+  };
+  const headOf = (members: string[]): string => {
+    let head = members[0]!;
+    for (const id of members.slice(1)) {
+      if (lastTs(id) > lastTs(head) || (lastTs(id) === lastTs(head) && id < head)) head = id;
+    }
+    return head;
+  };
+
+  // Effective invocation: manifest back-link, else inherited from the first
+  // lineage ancestor that has one (fork-of-subagent closure).
+  const effectiveInvocation = (
+    id: string,
+  ): { sessionId: string; atRecordId?: string } | undefined => {
+    const own = archive.get(id)!.manifest.invocation;
+    if (own !== undefined) return own;
+    const seen = new Set<string>([id]);
+    let cur = archive.get(id)!.manifest.lineage?.sessionId;
+    while (cur !== undefined && archive.has(cur) && !seen.has(cur)) {
+      seen.add(cur);
+      const inv = archive.get(cur)!.manifest.invocation;
+      if (inv !== undefined) return inv;
+      cur = archive.get(cur)!.manifest.lineage?.sessionId;
+    }
+    return undefined;
+  };
+
   const tokens: Record<string, number> = {
     input: 0,
     output: 0,
@@ -95,24 +166,54 @@ function expectedTotals(
     reasoning: 0,
   };
   let sessionCount = 0;
-  const visited = new Set<string>();
-  const visit = (id: string): void => {
-    if (visited.has(id)) return;
-    visited.add(id);
-    const session = archive.get(id);
-    if (session === undefined) return;
-    sessionCount += 1;
-    const jsonl = readFileSync(path.join(session.dir, "records.jsonl"), "utf8");
-    for (const line of jsonl.split("\n")) {
-      if (line.trim() === "") continue;
-      const rec = JSON.parse(line);
-      const u = rec.usage;
-      if (u === undefined) continue;
-      for (const [key, field] of TOKEN_FIELDS) {
-        tokens[key]! += u[field] ?? 0;
-      }
+  const visitedGroups = new Set<string>();
+
+  const visit = (entryId: string): void => {
+    const members = groupMembers.get(find(entryId));
+    if (members === undefined) return;
+    const groupKey = find(entryId);
+    if (visitedGroups.has(groupKey)) return;
+    visitedGroups.add(groupKey);
+
+    // HEAD chain, oldest first.
+    const chain: string[] = [];
+    const seen = new Set<string>();
+    let cur: string | undefined = headOf(members);
+    while (cur !== undefined && !seen.has(cur)) {
+      seen.add(cur);
+      chain.unshift(cur);
+      const lin: ArchivedSession["manifest"]["lineage"] = archive.get(cur)!.manifest.lineage;
+      cur = lin !== undefined && members.includes(lin.sessionId) ? lin.sessionId : undefined;
     }
-    for (const child of childrenOf.get(id) ?? []) visit(child);
+
+    for (let i = 0; i < chain.length; i += 1) {
+      const sid = chain[i]!;
+      const records = archive.get(sid)!.records;
+      let end = records.length;
+      if (i + 1 < chain.length) {
+        const childLin = archive.get(chain[i + 1]!)!.manifest.lineage;
+        if (childLin?.atRecordId === undefined) {
+          end = 0;
+        } else {
+          const idx = records.findIndex((r) => r.recordId === childLin.atRecordId);
+          end = idx >= 0 ? idx + 1 : records.length;
+        }
+      }
+      if (end === 0) continue;
+      sessionCount += 1;
+      for (const rec of records.slice(0, end)) {
+        if (rec.usage === undefined) continue;
+        for (const [key, field] of TOKEN_FIELDS) tokens[key]! += rec.usage[field] ?? 0;
+      }
+      // Invocation children of this chain session (deduped by group).
+      const childGroups = new Set<string>();
+      for (const s of archive.values()) {
+        const eff = effectiveInvocation(s.manifest.sessionId);
+        if (eff?.sessionId !== sid) continue;
+        childGroups.add(find(s.manifest.sessionId));
+      }
+      for (const childGroup of [...childGroups].sort()) visit(childGroup);
+    }
   };
   visit(rootId);
   return { tokens, sessionCount };
@@ -121,12 +222,18 @@ function expectedTotals(
 interface E2eCase {
   name: string;
   makeAdapter: (tmp: string) => HarnessAdapter;
-  /** Session the CLI is invoked with (a root with spawned children where the fixture has any). */
+  /** Session the CLI is invoked with (any member of the target lineage group). */
   rootSessionId: string;
   /** Spawned descendants expected to render indented under the root. */
   childSessionIds: string[];
   /** Substrings the transcript must contain. */
   transcriptMarkers: string[];
+  /** Substrings the default view must NOT contain (folded forks). */
+  absentMarkers?: string[];
+  /** Skip the generic tool_result-line check (HEAD chains without tool calls). */
+  skipToolResultLine?: boolean;
+  /** Extra CLI run with --all: substrings the output must contain. */
+  allRunMarkers?: string[];
 }
 
 const CLAUDE_SESSION_B = "22222222-2222-4222-8222-222222222222";
@@ -152,7 +259,8 @@ const cases: E2eCase[] = [
     makeAdapter: () => new CodexAdapter(path.join(fixturesDir, "codex", "sessions")),
     rootSessionId: CODEX_A1,
     childSessionIds: [CODEX_B2],
-    transcriptMarkers: [`# ${CODEX_A1} [codex`, "→ spawn_agent("],
+    // HEAD chain of the {a1, c3, f6} group: f6 is the HEAD (most recent).
+    transcriptMarkers: [`# ${CODEX_A1} [codex`, "→ spawn_agent(", "(task HEAD)"],
   },
   {
     name: "kimi-code",
@@ -165,10 +273,29 @@ const cases: E2eCase[] = [
     name: "devin",
     makeAdapter: (tmp) => new DevinAdapter(createDevinFixture(tmp)),
     rootSessionId: "sunny-forest",
-    // sibling_attempt sessions are lineage-linked, NOT invocation children —
-    // the report aggregates only the root session itself.
+    // sibling_attempt/fork sessions are lineage-linked, NOT invocation
+    // children — the default view folds them (HEAD chain only).
     childSessionIds: [],
-    transcriptMarkers: ["# sunny-forest [devin", "→ "],
+    // Group HEAD by the recency heuristic is sunny-forest#root-50 (latest
+    // record); its chain is [sunny-forest prefix, root-50 suffix].
+    transcriptMarkers: [
+      "# sunny-forest [devin",
+      "(shared prefix, stitched)",
+      "# sunny-forest#root-50 [devin",
+      "(task HEAD)",
+      "Different answer to the same prompt.",
+    ],
+    absentMarkers: ["#fork-16", "#root-30", "#root-40"],
+    skipToolResultLine: true,
+    allRunMarkers: [
+      "== alternate versions (group sunny-forest) ==",
+      "HEAD: sunny-forest#root-50",
+      "- sunny-forest (group root)",
+      "sunny-forest#fork-16",
+      "sunny-forest#root-30",
+      "sunny-forest#root-40",
+      "- sunny-forest#root-50 (HEAD)",
+    ],
   },
 ];
 
@@ -183,22 +310,28 @@ try {
     const exported = await exportSessions(adapter, archiveRoot);
     check(exported.length > 0, `${c.name}: adapter exported no sessions`);
 
-    const proc = spawnSync(
-      process.execPath,
-      [viteNode, reportCli, archiveRoot, c.rootSessionId],
-      { encoding: "utf8" },
-    );
-    check(
-      proc.status === 0,
-      `${c.name}: CLI exit code ${proc.status} (stderr: ${proc.stderr?.slice(0, 400)})`,
-    );
-    const out = proc.stdout ?? "";
+    const run = (args: string[]): string => {
+      const proc = spawnSync(process.execPath, [viteNode, reportCli, ...args], {
+        encoding: "utf8",
+      });
+      check(
+        proc.status === 0,
+        `${c.name}: CLI exit code ${proc.status} (stderr: ${proc.stderr?.slice(0, 400)})`,
+      );
+      return proc.stdout ?? "";
+    };
+    const out = run([archiveRoot, c.rootSessionId]);
 
     // Transcript structure.
     for (const marker of c.transcriptMarkers) {
       check(out.includes(marker), `${c.name}: stdout missing transcript marker ${JSON.stringify(marker)}`);
     }
-    check(out.includes("⤷"), `${c.name}: stdout has no tool_result line`);
+    if (c.skipToolResultLine !== true) {
+      check(out.includes("⤷"), `${c.name}: stdout has no tool_result line`);
+    }
+    for (const absent of c.absentMarkers ?? []) {
+      check(!out.includes(absent), `${c.name}: default view must fold ${JSON.stringify(absent)}`);
+    }
     for (const childId of c.childSessionIds) {
       check(
         out.includes(`  # ${childId}`),
@@ -206,7 +339,16 @@ try {
       );
     }
 
-    // Aggregated usage: CLI total line vs independent record-level sums.
+    // --all: fork/attempt sessions become visible as alternate versions.
+    if (c.allRunMarkers !== undefined) {
+      const allOut = run([archiveRoot, c.rootSessionId, "--all"]);
+      for (const marker of c.allRunMarkers) {
+        check(allOut.includes(marker), `${c.name}: --all stdout missing ${JSON.stringify(marker)}`);
+      }
+    }
+
+    // Aggregated usage: CLI total line vs independent record-level sums over
+    // the rendered HEAD-chain slices.
     const totalLine = out.split("\n").find((l) => l.startsWith("total: "));
     check(totalLine !== undefined, `${c.name}: stdout has no total: line`);
     const summaryLine = out

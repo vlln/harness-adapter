@@ -6,6 +6,7 @@ import type { Manifest } from "../schema/manifest";
 import type { BlobRef } from "../schema/blob";
 import type { AhsRecord } from "../schema/record";
 import type { HarnessAdapter, SessionFilter } from "../store/adapter";
+import { buildRelations, writeRelations, type RelationSession } from "./relations";
 
 /**
  * AHS archive writer (spec section "磁盘布局与 blob 外置").
@@ -146,29 +147,15 @@ export interface WriteArchiveResult {
 }
 
 /**
- * Write one session's archive. The manifest is located via the adapter's
- * listSessions (adapters may synthesize manifests only there).
+ * Write one already-collected session (manifest + seq-sorted records).
+ * Shared by writeArchive and exportSessions.
  */
-export async function writeArchive(
-  adapter: HarnessAdapter,
-  sessionId: string,
+async function writeSessionArchive(
+  manifest: Manifest,
+  records: AhsRecord[],
   outDir: string,
 ): Promise<WriteArchiveResult> {
-  let manifest: Manifest | undefined;
-  // Storage view: look up among ALL sessions, lineage descendants included.
-  for await (const m of adapter.listSessions({ includeForks: true })) {
-    if (m.sessionId === sessionId) {
-      manifest = m;
-      break;
-    }
-  }
-  if (manifest === undefined) throw new Error(`session not found: ${sessionId}`);
-
-  const records: AhsRecord[] = [];
-  for await (const rec of adapter.readRecords(sessionId)) records.push(rec);
-  records.sort((a, b) => a.seq - b.seq);
-
-  const dir = path.join(outDir, sanitizeSessionId(sessionId));
+  const dir = path.join(outDir, sanitizeSessionId(manifest.sessionId));
   const blobsDir = path.join(dir, "blobs");
   await mkdir(blobsDir, { recursive: true });
 
@@ -196,7 +183,45 @@ export async function writeArchive(
     "utf8",
   );
 
-  return { sessionId, dir, recordCount: records.length, blobCount };
+  return { sessionId: manifest.sessionId, dir, recordCount: records.length, blobCount };
+}
+
+/** Read one session's records from the adapter, seq-sorted. */
+async function collectRecords(adapter: HarnessAdapter, sessionId: string): Promise<AhsRecord[]> {
+  const records: AhsRecord[] = [];
+  for await (const rec of adapter.readRecords(sessionId)) records.push(rec);
+  records.sort((a, b) => a.seq - b.seq);
+  return records;
+}
+
+/**
+ * Write one session's archive. The manifest is located via the adapter's
+ * listSessions (adapters may synthesize manifests only there).
+ */
+export async function writeArchive(
+  adapter: HarnessAdapter,
+  sessionId: string,
+  outDir: string,
+): Promise<WriteArchiveResult> {
+  let manifest: Manifest | undefined;
+  // Storage view: look up among ALL sessions, lineage descendants included.
+  for await (const m of adapter.listSessions({ includeForks: true })) {
+    if (m.sessionId === sessionId) {
+      manifest = m;
+      break;
+    }
+  }
+  if (manifest === undefined) throw new Error(`session not found: ${sessionId}`);
+  return writeSessionArchive(manifest, await collectRecords(adapter, sessionId), outDir);
+}
+
+export interface ExportOptions {
+  /**
+   * Also derive and write relations.jsonl at the archive root (default
+   * true). Pure derivation (AR-005): the file can be deleted and rebuilt
+   * from the archived sessions at any time.
+   */
+  relations?: boolean;
 }
 
 /** Export every session an adapter lists (optionally filtered) into outDir. */
@@ -204,13 +229,21 @@ export async function exportSessions(
   adapter: HarnessAdapter,
   outDir: string,
   filter?: SessionFilter,
+  options?: ExportOptions,
 ): Promise<WriteArchiveResult[]> {
-  const results: WriteArchiveResult[] = [];
   // An archive is the storage view: default to the FULL set (forks included);
   // a caller-supplied filter may still narrow it down.
   const effective: SessionFilter = { includeForks: true, ...filter };
+  const sessions: RelationSession[] = [];
   for await (const manifest of adapter.listSessions(effective)) {
-    results.push(await writeArchive(adapter, manifest.sessionId, outDir));
+    sessions.push({ manifest, records: await collectRecords(adapter, manifest.sessionId) });
+  }
+  const results: WriteArchiveResult[] = [];
+  for (const session of sessions) {
+    results.push(await writeSessionArchive(session.manifest, session.records, outDir));
+  }
+  if (options?.relations !== false) {
+    await writeRelations(outDir, buildRelations(sessions));
   }
   return results;
 }

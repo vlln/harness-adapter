@@ -378,25 +378,42 @@ describe("AC-0004: output is usable (layer 4 archive + consumer)", () => {
       );
 
       const report = await renderReport(archiveDir, "sunny-forest");
-      // Transcript renders the key records readably.
-      expect(report.text).toContain("# sunny-forest [devin · claude-test-medium] — Alpha Refactor");
+      // Task view (ADR-0005 §5): the group's HEAD by the recency heuristic
+      // is sunny-forest#root-50 (latest record); the transcript is the HEAD
+      // chain — sunny-forest's records up to the lineage anchor (system
+      // prompt + first user message) stitched with root-50's suffix.
+      expect(report.headSessionId).toBe("sunny-forest#root-50");
+      expect(report.text).toContain(
+        "# sunny-forest [devin · claude-test-medium] — Alpha Refactor (shared prefix, stitched)",
+      );
       expect(report.text).toContain("[user] Refactor the parser.");
-      expect(report.text).toContain("[thinking 13 chars]");
-      expect(report.text).toContain("→ read_file(");
-      expect(report.text).toContain("⤷ file contents here");
-      // Token aggregation matches record-level reconciliation (AC-0002-N-4).
-      // (renderReport materializes unused token keys as 0 — match on values.)
-      expect(report.totalUsage).toMatchObject({
-        inputTokens: 150,
-        outputTokens: 30,
-        cacheWriteTokens: 177,
-        durationMs: 2300,
-      });
-      expect(report.aggregatedSessions).toEqual(["sunny-forest"]);
+      expect(report.text).toContain("# sunny-forest#root-50 [devin · claude-test-medium]");
+      expect(report.text).toContain("Different answer to the same prompt.");
+      // Folded alternates (and the abandoned tail past the anchor) are NOT
+      // stitched into the default view.
+      expect(report.text).not.toContain("sunny-forest#fork-16");
+      expect(report.text).not.toContain("sunny-forest#root-40");
+      expect(report.text).not.toContain("file contents here");
+      // Aggregation is over the rendered slices only; the metrics records
+      // (m-asst-2, tc-2) live past the anchor in the folded alternate, so
+      // the HEAD chain itself carries no usage (all-zero totals).
+      expect(report.aggregatedSessions).toEqual(["sunny-forest", "sunny-forest#root-50"]);
+      expect(report.totalUsage).toMatchObject({ inputTokens: 0, outputTokens: 0 });
 
-      // Fork sessions are archived under sanitized, resolvable dir names.
-      const forkReport = await renderReport(archiveDir, "sunny-forest#root-40");
-      expect(forkReport.text).toContain("[user] Try differently.");
+      // Fork sessions are archived under sanitized, resolvable dir names:
+      // invoking with any group member resolves the same group + HEAD, and
+      // --all lists the folded forks as alternate versions.
+      const forkReport = await renderReport(archiveDir, "sunny-forest#root-40", { all: true });
+      expect(forkReport.headSessionId).toBe("sunny-forest#root-50");
+      expect(forkReport.alternates).toEqual([
+        "sunny-forest",
+        "sunny-forest#fork-16",
+        "sunny-forest#root-30",
+        "sunny-forest#root-40",
+        "sunny-forest#root-50",
+      ]);
+      expect(forkReport.text).toContain("== alternate versions (group sunny-forest) ==");
+      expect(forkReport.text).toContain("sunny-forest#root-40");
     } finally {
       await rm(archiveDir, { recursive: true, force: true });
     }
