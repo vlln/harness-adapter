@@ -2,7 +2,7 @@
 title: Plan 02 适配器线性化重构
 description: 4 个适配器按 ADR-0005 重构：线性化 + fork 合成 + invocation 两链 + HEAD 指针；worktree 并行；复用 spike/正式版映射知识。
 type: plan
-status: pending
+status: done
 created: 2026-07-23T05:40:00Z
 ---
 
