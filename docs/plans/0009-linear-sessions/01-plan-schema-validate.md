@@ -2,7 +2,7 @@
 title: Plan 01 schema + validate 重构
 description: record 删 parentId；relation → lineage/invocation 两槽；Manifest 删 isMainChain；tool_result +sessionId；validate 按 AC v2 重写不变量。
 type: plan
-status: pending
+status: done
 created: 2026-07-23T05:40:00Z
 ---
 
