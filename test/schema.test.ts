@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   AhsRecordSchema,
+  InvocationSchema,
+  LineageSchema,
   ManifestSchema,
-  RelationSchema,
   type AhsRecord,
 } from "../src/schema";
 
 const base = {
   recordId: "r1",
-  parentId: null,
   seq: 0,
   timestamp: "2026-07-21T10:00:00Z",
 };
@@ -27,7 +27,8 @@ describe("Manifest", () => {
       provider: "anthropic",
       title: "Fix login bug",
       titleOrigin: "generated",
-      isMainChain: true,
+      lineage: { type: "forked_from", sessionId: "parent-1", atRecordId: "r7" },
+      invocation: { sessionId: "parent-1", atRecordId: "r9" },
       acpBinding: { agentId: "claude", sessionId: "native-id" },
       stats: {
         totalUsage: { inputTokens: 100, outputTokens: 50, cost: { amount: 0.01, currency: "USD" } },
@@ -71,6 +72,13 @@ describe("records", () => {
       ...base,
       type: "tool_result",
       toolCallId: "tc1",
+      content: "done",
+      sessionId: "child-session-1",
+    },
+    {
+      ...base,
+      type: "tool_result",
+      toolCallId: "tc1",
       content: { type: "blob_ref", sha256: "deadbeef", mediaType: "text/plain", byteLength: 70000, preview: "..." },
     },
     { ...base, type: "turn_boundary", phase: "start", turnId: "t1" },
@@ -100,19 +108,26 @@ describe("records", () => {
   });
 });
 
-describe("relation", () => {
-  it("parses a spawned_by relation with anchor", () => {
-    const rel = { type: "spawned_by", sessionId: "parent-1", toolCallId: "tc-9" };
-    expect(RelationSchema.parse(rel)).toEqual(rel);
+describe("lineage / invocation", () => {
+  it("parses a forked_from lineage with anchor", () => {
+    const lin = { type: "forked_from", sessionId: "parent-1", atRecordId: "r7" };
+    expect(LineageSchema.parse(lin)).toEqual(lin);
   });
 
-  it("parses a sibling_attempt relation without toolCallId", () => {
-    const rel = { type: "sibling_attempt", sessionId: "root-1" };
-    expect(RelationSchema.parse(rel)).toEqual(rel);
+  it("parses a sibling_attempt lineage without anchor (retry from start)", () => {
+    const lin = { type: "sibling_attempt", sessionId: "root-1" };
+    expect(LineageSchema.parse(lin)).toEqual(lin);
   });
 
-  it("rejects an unknown relation type", () => {
-    expect(RelationSchema.safeParse({ type: "child_of", sessionId: "x" }).success).toBe(false);
+  it("rejects an unknown lineage type", () => {
+    expect(LineageSchema.safeParse({ type: "spawned_by", sessionId: "x" }).success).toBe(false);
+  });
+
+  it("parses an invocation with and without anchor", () => {
+    const anchored = { sessionId: "parent-1", atRecordId: "r9" };
+    expect(InvocationSchema.parse(anchored)).toEqual(anchored);
+    const bare = { sessionId: "parent-1" };
+    expect(InvocationSchema.parse(bare)).toEqual(bare);
   });
 });
 

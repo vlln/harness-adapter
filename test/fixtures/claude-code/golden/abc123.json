@@ -7,12 +7,10 @@
     },
     "harness": "claude-code",
     "harnessVersion": "2.1.204",
-    "model": "claude-opus-4-1",
-    "relation": {
-      "sessionId": "22222222-2222-4222-8222-222222222222",
-      "toolCallId": "toolu_task01AAAAAAAAAAAAAAAAAA",
-      "type": "spawned_by"
+    "invocation": {
+      "sessionId": "22222222-2222-4222-8222-222222222222"
     },
+    "model": "claude-opus-4-1",
     "sessionId": "abc123",
     "stats": {
       "totalUsage": {
@@ -32,7 +30,6 @@
           "type": "text"
         }
       ],
-      "parentId": null,
       "recordId": "cccc0001-0000-4000-8000-000000000001",
       "seq": 0,
       "timestamp": "2026-07-15T09:00:05.000Z",
@@ -46,7 +43,6 @@
         }
       ],
       "model": "claude-opus-4-1",
-      "parentId": "cccc0001-0000-4000-8000-000000000001",
       "recordId": "cccc0002-0000-4000-8000-000000000002",
       "seq": 1,
       "timestamp": "2026-07-15T09:00:08.000Z",
@@ -64,7 +60,6 @@
         "pattern": "class .*Parser|parseGeneric"
       },
       "name": "Grep",
-      "parentId": "cccc0002-0000-4000-8000-000000000002",
       "recordId": "cccc0002-0000-4000-8000-000000000002/tool_use/0",
       "seq": 2,
       "status": "completed",
@@ -74,7 +69,6 @@
     },
     {
       "content": "src/parser.ts:12:class RecursiveDescentParser\nsrc/generics.ts:3:parseGeneric",
-      "parentId": "cccc0002-0000-4000-8000-000000000002/tool_use/0",
       "recordId": "cccc0003-0000-4000-8000-000000000003",
       "seq": 3,
       "status": "success",
@@ -90,7 +84,6 @@
         }
       ],
       "model": "claude-opus-4-1",
-      "parentId": "cccc0003-0000-4000-8000-000000000003",
       "recordId": "cccc0004-0000-4000-8000-000000000004",
       "seq": 4,
       "timestamp": "2026-07-15T09:00:12.000Z",

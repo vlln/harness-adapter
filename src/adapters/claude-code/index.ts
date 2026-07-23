@@ -16,22 +16,20 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *     agent-<agent-id>.jsonl                           sub-agent stream
  *     agent-<agent-id>.meta.json                       { agentType, description, toolUseId }
  *
- * Mapping decisions (lossy projection, ADR-0001 / ADR-0002):
- * - uuid → recordId as-is; parentUuid → parentId. Records of dropped types
+ * Mapping decisions (lossy projection, ADR-0001 / ADR-0005):
+ * - uuid → recordId as-is. Records of dropped types
  *   (queue-operation / last-prompt / system / mode / permission-mode /
- *   non-goal attachments / ...) forward their resolved parent to their
- *   children, so the kept tree stays connected.
+ *   non-goal attachments / ...) are simply dropped; the linear model needs
+ *   no parent forwarding.
  * - `attachment` records with subtype `goal_status` are harness goal
  *   verdicts (control plane) → `goal_update`. Mapping: `sentinel: true`
  *   (goal registered, no verdict yet) → "pending"; verdict records map
  *   `met: boolean` → "met" / "unmet"; `reason` kept when present. The
  *   source has no goal id, so goalId is omitted.
  * - Assistant `tool_use` blocks are split out of the assistant message into
- *   their own `tool_call` records. Chain rule: within one source record the
- *   emitted records form a chain (assistant_message → tool_call → …); the
- *   NEXT source record parents to the LAST record emitted by its parent
- *   source record. This keeps a single-parent tree while preserving
- *   emission order via seq.
+ *   their own `tool_call` records. Within one source record the emitted
+ *   records follow in order (assistant_message → tool_call → …); emission
+ *   order is preserved via seq (the linear model has no parentId).
  * - When an assistant message has only tool_use blocks, no assistant_message
  *   is emitted; the usage (must not be silently lost, AC-0002-N-4) rides on
  *   the first tool_call record.
@@ -53,8 +51,10 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * - Sidechains: each `subagents/agent-*.jsonl` file is one child session;
  *   inline `isSidechain: true` records in the main file are grouped by
  *   `agentId` into child sessions as well. Child sessionId = agentId; child
- *   Manifest.relation = spawned_by(parent session, meta.toolUseId, falling
- *   back to the first record's `sourceToolUseID` for inline groups).
+ *   Manifest.invocation = { sessionId: parent session }.
+ *   TODO(Plan 02): anchor the back-link (atRecordId = the parent's spawning
+ *   tool_call record, via meta.toolUseId / first record's `sourceToolUseID`)
+ *   and write the forward link into the parent's paired tool_result.sessionId.
  * - Usage: coarse totals only (input/output/cache read/cache write); the
  *   ephemeral 1h/5m tiers, service_tier, inference_geo, server_tool_use are
  *   dropped per ADR-0001.
@@ -168,49 +168,24 @@ function stringifyToolResultContent(content: unknown): string {
 
 /**
  * Project the lines of ONE session (main lines, or one sub-agent's lines)
- * into an AHS record tree. Lines must already be filtered to this session.
+ * into an AHS record list. Lines must already be filtered to this session.
+ * Linear model (ADR-0005): records are emitted in file order; seq is the
+ * only structural field. TODO(Plan 02): in-file forks (edit-resend, retries)
+ * must be split into separate fork sessions with lineage edges.
  */
 export function projectRecords(lines: RawLine[]): AhsRecord[] {
   const records: AhsRecord[] = [];
-  // source uuid -> recordId this source record resolved to. For dropped
-  // records this forwards the resolved parent so the kept tree stays linked.
-  const resolved = new Map<string, string | null>();
   const seenToolResults = new Set<string>();
   let seq = 0;
-  let lastEmitted: string | null = null;
 
   const emit = (rec: AhsRecord): void => {
     records.push(rec);
     seq += 1;
-    lastEmitted = rec.recordId;
   };
 
   for (const line of lines) {
     const uuid = line.uuid;
     const timestamp = line.timestamp ?? "";
-    // Parent resolution: a parentUuid already seen maps to its last emitted
-    // record (or forwarded ancestor). An unknown parentUuid is either an
-    // external anchor (sidechain root pointing into the parent session) at
-    // the start — becomes this session's root — or a gap mid-stream, where
-    // we fall back to the previous record to keep a single root.
-    let parent: string | null;
-    if (line.parentUuid == null) {
-      parent = null;
-    } else if (resolved.has(line.parentUuid)) {
-      parent = resolved.get(line.parentUuid) ?? null;
-    } else {
-      parent = lastEmitted;
-    }
-    // Real Claude files contain mid-stream chain restarts: dropped-type
-    // records with parentUuid null whose kept children would each become an
-    // extra root, violating the single-rooted tree. Once a root exists,
-    // re-anchor such records to the current tip.
-    if (parent === null && lastEmitted !== null) {
-      parent = lastEmitted;
-    }
-
-    let emitted = false;
-    const nextParent = (): string | null => (emitted ? lastEmitted : parent);
 
     if (line.type === "user" && uuid !== undefined) {
       if (line.isCompactSummary === true) {
@@ -220,26 +195,22 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
           typeof line.message?.content === "string" ? line.message.content : undefined;
         emit({
           recordId: uuid,
-          parentId: nextParent(),
           seq,
           timestamp,
           type: "compaction",
           ...(summary !== undefined ? { summary } : {}),
         });
-        emitted = true;
       } else {
         const content = line.message?.content;
         if (typeof content === "string") {
           // Verbatim, including slash-command XML markup (do not parse).
           emit({
             recordId: uuid,
-            parentId: nextParent(),
             seq,
             timestamp,
             type: "user_message",
             content: [{ type: "text", text: content }],
           });
-          emitted = true;
         } else if (Array.isArray(content)) {
           const textBlocks: ContentBlock[] = [];
           for (const block of content) {
@@ -250,13 +221,11 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
           if (textBlocks.length > 0) {
             emit({
               recordId: uuid,
-              parentId: nextParent(),
               seq,
               timestamp,
               type: "user_message",
               content: textBlocks,
             });
-            emitted = true;
           }
           let toolResultIndex = 0;
           for (const block of content) {
@@ -273,7 +242,6 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
             toolResultIndex += 1;
             emit({
               recordId,
-              parentId: nextParent(),
               seq,
               timestamp,
               type: "tool_result",
@@ -281,7 +249,6 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
               content: stringifyToolResultContent(block.content),
               status: block.is_error === true ? "error" : "success",
             });
-            emitted = true;
           }
         }
       }
@@ -300,14 +267,12 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
             : ("unmet" as const);
       emit({
         recordId: uuid,
-        parentId: nextParent(),
         seq,
         timestamp,
         type: "goal_update",
         status,
         ...(reason !== undefined ? { reason } : {}),
       });
-      emitted = true;
     } else if (line.type === "assistant" && uuid !== undefined) {
       const msg = line.message ?? {};
       const blocks = Array.isArray(msg.content) ? msg.content : [];
@@ -328,17 +293,16 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
         ...(usage !== undefined ? { usage } : {}),
         ...(model !== undefined ? { model } : {}),
       };
+      let emitted = contentBlocks.length > 0;
       if (contentBlocks.length > 0) {
         emit({
           ...extras,
           recordId: uuid,
-          parentId: nextParent(),
           seq,
           timestamp,
           type: "assistant_message",
           content: contentBlocks,
         });
-        emitted = true;
       }
       let toolCallIndex = 0;
       for (const block of toolUses) {
@@ -353,7 +317,6 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
         emit({
           ...carryExtras,
           recordId,
-          parentId: nextParent(),
           seq,
           timestamp,
           type: "tool_call",
@@ -366,12 +329,7 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
     }
     // All other types (queue-operation, last-prompt, summary, system, mode,
     // permission-mode, non-goal attachments, ...) are dropped per ADR-0001
-    // (process/telemetry). Their children re-anchor through the forwarding
-    // map below.
-
-    if (uuid !== undefined) {
-      resolved.set(uuid, emitted ? lastEmitted : parent);
-    }
+    // (process/telemetry).
   }
 
   // Derive tool_call status from the pairing outcome: a paired tool_result
@@ -402,7 +360,7 @@ function buildManifest(
   sessionId: string,
   lines: RawLine[],
   records: AhsRecord[],
-  relation?: Manifest["relation"],
+  invocation?: Manifest["invocation"],
 ): Manifest {
   const firstWith = <K extends keyof RawLine>(key: K): string | undefined => {
     for (const line of lines) {
@@ -452,7 +410,7 @@ function buildManifest(
     ...(branch !== undefined ? { git: { branch } } : {}),
     model: model ?? "unknown",
     ...(title !== undefined ? { title, titleOrigin: "generated" as const } : {}),
-    ...(relation !== undefined ? { relation } : {}),
+    ...(invocation !== undefined ? { invocation } : {}),
     stats: {
       turnCount,
       ...(hasUsage ? { totalUsage } : {}),
@@ -572,19 +530,14 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
     return [...byId.values()].sort((a, b) => a.agentId.localeCompare(b.agentId));
   }
 
-  private static childRelation(
-    parentSessionId: string,
-    child: ChildSource,
-    lines: RawLine[],
-  ): Manifest["relation"] {
-    const toolCallId =
-      child.meta?.toolUseId ??
-      lines.find((l) => typeof l.sourceToolUseID === "string")?.sourceToolUseID;
-    return {
-      type: "spawned_by",
-      sessionId: parentSessionId,
-      ...(toolCallId !== undefined ? { toolCallId } : {}),
-    };
+  /**
+   * Invocation back-link for a child session. The toolUseId anchor
+   * (meta.toolUseId, or the first record's sourceToolUseID for inline
+   * groups) is not wired to atRecordId yet — that plus the parent's
+   * tool_result.sessionId forward link is Plan 02 work.
+   */
+  private static childInvocation(parentSessionId: string): Manifest["invocation"] {
+    return { sessionId: parentSessionId };
   }
 
   /** Load and split one main session file; sub-agent file lines are attached to their ChildSource. */
@@ -615,7 +568,7 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
         const manifest = buildManifest(session.sessionId, main, records);
         if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) {
           // Children of a filtered-out parent are also skipped: the parent's
-          // records anchor their spawned_by relation.
+          // records anchor their invocation back-link.
           continue;
         }
         yield manifest;
@@ -628,7 +581,7 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
           child.agentId,
           cLines,
           cRecords,
-          ClaudeCodeAdapter.childRelation(session.sessionId, child, cLines),
+          ClaudeCodeAdapter.childInvocation(session.sessionId),
         );
       }
     }

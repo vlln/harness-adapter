@@ -128,15 +128,16 @@ export interface ReportResult {
   /** Aggregated usage over the session and all spawned descendants. */
   totalUsage: Usage;
   totalCost: Map<string, number>;
-  /** sessionIds included in the aggregate (relation-graph walk order). */
+  /** sessionIds included in the aggregate (invocation-graph walk order). */
   aggregatedSessions: string[];
 }
 
 /**
  * Render the transcript + cost report for one archived session, reading
- * ONLY the archive. Spawned children are rendered indented right after the
- * anchoring tool_call (children without a toolCallId anchor render after
- * the parent's records); cycles are cut defensively.
+ * ONLY the archive. Spawned children (manifest.invocation back-links) are
+ * rendered indented right after the anchoring tool_call (children without
+ * an atRecordId anchor render after the parent's records); cycles are cut
+ * defensively.
  */
 export async function renderReport(archiveRoot: string, sessionId: string): Promise<ReportResult> {
   const archive = await loadArchive(archiveRoot);
@@ -145,11 +146,11 @@ export async function renderReport(archiveRoot: string, sessionId: string): Prom
 
   const childrenOf = new Map<string, ArchiveSession[]>();
   for (const session of archive.values()) {
-    const relation = session.manifest.relation;
-    if (relation?.type !== "spawned_by") continue;
-    const list = childrenOf.get(relation.sessionId);
+    const invocation = session.manifest.invocation;
+    if (invocation === undefined) continue;
+    const list = childrenOf.get(invocation.sessionId);
     if (list !== undefined) list.push(session);
-    else childrenOf.set(relation.sessionId, [session]);
+    else childrenOf.set(invocation.sessionId, [session]);
   }
 
   const lines: string[] = [];
@@ -175,7 +176,7 @@ export async function renderReport(archiveRoot: string, sessionId: string): Prom
     const anchored = new Map<string, ArchiveSession[]>();
     const unanchored: ArchiveSession[] = [];
     for (const child of children) {
-      const anchor = child.manifest.relation?.toolCallId;
+      const anchor = child.manifest.invocation?.atRecordId;
       if (anchor !== undefined) {
         const list = anchored.get(anchor);
         if (list !== undefined) list.push(child);
@@ -191,7 +192,7 @@ export async function renderReport(archiveRoot: string, sessionId: string): Prom
       for (const line of renderRecord(rec)) lines.push(`${indent}${line}`);
       if (rec.usage !== undefined) addUsage(sessionUsage, rec.usage, sessionCost);
       if (rec.type === "tool_call") {
-        for (const child of anchored.get(rec.toolCallId) ?? []) {
+        for (const child of anchored.get(rec.recordId) ?? []) {
           await renderSession(child, depth + 1);
         }
       }

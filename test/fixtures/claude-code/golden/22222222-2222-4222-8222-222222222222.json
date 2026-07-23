@@ -29,7 +29,6 @@
           "type": "text"
         }
       ],
-      "parentId": null,
       "recordId": "bbbb0001-0000-4000-8000-000000000001",
       "seq": 0,
       "timestamp": "2026-07-15T09:00:00.000Z",
@@ -43,7 +42,6 @@
         }
       ],
       "model": "claude-opus-4-1",
-      "parentId": "bbbb0001-0000-4000-8000-000000000001",
       "recordId": "bbbb0002-0000-4000-8000-000000000002",
       "seq": 1,
       "timestamp": "2026-07-15T09:00:04.000Z",
@@ -62,7 +60,6 @@
         "subagent_type": "Explore"
       },
       "name": "Task",
-      "parentId": "bbbb0002-0000-4000-8000-000000000002",
       "recordId": "bbbb0002-0000-4000-8000-000000000002/tool_use/0",
       "seq": 2,
       "status": "completed",
@@ -72,7 +69,6 @@
     },
     {
       "content": "Agent completed: found 3 parser files (src/parser.ts, src/generics.ts, src/ast.ts)",
-      "parentId": "bbbb0002-0000-4000-8000-000000000002/tool_use/0",
       "recordId": "bbbb0003-0000-4000-8000-000000000003",
       "seq": 3,
       "status": "success",
@@ -88,7 +84,6 @@
         }
       ],
       "model": "claude-opus-4-1",
-      "parentId": "bbbb0003-0000-4000-8000-000000000003",
       "recordId": "bbbb0004-0000-4000-8000-000000000004",
       "seq": 4,
       "timestamp": "2026-07-15T09:00:33.000Z",

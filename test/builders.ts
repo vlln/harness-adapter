@@ -2,6 +2,9 @@
  * Hand-built in-memory AHS sessions for core-layer tests (no adapter
  * fixtures involved). Every builder emits schema-valid shapes by default;
  * tests pass overrides to construct negative cases.
+ *
+ * Linear-session model (ADR-0005): records carry no parentId; seq is the
+ * only structural field.
  */
 
 import type { Manifest } from "../src/schema/manifest";
@@ -29,10 +32,9 @@ interface RecordExtras {
   usage?: AhsRecord["usage"];
 }
 
-function base(seq: number, parentId: string | null, extras: RecordExtras = {}) {
+function base(seq: number, extras: RecordExtras = {}) {
   return {
     recordId: extras.recordId ?? `r${seq}`,
-    parentId,
     seq,
     timestamp: extras.timestamp ?? BASE_TIME,
     ...(extras.usage !== undefined ? { usage: extras.usage } : {}),
@@ -41,21 +43,19 @@ function base(seq: number, parentId: string | null, extras: RecordExtras = {}) {
 
 export function userMessage(
   seq: number,
-  parentId: string | null,
   text: string,
   extras: RecordExtras = {},
 ): AhsRecord {
-  return { ...base(seq, parentId, extras), type: "user_message", content: [{ type: "text", text }] };
+  return { ...base(seq, extras), type: "user_message", content: [{ type: "text", text }] };
 }
 
 export function assistantMessage(
   seq: number,
-  parentId: string | null,
   text: string,
   extras: RecordExtras = {},
 ): AhsRecord {
   return {
-    ...base(seq, parentId, extras),
+    ...base(seq, extras),
     type: "assistant_message",
     content: [{ type: "text", text }],
   };
@@ -63,12 +63,11 @@ export function assistantMessage(
 
 export function toolCall(
   seq: number,
-  parentId: string | null,
   toolCallId: string,
   extras: RecordExtras & { name?: string; status?: "completed" | "failed" | "interrupted" } = {},
 ): AhsRecord {
   return {
-    ...base(seq, parentId, extras),
+    ...base(seq, extras),
     type: "tool_call",
     toolCallId,
     name: extras.name ?? "Bash",
@@ -79,19 +78,24 @@ export function toolCall(
 
 export function toolResult(
   seq: number,
-  parentId: string | null,
   toolCallId: string,
   content: string,
-  extras: RecordExtras = {},
+  extras: RecordExtras & { sessionId?: string } = {},
 ): AhsRecord {
-  return { ...base(seq, parentId, extras), type: "tool_result", toolCallId, content };
+  return {
+    ...base(seq, extras),
+    type: "tool_result",
+    toolCallId,
+    content,
+    ...(extras.sessionId !== undefined ? { sessionId: extras.sessionId } : {}),
+  };
 }
 
 /** A valid minimal session: root user message only. */
 export function makeSession(sessionId: string, records?: AhsRecord[], manifest?: Partial<Manifest>): SessionData {
   return {
     manifest: makeManifest({ sessionId, ...manifest }),
-    records: records ?? [userMessage(0, null, "hi")],
+    records: records ?? [userMessage(0, "hi")],
   };
 }
 

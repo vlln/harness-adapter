@@ -7,8 +7,8 @@
  *   22222222-…  session with a subagent FILE + .meta.json — AC-0002-N-2
  *   33333333-…  inline sidechain + compaction + duplicate tool_result +
  *               interrupted tool_call — AC-0002-N-6/B-1
- *   44444444-…  dropped process records (system/mode/attachment) with
- *               re-anchoring, multi tool_use, non-string tool_result,
+ *   44444444-…  dropped process records (system/mode/attachment) leaving no
+ *               seq gaps, multi tool_use, non-string tool_result,
  *               missing usage — AC-0001-E-1, AC-0002-B-2
  *   55555555-…  only process records — not an AHS session (skipped)
  */
@@ -141,7 +141,8 @@ describe("claude-code adapter", () => {
       expect(manifest.model).toBe("claude-opus-4-1");
       expect(manifest.title).toBe("Fix the flaky login test");
       expect(manifest.titleOrigin).toBe("generated");
-      expect(manifest.relation).toBeUndefined();
+      expect(manifest.lineage).toBeUndefined();
+      expect(manifest.invocation).toBeUndefined();
       expect(manifest.stats?.turnCount).toBe(2); // two string-content user prompts
       expect(manifest.stats?.totalUsage).toEqual({
         inputTokens: 6700,
@@ -176,7 +177,6 @@ describe("claude-code adapter", () => {
         expect(initial.status).toBe("pending");
         expect(initial.reason).toBeUndefined();
         expect(initial.goalId).toBeUndefined();
-        expect(initial.parentId).toBeNull(); // session root
       }
       const final = records[10]!;
       expect(final.type).toBe("goal_update");
@@ -185,7 +185,6 @@ describe("claude-code adapter", () => {
         expect(final.reason).toBe(
           "The flaky timing wait was replaced with an explicit event await.",
         );
-        expect(final.parentId).toBe("aaaa0008-0000-4000-8000-000000000008");
       }
     });
 
@@ -214,7 +213,7 @@ describe("claude-code adapter", () => {
       }
     });
 
-    it("splits tool_use blocks into tool_call records chained off the assistant record", async () => {
+    it("splits tool_use blocks into tool_call records following the assistant record", async () => {
       const records = await readAll(adapter, SESSION_A);
       const toolCall = records[4]!;
       if (toolCall.type === "tool_call") {
@@ -224,14 +223,11 @@ describe("claude-code adapter", () => {
           command: "npx vitest run test/login.test.ts",
           description: "Run the login test",
         });
-        expect(toolCall.parentId).toBe("aaaa0004-0000-4000-8000-000000000004");
       }
-      // Next record parents to the LAST record emitted by the previous message.
       const toolResult = records[5]!;
       if (toolResult.type === "tool_result") {
         expect(toolResult.toolCallId).toBe("toolu_01AAAAAAAAAAAAAAAAAAAAAA");
         expect(toolResult.status).toBe("success");
-        expect(toolResult.parentId).toBe(toolCall.recordId);
       }
       const errorResult = records[8]!;
       if (errorResult.type === "tool_result") {
@@ -265,14 +261,9 @@ describe("claude-code adapter", () => {
       });
     });
 
-    it("assigns seq in emission order and keeps the causal chain connected (AC-0002-N-1)", async () => {
+    it("assigns seq in emission order, strictly increasing and contiguous (AC-0002-N-1)", async () => {
       const records = await readAll(adapter, SESSION_A);
       expect(records.map((r) => r.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-      expect(records[0]!.parentId).toBeNull();
-      for (let i = 1; i < records.length; i += 1) {
-        const parentId = records[i]!.parentId!;
-        expect(records.slice(0, i).some((r) => r.recordId === parentId)).toBe(true);
-      }
     });
   });
 
@@ -284,17 +275,14 @@ describe("claude-code adapter", () => {
       expect(manifest.titleOrigin).toBe("generated");
     });
 
-    it("emits the subagent as a child session with spawned_by anchored to the Task call (AC-0002-N-2)", async () => {
+    it("emits the subagent as a child session with an invocation back-link (AC-0002-N-2)", async () => {
       const sessions = await collectSessions(adapter);
       const child = sessions.find((s) => s.manifest.sessionId === "abc123")!.manifest;
-      expect(child.relation).toEqual({
-        type: "spawned_by",
-        sessionId: SESSION_B,
-        toolCallId: "toolu_task01AAAAAAAAAAAAAAAAAA",
-      });
+      // TODO(Plan 02): atRecordId anchor + parent tool_result.sessionId forward link.
+      expect(child.invocation).toEqual({ sessionId: SESSION_B });
     });
 
-    it("keeps the Task tool_call in the main session; sidechain records stay out of the main tree", async () => {
+    it("keeps the Task tool_call in the main session; sidechain records stay out of the main session", async () => {
       const main = await readAll(adapter, SESSION_B);
       expect(main.map((r) => r.type)).toEqual([
         "user_message",
@@ -311,7 +299,7 @@ describe("claude-code adapter", () => {
       expect(main.some((r) => r.recordId.startsWith("cccc"))).toBe(false);
     });
 
-    it("gives the child session its own rooted record tree with its own usage", async () => {
+    it("gives the child session its own linear record chain with its own usage", async () => {
       const child = await readAll(adapter, "abc123");
       expect(child.map((r) => r.type)).toEqual([
         "user_message",
@@ -320,7 +308,7 @@ describe("claude-code adapter", () => {
         "tool_result",
         "assistant_message",
       ]);
-      expect(child[0]!.parentId).toBeNull();
+      expect(child[0]!.seq).toBe(0);
       expect(sumUsage(child)).toEqual({
         inputTokens: 2400,
         outputTokens: 150,
@@ -334,19 +322,15 @@ describe("claude-code adapter", () => {
     it("groups inline isSidechain records by agentId into a child session", async () => {
       const child = await readAll(adapter, "def456");
       expect(child.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
-      expect(child[0]!.parentId).toBeNull();
+      expect(child[0]!.seq).toBe(0);
 
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === "def456")!.manifest;
-      // No meta.json: toolCallId falls back to the record's sourceToolUseID.
-      expect(manifest.relation).toEqual({
-        type: "spawned_by",
-        sessionId: SESSION_C,
-        toolCallId: "toolu_task02AAAAAAAAAAAAAAAAAA",
-      });
+      // TODO(Plan 02): atRecordId anchor (sourceToolUseID fallback) + forward link.
+      expect(manifest.invocation).toEqual({ sessionId: SESSION_C });
     });
 
-    it("excludes inline sidechain records from the main tree", async () => {
+    it("excludes inline sidechain records from the main session", async () => {
       const main = await readAll(adapter, SESSION_C);
       expect(
         main.some(
@@ -433,20 +417,14 @@ describe("claude-code adapter", () => {
       if (secondCall.type === "tool_call") {
         expect(secondCall.toolCallId).toBe("toolu_multi02AAAAAAAAAAAAAAAA");
         expect(secondCall.usage).toBeUndefined();
-        expect(secondCall.parentId).toBe(firstCall.recordId);
       }
     });
 
-    it("re-anchors kept records through dropped process records (single root)", async () => {
+    it("projects a linear chain through dropped process records (seq contiguous)", async () => {
       const records = await readAll(adapter, SESSION_D);
-      expect(records[0]!.parentId).toBeNull();
-      for (const rec of records.slice(1)) {
-        expect(records.some((r) => r.recordId === rec.parentId)).toBe(true);
-      }
-      // The final assistant message's source parent is a dropped attachment
-      // with parentUuid=null mid-stream — it must re-anchor to the current tip.
-      const last = records[records.length - 1]!;
-      expect(last.parentId).toBe(records[records.length - 2]!.recordId);
+      // Dropped process records (system/mode/attachment) leave no gaps:
+      // seq is strictly increasing and contiguous from 0.
+      expect(records.map((r) => r.seq)).toEqual(records.map((_, i) => i));
     });
 
     it("JSON-stringifies non-string tool_result content and keeps error status", async () => {

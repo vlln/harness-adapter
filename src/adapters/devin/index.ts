@@ -22,18 +22,18 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   doc's "root node_id" is an erratum). The main root is found by walking
  *   parent_node_id up from main_chain_id; fallback when main_chain_id is
  *   NULL/unresolvable: the root with the lowest node_id. Its AHS session id
- *   is the bare Devin slug, with Manifest.isMainChain = true.
+ *   is the bare Devin slug. (ADR-0005: mainness is no longer a Manifest
+ *   field — the group HEAD pointer is derived-layer data, Plan 03.)
  * - Every other root → AHS session `<slug>#root-<nodeId>` with
- *   relation { type: "sibling_attempt", sessionId: <slug> } (no toolCallId
- *   — sibling_attempt has no anchor semantics). Nodes whose parent is
- *   missing (deleted-parent gap) are treated as additional roots.
+ *   lineage { type: "sibling_attempt", sessionId: <slug> } (no atRecordId
+ *   anchor yet — shared-prefix anchoring is Plan 02 work). Nodes whose
+ *   parent is missing (deleted-parent gap) are treated as additional roots.
  *
  * DEDUP: Devin stores branch retries as sibling nodes carrying the SAME
  * chat_message.message_id (real data: 2,250 nodes vs 1,192 distinct
  * message_ids). Within one tree the FIRST occurrence of a message_id
  * (pre-order DFS, children ordered by created_at then node_id) is emitted;
- * later duplicates are skipped and their children re-anchor to the first
- * occurrence's last emitted record (forwarding map).
+ * later duplicates are skipped.
  *
  * Content mapping:
  * - role user → user_message; user with metadata.is_user_input === false →
@@ -195,40 +195,29 @@ export function projectTree(nodes: NodeRow[], rootNodeId: number): AhsRecord[] {
   for (const list of children.values()) list.sort(byOrder);
 
   const records: AhsRecord[] = [];
-  // message_id -> last recordId emitted for its FIRST occurrence (dedup).
-  const firstOccurrence = new Map<string, string>();
-  // node_id -> recordId children should parent to.
-  const resolved = new Map<number, string | null>();
+  // message_ids already emitted (branch-retry duplicates are skipped).
+  const seenMessages = new Set<string>();
   const seenResults = new Set<string>();
 
-  const emitNode = (node: NodeRow, parentRecordId: string | null): void => {
+  const emitNode = (node: NodeRow): void => {
     let msg: ChatMessage;
     try {
       msg = JSON.parse(node.chat_message) as ChatMessage;
     } catch {
-      resolved.set(node.node_id, parentRecordId); // children re-anchor
       return;
     }
     const messageId = msg.message_id ?? `node-${node.node_id}`;
     const timestamp = isoFromSeconds(node.created_at);
 
-    const first = firstOccurrence.get(messageId);
-    if (first !== undefined) {
-      // Branch-retry duplicate of an already-emitted message: skip, forward.
-      resolved.set(node.node_id, first);
+    if (seenMessages.has(messageId)) {
+      // Branch-retry duplicate of an already-emitted message: skip.
       return;
     }
 
-    let lastEmitted: string | null = null;
+    let emittedAny = false;
     const emit = (specific: RecordSpecific, recordId: string): void => {
-      const base = {
-        recordId,
-        parentId: lastEmitted ?? parentRecordId,
-        timestamp,
-        seq: records.length,
-      };
-      records.push({ ...base, ...specific } as AhsRecord);
-      lastEmitted = recordId;
+      records.push({ recordId, timestamp, seq: records.length, ...specific } as AhsRecord);
+      emittedAny = true;
     };
 
     if (msg.role === "user" || msg.role === "system") {
@@ -261,7 +250,7 @@ export function projectTree(nodes: NodeRow[], rootNodeId: number): AhsRecord[] {
       for (const tc of msg.tool_calls ?? []) {
         // Tool-only message: usage rides on the first tool_call so it is
         // not silently lost.
-        const carryUsage = lastEmitted === null && index === 0 && hasUsage;
+        const carryUsage = !emittedAny && index === 0 && hasUsage;
         emit(
           {
             type: "tool_call",
@@ -275,16 +264,14 @@ export function projectTree(nodes: NodeRow[], rootNodeId: number): AhsRecord[] {
         );
         index += 1;
       }
-      if (lastEmitted === null) {
+      if (!emittedAny) {
         // Empty assistant node (no blocks, no tool calls) — skip emission.
-        resolved.set(node.node_id, parentRecordId);
         return;
       }
     } else if (msg.role === "tool") {
       const callId = msg.tool_call_id ?? "";
       if (seenResults.has(callId)) {
         // Duplicate result for one toolCallId: first in DFS order wins.
-        resolved.set(node.node_id, parentRecordId);
         return;
       }
       seenResults.add(callId);
@@ -293,25 +280,22 @@ export function projectTree(nodes: NodeRow[], rootNodeId: number): AhsRecord[] {
         messageId,
       );
     } else {
-      // Unknown role: skip emission, children re-anchor.
-      resolved.set(node.node_id, parentRecordId);
+      // Unknown role: skip emission.
       return;
     }
 
-    firstOccurrence.set(messageId, lastEmitted ?? parentRecordId ?? messageId);
-    resolved.set(node.node_id, lastEmitted);
+    seenMessages.add(messageId);
   };
 
-  const walk = (node: NodeRow, parentRecordId: string | null): void => {
-    emitNode(node, parentRecordId);
-    const next = resolved.has(node.node_id) ? (resolved.get(node.node_id) ?? null) : parentRecordId;
+  const walk = (node: NodeRow): void => {
+    emitNode(node);
     for (const child of children.get(node.node_id) ?? []) {
-      walk(child, next);
+      walk(child);
     }
   };
   const root = byId.get(rootNodeId);
   if (root === undefined) return records;
-  walk(root, null);
+  walk(root);
 
   // Derive tool_call status from the pairing outcome (XOR per spec).
   const paired = new Set<string>();
@@ -360,7 +344,7 @@ function buildManifest(
   row: SessionRow,
   sessionId: string,
   records: AhsRecord[],
-  extra: { isMainChain?: boolean; relation?: Manifest["relation"]; includeCost?: boolean },
+  extra: { lineage?: Manifest["lineage"]; includeCost?: boolean },
 ): Manifest {
   const totalUsage: Usage = {};
   let turnCount = 0;
@@ -392,8 +376,7 @@ function buildManifest(
     cwd: row.working_directory,
     model: row.model,
     ...(row.title !== null ? { title: row.title, titleOrigin: "custom" as const } : {}),
-    ...(extra.relation !== undefined ? { relation: extra.relation } : {}),
-    ...(extra.isMainChain === true ? { isMainChain: true } : {}),
+    ...(extra.lineage !== undefined ? { lineage: extra.lineage } : {}),
     stats: {
       turnCount,
       ...(hasUsage ? { totalUsage } : {}),
@@ -459,7 +442,6 @@ export class DevinAdapter implements HarnessAdapter {
         const projected = this.projectSession(db, row);
         if (projected === null || projected.main.records.length === 0) continue;
         const main = buildManifest(row, row.id, projected.main.records, {
-          isMainChain: true,
           includeCost: true,
         });
         if (filter?.cwd !== undefined && main.cwd !== filter.cwd) continue;
@@ -467,7 +449,7 @@ export class DevinAdapter implements HarnessAdapter {
         for (const sibling of projected.siblings) {
           if (sibling.records.length === 0) continue;
           yield buildManifest(row, `${row.id}#root-${sibling.rootNodeId}`, sibling.records, {
-            relation: { type: "sibling_attempt", sessionId: row.id },
+            lineage: { type: "sibling_attempt", sessionId: row.id },
           });
         }
       }

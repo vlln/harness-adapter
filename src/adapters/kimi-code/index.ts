@@ -20,8 +20,8 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * its own AHS session. The main agent's sessionId is the bare session uuid;
  * a sub-agent's sessionId is `<uuid>/<agent-name>`. state.json gives only an
  * AGENT-level parent link (parentAgentId — always "main" in observed data),
- * so children get relation spawned_by(parent session) with NO toolCallId
- * anchor (AC-0002-B-3).
+ * so children get a Manifest invocation back-link (parent session) with NO
+ * atRecordId anchor (AC-0002-B-3).
  *
  * DEDUP POLICY: turn.prompt / turn.steer are NOT emitted — their content is
  * duplicated by an immediately following context.append_message with
@@ -81,7 +81,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   the stream position of plan writing is not recoverable (plan_mode.enter
  *   only carries the slug).
  * - forked events ({type:"forked", time}) mark a session fork but carry NO
- *   source session id, so a forked_from relation cannot be populated:
+ *   source session id, so a forked_from lineage cannot be populated:
  *   DROPPED (source-unavailable; flagged for ADR-0002).
  * - Dropped as process mechanics/telemetry: metadata (protocol_version —
  *   there is no CLI version in the source, so Manifest.harnessVersion is
@@ -95,8 +95,8 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   createdAt/updatedAt/lastPrompt/custom: dropped (no Manifest home).
  *
  * Causal synthesis: wires are temporal streams without parent links — a
- * linear chain is synthesized per wire (parentId = previous emitted record,
- * null for the first; seq = emission index). Record ids are
+ * linear chain is synthesized per wire (seq = emission index; the linear
+ * model has no parentId). Record ids are
  * `<sessionId>:<seq>`; timestamps come from the Unix-ms `time` field
  * converted to ISO 8601. Directory entries are sorted and there are no
  * wall-clock reads, so output is byte-identical across runs.
@@ -164,7 +164,7 @@ interface AgentSource {
   sessionId: string;
   wirePath: string;
   plansDir: string;
-  relation?: Manifest["relation"];
+  invocation?: Manifest["invocation"];
 }
 
 interface SessionSource {
@@ -214,7 +214,7 @@ function sumUsageInto(target: Usage, add: Usage): void {
 
 /** Omit that distributes over the AhsRecord discriminated union. */
 type RecordPayload<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
-type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "parentId" | "seq" | "timestamp">;
+type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "seq" | "timestamp">;
 
 /**
  * Project ONE agent's wire.jsonl (+ its plans/ directory) into an AHS
@@ -235,7 +235,6 @@ export function projectRecords(
     const seq = records.length;
     const rec = {
       recordId: `${sessionId}:${seq}`,
-      parentId: seq === 0 ? null : records[seq - 1]!.recordId,
       seq,
       timestamp,
       ...(pendingUsage !== undefined ? { usage: pendingUsage } : {}),
@@ -458,7 +457,7 @@ function buildManifest(
     ...(state.title !== undefined
       ? { title: state.title, titleOrigin: state.isCustomTitle === true ? ("custom" as const) : ("generated" as const) }
       : {}),
-    ...(agent.relation !== undefined ? { relation: agent.relation } : {}),
+    ...(agent.invocation !== undefined ? { invocation: agent.invocation } : {}),
     stats: {
       turnCount,
       ...(hasUsage ? { totalUsage } : {}),
@@ -524,22 +523,23 @@ export class KimiCodeAdapter implements HarnessAdapter {
           const wirePath = path.join(agentDir, "wire.jsonl");
           const isMain = name === "main" || state.agents?.[name]?.type === "main";
           const agentSessionId = isMain ? sessionId : `${sessionId}/${name}`;
-          let relation: AgentSource["relation"];
+          let invocation: AgentSource["invocation"];
           if (!isMain) {
-            // Agent-level parent link only (AC-0002-B-3: no toolCallId).
+            // Agent-level parent link only (AC-0002-B-3: no atRecordId anchor).
+            // TODO(Plan 02): forward link via the parent's tool_result.sessionId.
             const parentName = state.agents?.[name]?.parentAgentId;
             const parentSessionId =
               parentName === undefined || parentName === null || parentName === "main"
                 ? sessionId
                 : `${sessionId}/${parentName}`;
-            relation = { type: "spawned_by", sessionId: parentSessionId };
+            invocation = { sessionId: parentSessionId };
           }
           agents.push({
             name,
             sessionId: agentSessionId,
             wirePath,
             plansDir: path.join(agentDir, "plans"),
-            ...(relation !== undefined ? { relation } : {}),
+            ...(invocation !== undefined ? { invocation } : {}),
           });
         }
         // Main first, then sub-agents sorted by name.

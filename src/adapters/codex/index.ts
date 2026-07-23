@@ -51,19 +51,20 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   update, thread_settings_applied, thread_rolled_back,
  *   entered/exited_review_mode, item_completed, error): DROPPED.
  *
- * Session relations:
+ * Session relations (ADR-0005 two dimensions):
  * - Sub-agents: the child's rollout file opens with its OWN session_meta
  *   whose `source` is { subagent: { thread_spawn: { parent_thread_id } } }.
- *   This maps to Manifest.relation = spawned_by(parent_thread_id). The
- *   toolCallId anchor is recovered by cross-file correlation: the parent's
- *   event_msg `sub_agent_activity` (kind "started") carries event_id = the
- *   parent's spawn_agent function_call call_id and agent_thread_id = the
- *   child thread id (verified on real data).
+ *   This maps to Manifest.invocation = { sessionId: parent_thread_id }.
+ *   TODO(Plan 02): recover the atRecordId anchor by cross-file correlation
+ *   (the parent's event_msg `sub_agent_activity`, kind "started", carries
+ *   event_id = the parent's spawn_agent function_call call_id and
+ *   agent_thread_id = the child thread id) and write the forward link into
+ *   the parent's paired tool_result.sessionId.
  * - Resumed/forked threads: the file's own session_meta is followed by
  *   ancestor lineage headers, most recent first; ancestor content is NOT
  *   replayed (verified on real data). The most recent ancestor (the second
- *   session_meta) maps to forked_from, per spec ("延续是退化的 fork").
- *   A sub-agent file has lineage headers too, but spawned_by wins.
+ *   session_meta) maps to lineage forked_from, per spec ("延续是退化的 fork").
+ *   A sub-agent file has lineage headers too, but invocation wins.
  *
  * Specific mappings:
  * - response_item message role: user → user_message; assistant →
@@ -103,8 +104,8 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   the first in file order is kept.
  *
  * Causal synthesis: the source is a temporal stream with no parent links —
- * a linear chain is synthesized (parentId = previous emitted record,
- * null for the first; seq = emission index). Record ids are synthesized as
+ * a linear chain is synthesized (seq = emission index; the linear model has
+ * no parentId). Record ids are synthesized as
  * `<sessionId>:<seq>` (source records have no stable uuids); directory
  * entries are sorted and there are no wall-clock reads, so output is
  * byte-identical across runs.
@@ -187,7 +188,7 @@ interface RawContent {
 
 /** Omit that distributes over the AhsRecord discriminated union. */
 type RecordPayload<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
-type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "parentId" | "seq" | "timestamp">;
+type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "seq" | "timestamp">;
 
 interface SessionSource {
   /** sessionId from session_meta, falling back to the filename id. */
@@ -272,7 +273,6 @@ export function projectRecords(
     const seq = records.length;
     const rec = {
       recordId: `${sessionId}:${seq}`,
-      parentId: seq === 0 ? null : records[seq - 1]!.recordId,
       seq,
       timestamp,
       ...(pendingUsage !== undefined ? { usage: pendingUsage } : {}),
@@ -406,8 +406,8 @@ export function projectRecords(
         });
       }
       // event_msg user_message / agent_message are duplicates of
-      // response_item messages — skipped. sub_agent_activity feeds the
-      // spawn-anchor map (buildSpawnAnchors), not records. All other
+      // response_item messages — skipped. sub_agent_activity will feed the
+      // invocation anchor recovery (Plan 02), not records. All other
       // subtypes (exec_command_end, patch_apply_end, ...) are
       // process/telemetry — dropped per spec.
     } else if (line.type === "turn_context") {
@@ -460,31 +460,11 @@ export function projectRecords(
   return records;
 }
 
-/**
- * Scan all sessions' lines for event_msg sub_agent_activity (kind
- * "started") and map childThreadId → the parent's spawn_agent call_id
- * (event_id). First event per thread wins.
- */
-function buildSpawnAnchors(sessions: SessionSource[]): Map<string, string> {
-  const anchors = new Map<string, string>();
-  for (const session of sessions) {
-    for (const line of session.lines) {
-      if (line.type !== "event_msg") continue;
-      const p = line.payload ?? {};
-      if (p.type !== "sub_agent_activity" || p.kind !== "started") continue;
-      if (p.agent_thread_id === undefined || p.event_id === undefined) continue;
-      if (!anchors.has(p.agent_thread_id)) anchors.set(p.agent_thread_id, p.event_id);
-    }
-  }
-  return anchors;
-}
-
 /** Build the session-level Manifest from raw lines + projected records. */
 function buildManifest(
   sessionId: string,
   lines: RawLine[],
   records: AhsRecord[],
-  spawnAnchor?: string,
 ): Manifest {
   const metas: RawPayload[] = [];
   let model: string | undefined;
@@ -517,22 +497,19 @@ function buildManifest(
     git.branch !== undefined || git.commit_hash !== undefined || git.repository_url !== undefined;
   const hasUsage = Object.keys(totalUsage).length > 0;
 
-  // Relation: thread_spawn → spawned_by (with the cross-file anchor when
-  // found); otherwise a lineage ancestor → forked_from (most recent first).
+  // Relations: thread_spawn → invocation back-link (anchor recovery +
+  // forward link are Plan 02 work); otherwise a lineage ancestor →
+  // forked_from lineage (most recent first).
   const source = meta?.source;
   const parentThreadId =
     typeof source === "object" ? source.subagent?.thread_spawn?.parent_thread_id : undefined;
   const ancestorId = metas[1]?.id ?? metas[1]?.session_id;
-  const relation: Manifest["relation"] =
-    parentThreadId !== undefined
-      ? {
-          type: "spawned_by",
-          sessionId: parentThreadId,
-          ...(spawnAnchor !== undefined ? { toolCallId: spawnAnchor } : {}),
-        }
-      : ancestorId !== undefined
-        ? { type: "forked_from", sessionId: ancestorId }
-        : undefined;
+  const invocation: Manifest["invocation"] =
+    parentThreadId !== undefined ? { sessionId: parentThreadId } : undefined;
+  const lineage: Manifest["lineage"] =
+    parentThreadId === undefined && ancestorId !== undefined
+      ? { type: "forked_from", sessionId: ancestorId }
+      : undefined;
 
   return {
     sessionId,
@@ -552,7 +529,8 @@ function buildManifest(
       : {}),
     model: model ?? "unknown",
     ...(meta?.model_provider !== undefined ? { provider: meta.model_provider } : {}),
-    ...(relation !== undefined ? { relation } : {}),
+    ...(lineage !== undefined ? { lineage } : {}),
+    ...(invocation !== undefined ? { invocation } : {}),
     stats: {
       turnCount,
       ...(hasUsage ? { totalUsage } : {}),
@@ -616,7 +594,6 @@ export class CodexAdapter implements HarnessAdapter {
   async *listSessions(filter?: SessionFilter): AsyncIterable<Manifest> {
     if (filter?.harness !== undefined && filter.harness !== this.harness) return;
     const sessions = await this.loadAll();
-    const anchors = buildSpawnAnchors(sessions);
     for (const session of sessions) {
       const records = projectRecords(
         session.sessionId,
@@ -629,7 +606,6 @@ export class CodexAdapter implements HarnessAdapter {
         session.sessionId,
         session.lines,
         records,
-        anchors.get(session.sessionId),
       );
       if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) continue;
       yield manifest;

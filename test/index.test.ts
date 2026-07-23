@@ -5,7 +5,8 @@ describe("library entry", () => {
   it("exposes the AHS schemas from the root entry", () => {
     expect(ahs.ManifestSchema).toBeDefined();
     expect(ahs.AhsRecordSchema).toBeDefined();
-    expect(ahs.RelationSchema).toBeDefined();
+    expect(ahs.LineageSchema).toBeDefined();
+    expect(ahs.InvocationSchema).toBeDefined();
     expect(ahs.UsageSchema).toBeDefined();
     expect(ahs.BlobRefSchema).toBeDefined();
   });

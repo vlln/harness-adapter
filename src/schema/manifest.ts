@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RelationSchema } from "./relation";
+import { InvocationSchema, LineageSchema } from "./relation";
 import { UsageSchema } from "./usage";
 
 /**
@@ -30,9 +30,10 @@ export const ManifestSchema = z.object({
   provider: z.string().optional(),
   title: z.string().optional(),
   titleOrigin: z.enum(["generated", "custom"]).optional(),
-  relation: RelationSchema.optional(),
-  /** Marks the winning chain among sibling_attempt sessions. */
-  isMainChain: z.boolean().optional(),
+  /** History-dimension back-link (fork source); see ADR-0005. */
+  lineage: LineageSchema.optional(),
+  /** Call-dimension back-link (invoking session); see ADR-0005. */
+  invocation: InvocationSchema.optional(),
   /** Binding back to the native session for resumption via ACP. */
   acpBinding: z
     .object({

@@ -23,7 +23,6 @@
   },
   "records": [
     {
-      "parentId": null,
       "recordId": "aaaa0001-0000-4000-8000-000000000001",
       "seq": 0,
       "status": "pending",
@@ -37,7 +36,6 @@
           "type": "text"
         }
       ],
-      "parentId": "aaaa0001-0000-4000-8000-000000000001",
       "recordId": "aaaa0002-0000-4000-8000-000000000002",
       "seq": 1,
       "timestamp": "2026-07-14T05:15:46.700Z",
@@ -50,7 +48,6 @@
           "type": "text"
         }
       ],
-      "parentId": "aaaa0002-0000-4000-8000-000000000002",
       "recordId": "aaaa0003-0000-4000-8000-000000000003",
       "seq": 2,
       "timestamp": "2026-07-14T05:15:46.720Z",
@@ -68,7 +65,6 @@
         }
       ],
       "model": "claude-opus-4-1",
-      "parentId": "aaaa0003-0000-4000-8000-000000000003",
       "recordId": "aaaa0004-0000-4000-8000-000000000004",
       "seq": 3,
       "timestamp": "2026-07-14T05:15:50.338Z",
@@ -86,7 +82,6 @@
         "description": "Run the login test"
       },
       "name": "Bash",
-      "parentId": "aaaa0004-0000-4000-8000-000000000004",
       "recordId": "aaaa0004-0000-4000-8000-000000000004/tool_use/0",
       "seq": 4,
       "status": "completed",
@@ -96,7 +91,6 @@
     },
     {
       "content": "1 passed, 0 failed (login.test.ts)",
-      "parentId": "aaaa0004-0000-4000-8000-000000000004/tool_use/0",
       "recordId": "aaaa0005-0000-4000-8000-000000000005",
       "seq": 5,
       "status": "success",
@@ -112,7 +106,6 @@
         }
       ],
       "model": "claude-opus-4-1",
-      "parentId": "aaaa0005-0000-4000-8000-000000000005",
       "recordId": "aaaa0006-0000-4000-8000-000000000006",
       "seq": 6,
       "timestamp": "2026-07-14T05:15:54.000Z",
@@ -129,7 +122,6 @@
         "file_path": "/Users/test/Project/demo/test/login.test.ts"
       },
       "name": "Read",
-      "parentId": "aaaa0006-0000-4000-8000-000000000006",
       "recordId": "aaaa0006-0000-4000-8000-000000000006/tool_use/0",
       "seq": 7,
       "status": "failed",
@@ -139,7 +131,6 @@
     },
     {
       "content": "Error: ENOENT: no such file or directory",
-      "parentId": "aaaa0006-0000-4000-8000-000000000006/tool_use/0",
       "recordId": "aaaa0007-0000-4000-8000-000000000007",
       "seq": 8,
       "status": "error",
@@ -155,7 +146,6 @@
         }
       ],
       "model": "claude-opus-4-1",
-      "parentId": "aaaa0007-0000-4000-8000-000000000007",
       "recordId": "aaaa0008-0000-4000-8000-000000000008",
       "seq": 9,
       "timestamp": "2026-07-14T05:15:57.900Z",
@@ -167,7 +157,6 @@
       }
     },
     {
-      "parentId": "aaaa0008-0000-4000-8000-000000000008",
       "reason": "The flaky timing wait was replaced with an explicit event await.",
       "recordId": "aaaa0009-0000-4000-8000-000000000009",
       "seq": 10,

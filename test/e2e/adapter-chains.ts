@@ -52,7 +52,7 @@ interface ArchivedSession {
   dir: string;
   manifest: {
     sessionId: string;
-    relation?: { type: string; sessionId: string; toolCallId?: string };
+    invocation?: { sessionId: string; atRecordId?: string };
   };
 }
 
@@ -73,7 +73,7 @@ function loadArchive(archiveRoot: string): Map<string, ArchivedSession> {
 
 /**
  * Independently recompute what the report's `total:` line must show: walk
- * the spawned_by graph from the root and sum usage over every record in
+ * the invocation graph from the root and sum usage over every record in
  * each visited session's records.jsonl.
  */
 function expectedTotals(
@@ -82,10 +82,10 @@ function expectedTotals(
 ): { tokens: Record<string, number>; sessionCount: number } {
   const childrenOf = new Map<string, string[]>();
   for (const s of archive.values()) {
-    if (s.manifest.relation?.type !== "spawned_by") continue;
-    const list = childrenOf.get(s.manifest.relation.sessionId) ?? [];
+    if (s.manifest.invocation === undefined) continue;
+    const list = childrenOf.get(s.manifest.invocation.sessionId) ?? [];
     list.push(s.manifest.sessionId);
-    childrenOf.set(s.manifest.relation.sessionId, list);
+    childrenOf.set(s.manifest.invocation.sessionId, list);
   }
   const tokens: Record<string, number> = {
     input: 0,
@@ -165,8 +165,8 @@ const cases: E2eCase[] = [
     name: "devin",
     makeAdapter: (tmp) => new DevinAdapter(createDevinFixture(tmp)),
     rootSessionId: "sunny-forest",
-    // sibling_attempt sessions are NOT spawned_by — the report aggregates
-    // only the root session itself.
+    // sibling_attempt sessions are lineage-linked, NOT invocation children —
+    // the report aggregates only the root session itself.
     childSessionIds: [],
     transcriptMarkers: ["# sunny-forest [devin", "→ "],
   },

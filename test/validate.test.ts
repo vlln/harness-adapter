@@ -1,5 +1,6 @@
 /**
- * AC layer-2 invariant checker tests (AC-0002) over hand-built sessions.
+ * AC layer-2 invariant checker tests (AC-0002 v2, linear-session model)
+ * over hand-built sessions.
  */
 
 import { describe, expect, it } from "vitest";
@@ -21,114 +22,185 @@ import {
   userMessage,
 } from "./builders";
 
-describe("AC-0002-N-1 causal completeness (tree shape)", () => {
-  it("passes a single-rooted session with resolving parents and increasing seq", () => {
+describe("AC-0002-N-1 linear shape (seq strictly increasing and contiguous)", () => {
+  it("passes a linear session with contiguous seq", () => {
     const session = makeSession("sess-1", [
-      userMessage(0, null, "go"),
-      assistantMessage(1, "r0", "working"),
-      toolCall(2, "r1", "tc1"),
-      toolResult(3, "r2", "tc1", "ok"),
+      userMessage(0, "go"),
+      assistantMessage(1, "working"),
+      toolCall(2, "tc1"),
+      toolResult(3, "tc1", "ok"),
     ]);
     expect(validateSessions([session])).toEqual([]);
   });
 
-  it("flags zero or multiple root records (single-root)", () => {
-    const twoRoots = makeSession("sess-1", [
-      userMessage(0, null, "a"),
-      userMessage(1, null, "b"),
-    ]);
-    const errors = validateSessions([twoRoots]);
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatchObject({ code: "single-root", sessionId: "sess-1" });
-
-    const noRoots = makeSession("sess-1", [
-      userMessage(0, "ghost", "a"),
-      assistantMessage(1, "r0", "b"),
-    ]);
-    expect(validateSessions([noRoots]).map((e) => e.code)).toContain("single-root");
-  });
-
-  it("flags a dangling parentId (parent-resolution)", () => {
-    const session = makeSession("sess-1", [
-      userMessage(0, null, "a"),
-      assistantMessage(1, "no-such-record", "b"),
-    ]);
-    const errors = validateSessions([session]);
-    expect(errors.map((e) => e.code)).toContain("parent-resolution");
-  });
-
   it("flags non-monotonic seq (seq-order)", () => {
     const session = makeSession("sess-1", [
-      userMessage(0, null, "a"),
-      { ...assistantMessage(1, "r0", "b"), seq: 0 },
+      userMessage(0, "a"),
+      { ...assistantMessage(1, "b"), seq: 0 },
+    ]);
+    const errors = validateSessions([session]);
+    expect(errors.map((e) => e.code)).toContain("seq-order");
+  });
+
+  it("flags a seq gap (not contiguous)", () => {
+    const session = makeSession("sess-1", [
+      userMessage(0, "a"),
+      { ...assistantMessage(1, "b"), seq: 2 },
     ]);
     const errors = validateSessions([session]);
     expect(errors.map((e) => e.code)).toContain("seq-order");
   });
 });
 
-describe("AC-0002-N-2 relation completeness (spawned_by anchors)", () => {
+describe("AC-0002-N-2 invocation completeness (forward/back-link reconciliation)", () => {
   const parent = makeSession("parent", [
-    userMessage(0, null, "go"),
-    toolCall(1, "r0", "tc-task", { name: "Task" }),
-    toolResult(2, "r1", "tc-task", "done"),
+    userMessage(0, "go"),
+    toolCall(1, "tc-task", { name: "Task", recordId: "p-call" }),
+    toolResult(2, "tc-task", "done", { recordId: "p-result", sessionId: "child" }),
   ]);
 
-  it("passes when the parent session and the tool_call anchor exist", () => {
+  it("passes when the parent, tool_call anchor and forward link reconcile", () => {
     const child = makeSession("child", undefined, {
-      relation: { type: "spawned_by", sessionId: "parent", toolCallId: "tc-task" },
+      invocation: { sessionId: "parent", atRecordId: "p-call" },
     });
     expect(validateSessions([parent, child])).toEqual([]);
   });
 
-  it("passes when toolCallId is omitted (AC-0002-B-3: agent-level link only)", () => {
+  it("passes when atRecordId is omitted (AC-0002-B-3: agent-level link only)", () => {
     const child = makeSession("child", undefined, {
-      relation: { type: "spawned_by", sessionId: "parent" },
+      invocation: { sessionId: "parent" },
     });
     expect(validateSessions([parent, child])).toEqual([]);
   });
 
-  it("flags a relation pointing at an unknown session (relation-session)", () => {
+  it("flags an invocation pointing at an unknown session (invocation-session)", () => {
     const child = makeSession("child", undefined, {
-      relation: { type: "spawned_by", sessionId: "ghost-parent", toolCallId: "tc-task" },
+      invocation: { sessionId: "ghost-parent", atRecordId: "p-call" },
     });
     const errors = validateSessions([parent, child]);
-    expect(errors.map((e) => e.code)).toContain("relation-session");
+    expect(errors.map((e) => e.code)).toContain("invocation-session");
   });
 
-  it("flags a toolCallId anchor matching no tool_call in the parent (relation-anchor)", () => {
-    const child = makeSession("child", undefined, {
-      relation: { type: "spawned_by", sessionId: "parent", toolCallId: "tc-missing" },
+  it("flags an atRecordId resolving to no tool_call in the parent (invocation-anchor)", () => {
+    const missing = makeSession("child", undefined, {
+      invocation: { sessionId: "parent", atRecordId: "no-such-record" },
     });
-    const errors = validateSessions([parent, child]);
-    expect(errors.map((e) => e.code)).toContain("relation-anchor");
+    expect(validateSessions([parent, missing]).map((e) => e.code)).toContain(
+      "invocation-anchor",
+    );
+
+    // Anchored at a non-tool_call record is equally invalid.
+    const wrongType = makeSession("child", undefined, {
+      invocation: { sessionId: "parent", atRecordId: "p-result" },
+    });
+    expect(validateSessions([parent, wrongType]).map((e) => e.code)).toContain(
+      "invocation-anchor",
+    );
+  });
+
+  it("flags a forward link that does not point back at the child (invocation-mismatch)", () => {
+    const badParent = makeSession("parent", [
+      userMessage(0, "go"),
+      toolCall(1, "tc-task", { name: "Task", recordId: "p-call" }),
+      toolResult(2, "tc-task", "done", { recordId: "p-result" }), // no sessionId forward link
+    ]);
+    const child = makeSession("child", undefined, {
+      invocation: { sessionId: "parent", atRecordId: "p-call" },
+    });
+    const errors = validateSessions([badParent, child]);
+    expect(errors.map((e) => e.code)).toContain("invocation-mismatch");
+
+    const wrongTarget = makeSession("parent", [
+      userMessage(0, "go"),
+      toolCall(1, "tc-task", { name: "Task", recordId: "p-call" }),
+      toolResult(2, "tc-task", "done", { recordId: "p-result", sessionId: "other-child" }),
+    ]);
+    expect(validateSessions([wrongTarget, child]).map((e) => e.code)).toContain(
+      "invocation-mismatch",
+    );
+  });
+});
+
+describe("AC-0002-N-7 lineage completeness (anchor resolution + type judgment)", () => {
+  const parent = makeSession("parent", [
+    userMessage(0, "fix the bug", { recordId: "p-user" }),
+    assistantMessage(1, "working on it", { recordId: "p-asst" }),
+  ]);
+
+  it("passes a forked_from anchored at an agent-side record", () => {
+    const fork = makeSession("fork", [userMessage(0, "new direction")], {
+      lineage: { type: "forked_from", sessionId: "parent", atRecordId: "p-asst" },
+    });
+    expect(validateSessions([parent, fork])).toEqual([]);
+  });
+
+  it("passes a sibling_attempt anchored at a user_message", () => {
+    const sibling = makeSession("sibling", [assistantMessage(0, "another answer")], {
+      lineage: { type: "sibling_attempt", sessionId: "parent", atRecordId: "p-user" },
+    });
+    expect(validateSessions([parent, sibling])).toEqual([]);
+  });
+
+  it("passes a retry-from-start lineage (atRecordId omitted)", () => {
+    const retry = makeSession("retry", [userMessage(0, "fix the bug")], {
+      lineage: { type: "sibling_attempt", sessionId: "parent" },
+    });
+    expect(validateSessions([parent, retry])).toEqual([]);
+  });
+
+  it("flags a lineage pointing at an unknown session (lineage-session)", () => {
+    const fork = makeSession("fork", undefined, {
+      lineage: { type: "forked_from", sessionId: "ghost-parent", atRecordId: "p-asst" },
+    });
+    const errors = validateSessions([parent, fork]);
+    expect(errors.map((e) => e.code)).toContain("lineage-session");
+  });
+
+  it("flags an atRecordId resolving to no record in the parent (lineage-anchor)", () => {
+    const fork = makeSession("fork", undefined, {
+      lineage: { type: "forked_from", sessionId: "parent", atRecordId: "no-such-record" },
+    });
+    const errors = validateSessions([parent, fork]);
+    expect(errors.map((e) => e.code)).toContain("lineage-anchor");
+  });
+
+  it("flags a wrong type judgment both ways (lineage-type)", () => {
+    const wrongFork = makeSession("fork", undefined, {
+      lineage: { type: "sibling_attempt", sessionId: "parent", atRecordId: "p-asst" },
+    });
+    expect(validateSessions([parent, wrongFork]).map((e) => e.code)).toContain("lineage-type");
+
+    const wrongSibling = makeSession("sibling", undefined, {
+      lineage: { type: "forked_from", sessionId: "parent", atRecordId: "p-user" },
+    });
+    expect(validateSessions([parent, wrongSibling]).map((e) => e.code)).toContain("lineage-type");
   });
 });
 
 describe("AC-0002-N-6 tool pairing (XOR: paired result | interrupted)", () => {
   const wrap = (middle: Parameters<typeof makeSession>[1]) =>
-    makeSession("sess-1", [userMessage(0, null, "go"), ...(middle ?? [])]);
+    makeSession("sess-1", [userMessage(0, "go"), ...(middle ?? [])]);
 
   it("case 1: tool_call with exactly one paired tool_result passes", () => {
-    const session = wrap([toolCall(1, "r0", "tc1"), toolResult(2, "r1", "tc1", "ok")]);
+    const session = wrap([toolCall(1, "tc1"), toolResult(2, "tc1", "ok")]);
     expect(validateSessions([session])).toEqual([]);
   });
 
   it("case 2: interrupted tool_call with no tool_result passes (AC-0002-B-1)", () => {
-    const session = wrap([toolCall(1, "r0", "tc1", { status: "interrupted" })]);
+    const session = wrap([toolCall(1, "tc1", { status: "interrupted" })]);
     expect(validateSessions([session])).toEqual([]);
   });
 
   it("case 3: tool_call with no result and not interrupted is flagged", () => {
-    const session = wrap([toolCall(1, "r0", "tc1")]);
+    const session = wrap([toolCall(1, "tc1")]);
     const errors = validateSessions([session]);
     expect(errors.map((e) => e.code)).toContain("tool-result-match");
   });
 
   it("case 4: interrupted tool_call that still has a paired result is flagged", () => {
     const session = wrap([
-      toolCall(1, "r0", "tc1", { status: "interrupted" }),
-      toolResult(2, "r1", "tc1", "ok"),
+      toolCall(1, "tc1", { status: "interrupted" }),
+      toolResult(2, "tc1", "ok"),
     ]);
     const errors = validateSessions([session]);
     expect(errors.map((e) => e.code)).toContain("tool-result-match");
@@ -136,16 +208,19 @@ describe("AC-0002-N-6 tool pairing (XOR: paired result | interrupted)", () => {
 
   it("flags a tool_call with multiple results (adapter must keep file-order first only)", () => {
     const session = wrap([
-      toolCall(1, "r0", "tc1"),
-      toolResult(2, "r1", "tc1", "first"),
-      toolResult(3, "r2", "tc1", "second"),
+      toolCall(1, "tc1"),
+      toolResult(2, "tc1", "first"),
+      toolResult(3, "tc1", "second"),
     ]);
     const errors = validateSessions([session]);
     expect(errors.map((e) => e.code)).toContain("tool-result-match");
   });
 
   it("flags a tool_result matching no tool_call", () => {
-    const session = wrap([toolCall(1, "r0", "tc1", { status: "interrupted" }), toolResult(2, "r1", "tc-orphan", "ok")]);
+    const session = wrap([
+      toolCall(1, "tc1", { status: "interrupted" }),
+      toolResult(2, "tc-orphan", "ok"),
+    ]);
     const errors = validateSessions([session]);
     expect(errors.map((e) => e.code)).toContain("tool-result-match");
   });
@@ -154,7 +229,7 @@ describe("AC-0002-N-6 tool pairing (XOR: paired result | interrupted)", () => {
 describe("AC-0002-N-5 idempotency helper", () => {
   it("passes when two runs over the same input are byte-identical", async () => {
     const adapter = fakeAdapter([
-      makeSession("sess-1", [userMessage(0, null, "go"), assistantMessage(1, "r0", "ok")]),
+      makeSession("sess-1", [userMessage(0, "go"), assistantMessage(1, "ok")]),
     ]);
     expect(await checkIdempotency(adapter)).toEqual([]);
   });
@@ -169,7 +244,7 @@ describe("AC-0002-N-5 idempotency helper", () => {
         yield makeManifest({ sessionId: "sess-1", title: `run-${run}` });
       },
       async *readRecords() {
-        yield userMessage(0, null, "go");
+        yield userMessage(0, "go");
       },
     };
     const errors = await checkIdempotency(flaky);
@@ -186,7 +261,7 @@ describe("AC-0002-N-5 idempotency helper", () => {
   it("collectSessions gathers manifests and records from the adapter", async () => {
     const adapter = fakeAdapter([
       makeSession("sess-1"),
-      makeSession("sess-2", [userMessage(0, null, "second")]),
+      makeSession("sess-2", [userMessage(0, "second")]),
     ]);
     const collected = await collectSessions(adapter);
     expect(collected.map((s) => s.manifest.sessionId)).toEqual(["sess-1", "sess-2"]);

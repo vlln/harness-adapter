@@ -26,7 +26,6 @@
           "type": "text"
         }
       ],
-      "parentId": null,
       "recordId": "eeee0002-0000-4000-8000-000000000002",
       "seq": 0,
       "timestamp": "2026-07-17T11:00:01.000Z",
@@ -39,7 +38,6 @@
       },
       "model": "claude-opus-4-1",
       "name": "Bash",
-      "parentId": "eeee0002-0000-4000-8000-000000000002",
       "recordId": "eeee0003-0000-4000-8000-000000000003",
       "seq": 1,
       "status": "completed",
@@ -59,7 +57,6 @@
         "description": "Run the tests"
       },
       "name": "Bash",
-      "parentId": "eeee0003-0000-4000-8000-000000000003",
       "recordId": "eeee0003-0000-4000-8000-000000000003/tool_use/1",
       "seq": 2,
       "status": "failed",
@@ -74,7 +71,6 @@
           "type": "text"
         }
       ],
-      "parentId": "eeee0003-0000-4000-8000-000000000003/tool_use/1",
       "recordId": "eeee0005-0000-4000-8000-000000000005",
       "seq": 3,
       "timestamp": "2026-07-17T11:00:06.000Z",
@@ -82,7 +78,6 @@
     },
     {
       "content": "[{\"type\":\"text\",\"text\":\"build ok\"}]",
-      "parentId": "eeee0005-0000-4000-8000-000000000005",
       "recordId": "eeee0005-0000-4000-8000-000000000005",
       "seq": 4,
       "status": "success",
@@ -92,7 +87,6 @@
     },
     {
       "content": "2 tests failed",
-      "parentId": "eeee0005-0000-4000-8000-000000000005",
       "recordId": "eeee0005-0000-4000-8000-000000000005/tool_result/1",
       "seq": 5,
       "status": "error",
@@ -108,7 +102,6 @@
         }
       ],
       "model": "claude-opus-4-1",
-      "parentId": "eeee0005-0000-4000-8000-000000000005/tool_result/1",
       "recordId": "eeee0006-0000-4000-8000-000000000006",
       "seq": 6,
       "timestamp": "2026-07-17T11:00:09.000Z",

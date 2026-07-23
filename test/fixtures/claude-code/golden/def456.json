@@ -7,12 +7,10 @@
     },
     "harness": "claude-code",
     "harnessVersion": "2.1.205",
-    "model": "claude-sonnet-4-5",
-    "relation": {
-      "sessionId": "33333333-3333-4333-8333-333333333333",
-      "toolCallId": "toolu_task02AAAAAAAAAAAAAAAAAA",
-      "type": "spawned_by"
+    "invocation": {
+      "sessionId": "33333333-3333-4333-8333-333333333333"
     },
+    "model": "claude-sonnet-4-5",
     "sessionId": "def456",
     "stats": {
       "totalUsage": {
@@ -31,7 +29,6 @@
           "type": "text"
         }
       ],
-      "parentId": null,
       "recordId": "dddd0004-0000-4000-8000-000000000004",
       "seq": 0,
       "timestamp": "2026-07-16T10:00:06.000Z",
@@ -45,7 +42,6 @@
         }
       ],
       "model": "claude-sonnet-4-5",
-      "parentId": "dddd0004-0000-4000-8000-000000000004",
       "recordId": "dddd0005-0000-4000-8000-000000000005",
       "seq": 1,
       "timestamp": "2026-07-16T10:00:09.000Z",

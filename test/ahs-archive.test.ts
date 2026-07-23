@@ -57,16 +57,18 @@ function archiveSnapshot(dir: string): Map<string, string> {
 
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
+const PARENT_RECORDS = [
+  userMessage(0, "go", { usage: { inputTokens: 10, outputTokens: 5 } }),
+  assistantMessage(1, "working"),
+  toolCall(2, "tc1", { status: "completed" }),
+  toolResult(3, "tc1", "done", { sessionId: "child" }),
+];
+
 describe("archive round-trip", () => {
   const sessions: SessionData[] = [
-    makeSession("parent", [
-      userMessage(0, null, "go", { usage: { inputTokens: 10, outputTokens: 5 } }),
-      assistantMessage(1, "r0", "working"),
-      toolCall(2, "r1", "tc1", { status: "completed" }),
-      toolResult(3, "r2", "tc1", "done"),
-    ]),
-    makeSession("child", [userMessage(0, null, "subtask")], {
-      relation: { type: "spawned_by", sessionId: "parent", toolCallId: "tc1" },
+    makeSession("parent", PARENT_RECORDS),
+    makeSession("child", [userMessage(0, "subtask")], {
+      invocation: { sessionId: "parent", atRecordId: "r2" },
     }),
   ];
 
@@ -148,12 +150,12 @@ describe("blob externalization", () => {
   const EXACTLY_AT = "E".repeat(BLOB_THRESHOLD);
 
   const session = makeSession("blob-session", [
-    userMessage(0, null, "go"),
-    assistantMessage(1, "r0", BIG_TEXT),
-    toolCall(2, "r1", "tc1"),
-    toolResult(3, "r2", "tc1", BIG_RESULT),
-    toolCall(4, "r3", "tc2"),
-    toolResult(5, "r4", "tc2", EXACTLY_AT), // at threshold → stays inline (rule is > 64 KiB)
+    userMessage(0, "go"),
+    assistantMessage(1, BIG_TEXT),
+    toolCall(2, "tc1"),
+    toolResult(3, "tc1", BIG_RESULT),
+    toolCall(4, "tc2"),
+    toolResult(5, "tc2", EXACTLY_AT), // at threshold → stays inline (rule is > 64 KiB)
   ]);
   const adapter = fakeAdapter([session]);
 
