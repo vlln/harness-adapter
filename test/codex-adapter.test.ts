@@ -351,24 +351,29 @@ describe("codex adapter", () => {
     expect(`${stableSerialize(sessions)}\n`).toBe(golden);
   });
 
-  it("AC-0004-N-1: archive export + report renders the child under its anchor and aggregates usage exactly", async () => {
+  it("AC-0004-N-1: archive export + report renders the HEAD chain, the child under its anchor, and aggregates usage exactly", async () => {
     const outDir = path.join(tmp, "archive");
     await exportSessions(new CodexAdapter(SESSIONS_DIR), outDir);
 
     const report = await renderReport(outDir, A1);
-    expect(report.aggregatedSessions.sort()).toEqual([A1, B2].sort());
+    // Task view (ADR-0005 §5): the {a1, c3, f6} group resolves to HEAD f6;
+    // the whole HEAD chain renders (a1 → c3 → f6, stitched at the lineage
+    // anchors) plus b2 as invocation child.
+    expect(report.headSessionId).toBe(F6);
+    expect(report.aggregatedSessions.sort()).toEqual([A1, B2, C3, F6].sort());
     // Child rendered indented, right after the anchoring spawn_agent call.
     const anchorIndex = report.text.indexOf("→ spawn_agent(");
     const childIndex = report.text.indexOf(`  # ${B2}`);
     expect(anchorIndex).toBeGreaterThan(-1);
     expect(childIndex).toBeGreaterThan(anchorIndex);
     expect(report.text).toContain("审查完成：修复正确，无回归风险。");
-    // a1 (2000/180/400/90) + b2 (500/80/100/20), forked_from c3 NOT included.
+    // a1 (2000/180/400/90) + c3 (no usage) + f6 (600/90/50/25) + b2
+    // (500/80/100/20): each session's own slice exactly once.
     expect(report.totalUsage).toMatchObject({
-      inputTokens: 2500,
-      outputTokens: 260,
-      cacheReadTokens: 500,
-      reasoningTokens: 110,
+      inputTokens: 3100,
+      outputTokens: 350,
+      cacheReadTokens: 550,
+      reasoningTokens: 135,
     });
   });
 
