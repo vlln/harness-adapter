@@ -98,11 +98,17 @@ lineage?: { type: "forked_from" | "sibling_attempt", sessionId: string, atRecord
 
 | 验证项 | 复现步骤 | 结论 | 经验 | 验证 Branch |
 |--------|---------|------|------|------------|
-| 4 个适配器按新模型重构后，全部 fixture/golden/不变量测试通过 | feat 容器重构 + CI | 待验证 | — | feat/0009+（待创建） |
-| Devin winner 易主不改 session：同一 sessions.db 两个投影时刻，session 集合字节一致、仅组指针移动 | 构造 fixture（两次投影间 main_chain_id 变化） | 待验证 | — | 同上 |
-| fork-of-subagent 传递继承：fork 自子代理的 session 不显式复制 invocation，关系存储闭包正确 | 构造 fixture | 待验证 | — | 同上 |
-| facade messages() 无分支选择逻辑（线性直读） | interface/0003 实现时静态检查 | 待验证 | — | 同上 |
-| 真实数据 sweep 复跑：4 家不变量 0 错误、usage 对账 0 偏差 | 统一 sweep（对照 0008 Report 基线） | 待验证 | — | 同上 |
+| 4 个适配器按新模型重构后，全部 fixture/golden/不变量测试通过 | feat 容器重构 + CI | **通过**（2026-07-23，180 测试全绿，PR #20-#28） | 容器 0009 三个 Plan 的 Report | refactor/0009a/b/c |
+| Devin winner 易主不改 session：同一 sessions.db 两个投影时刻，session 集合字节一致、仅组指针移动 | 构造 fixture（两次投影间 main_chain_id 变化） | **通过**（2026-07-23，main_chain_id 18→42，session 集与派生 relations 逐字节一致，仅 HEAD 移动） | 0009 03-report §B-4 | refactor/0009c-ahs-report |
+| fork-of-subagent 传递继承：fork 自子代理的 session 不显式复制 invocation，关系存储闭包正确 | 构造 fixture | **通过**（2026-07-23，fixture 锁定；真实语料中无此实例，仅有合成验证） | 0009 03-report | 同上 |
+| facade messages() 无分支选择逻辑（线性直读） | interface/0003 实现时静态检查 | **通过**（2026-07-23，ahs-report Task 视图 = lineage 回溯拼接 + 线性渲染，无分支选择；e2e 独立重算断言） | 0009 03-report + test/e2e | 同上 |
+| 真实数据 sweep 复跑：4 家不变量 0 错误、usage 对账 0 偏差 | 统一 sweep（对照 0008 Report 基线） | **通过**（2026-07-23，1,341 session / 356,827 records，zod 0、不变量 0、usage 1,189 项 0 偏差） | 0009 03-report §sweep 对照表 | 同上 |
+
+**验证经验（2026-07-23，容器 0009）**：
+
+- 线性化暴露并消除了 tree 模型最大的适配器复杂度：Claude 裸 parentUuid 图的 1,773 个多子点绝大多数是存储重写工件（流式分段、重日志），归一化后仅 20 个真分叉；Devin 的 twin 兄弟副本（513/513 其一必为死支）同理——新模型下这些去重机制全部删除。
+- 关系存储的 HEAD 指针采用最近活跃启发式（归档层看不到源端 main_chain_id），与源端胜者可能不同——已在 03-report 记录，属预期行为：HEAD 是"用户最近在哪"的视图，不是源端裁判的镜像。
+- 已知模型边界（不阻塞）：Devin 跨树消息汇流导致跨 session 聚合约 +8% output 双计（02-report-devin 定性）；Kimi AgentSwarm 一对多正链超出 tool_result.sessionId 单值槽（待 Spec 决策）。
 
 ---
 
