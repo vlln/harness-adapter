@@ -1,0 +1,155 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/Users/test/Project/demo",
+    "git": {
+      "branch": "main"
+    },
+    "harness": "claude-code",
+    "harnessVersion": "2.1.207",
+    "model": "claude-opus-4-1",
+    "sessionId": "66666666-6666-4666-8666-666666666666",
+    "stats": {
+      "totalUsage": {
+        "cacheReadTokens": 3250,
+        "cacheWriteTokens": 400,
+        "inputTokens": 15500,
+        "outputTokens": 220
+      },
+      "turnCount": 3
+    }
+  },
+  "records": [
+    {
+      "content": [
+        {
+          "text": "Fix the login timeout",
+          "type": "text"
+        }
+      ],
+      "recordId": "eeee0001-0000-4000-8000-000000000001",
+      "seq": 0,
+      "timestamp": "2026-07-20T09:00:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "I'll look at the login flow first.",
+          "type": "text"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "recordId": "eeee0002-0000-4000-8000-000000000002",
+      "seq": 1,
+      "timestamp": "2026-07-20T09:00:05.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 400,
+        "inputTokens": 3000,
+        "outputTokens": 60
+      }
+    },
+    {
+      "content": [
+        {
+          "text": "Actually, focus on the backoff strategy.",
+          "type": "text"
+        }
+      ],
+      "recordId": "eeee0005-0000-4000-8000-000000000005",
+      "seq": 2,
+      "timestamp": "2026-07-20T09:02:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "I'll inspect the backoff strategy with a quick search.",
+          "type": "text"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "recordId": "eeee0006-0000-4000-8000-000000000006",
+      "seq": 3,
+      "timestamp": "2026-07-20T09:02:05.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 900,
+        "inputTokens": 3800,
+        "outputTokens": 70
+      }
+    },
+    {
+      "args": {
+        "path": "/Users/test/Project/demo/src",
+        "pattern": "backoff"
+      },
+      "name": "Grep",
+      "recordId": "eeee0006-0000-4000-8000-000000000006/tool_use/0",
+      "seq": 4,
+      "status": "completed",
+      "timestamp": "2026-07-20T09:02:05.000Z",
+      "toolCallId": "toolu_fork01AAAAAAAAAAAAAAAAAA",
+      "type": "tool_call"
+    },
+    {
+      "content": "src/auth/backoff.ts:4:export function backoff(attempt: number)",
+      "recordId": "eeee0007-0000-4000-8000-000000000007",
+      "seq": 5,
+      "status": "success",
+      "timestamp": "2026-07-20T09:02:07.000Z",
+      "toolCallId": "toolu_fork01AAAAAAAAAAAAAAAAAA",
+      "type": "tool_result"
+    },
+    {
+      "content": [
+        {
+          "text": "The backoff lives in src/auth/backoff.ts; I'll tune it for login timeouts.",
+          "type": "text"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "recordId": "eeee0008-0000-4000-8000-000000000008",
+      "seq": 6,
+      "timestamp": "2026-07-20T09:02:12.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 1100,
+        "inputTokens": 4200,
+        "outputTokens": 55
+      }
+    },
+    {
+      "content": [
+        {
+          "text": "Is the timeout configurable?",
+          "type": "text"
+        }
+      ],
+      "recordId": "eeee0009-0000-4000-8000-000000000009",
+      "seq": 7,
+      "timestamp": "2026-07-20T09:03:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "Yes — see the login.timeout setting in config/auth.json.",
+          "type": "text"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "recordId": "eeee0011-0000-4000-8000-000000000011",
+      "seq": 8,
+      "timestamp": "2026-07-20T09:03:40.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 1250,
+        "inputTokens": 4500,
+        "outputTokens": 35
+      }
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/Users/test/Project/demo",
+    "git": {
+      "branch": "main"
+    },
+    "harness": "claude-code",
+    "harnessVersion": "2.1.207",
+    "lineage": {
+      "atRecordId": "eeee0002-0000-4000-8000-000000000002",
+      "sessionId": "66666666-6666-4666-8666-666666666666",
+      "type": "forked_from"
+    },
+    "model": "claude-opus-4-1",
+    "sessionId": "66666666-6666-4666-8666-666666666666/fork/eeee0003-0000-4000-8000-000000000003",
+    "stats": {
+      "totalUsage": {
+        "cacheReadTokens": 800,
+        "inputTokens": 3600,
+        "outputTokens": 45
+      },
+      "turnCount": 1
+    }
+  },
+  "records": [
+    {
+      "content": [
+        {
+          "text": "Actually, focus on the retry logic first.",
+          "type": "text"
+        }
+      ],
+      "recordId": "eeee0003-0000-4000-8000-000000000003",
+      "seq": 0,
+      "timestamp": "2026-07-20T09:01:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "Looking at the retry logic in src/auth/retry.ts now.",
+          "type": "text"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "recordId": "eeee0004-0000-4000-8000-000000000004",
+      "seq": 1,
+      "timestamp": "2026-07-20T09:01:06.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 800,
+        "inputTokens": 3600,
+        "outputTokens": 45
+      }
+    }
+  ]
+}

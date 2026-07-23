@@ -76,6 +76,7 @@
       "content": "Agent completed: no usages of the old API remain outside src/legacy/.",
       "recordId": "dddd0006-0000-4000-8000-000000000006",
       "seq": 4,
+      "sessionId": "def456",
       "status": "success",
       "timestamp": "2026-07-16T10:00:10.000Z",
       "toolCallId": "toolu_task02AAAAAAAAAAAAAAAAAA",
