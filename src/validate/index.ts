@@ -210,7 +210,8 @@ export function validateSessions(sessions: SessionData[]): InvariantError[] {
 /** Collect the full adapter output into memory (manifests + records). */
 export async function collectSessions(adapter: HarnessAdapter): Promise<SessionData[]> {
   const sessions: SessionData[] = [];
-  for await (const manifest of adapter.listSessions()) {
+  // Cross-session invariants need the FULL set, lineage descendants included.
+  for await (const manifest of adapter.listSessions({ includeForks: true })) {
     const records: AhsRecord[] = [];
     for await (const rec of adapter.readRecords(manifest.sessionId)) {
       records.push(rec);

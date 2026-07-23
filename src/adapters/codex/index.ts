@@ -55,15 +55,22 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * - Sub-agents: the child's rollout file opens with its OWN session_meta
  *   whose `source` is { subagent: { thread_spawn: { parent_thread_id } } }.
  *   This maps to Manifest.invocation = { sessionId: parent_thread_id }.
- *   TODO(Plan 02): recover the atRecordId anchor by cross-file correlation
- *   (the parent's event_msg `sub_agent_activity`, kind "started", carries
- *   event_id = the parent's spawn_agent function_call call_id and
- *   agent_thread_id = the child thread id) and write the forward link into
- *   the parent's paired tool_result.sessionId.
+ *   The atRecordId anchor is recovered by cross-file correlation: the
+ *   parent's event_msg `sub_agent_activity` carries event_id = the parent's
+ *   spawn_agent function_call call_id and agent_thread_id = the child thread
+ *   id, so the anchor is the recordId of that tool_call in the parent; the
+ *   forward link is written as `sessionId` on the parent's paired
+ *   tool_result (from the same sub_agent_activity data, inside the parent's
+ *   own projection). If the parent file or the correlation event is missing,
+ *   the anchor is omitted (source-unavailable; the back-link still stands).
  * - Resumed/forked threads: the file's own session_meta is followed by
  *   ancestor lineage headers, most recent first; ancestor content is NOT
  *   replayed (verified on real data). The most recent ancestor (the second
- *   session_meta) maps to lineage forked_from, per spec ("延续是退化的 fork").
+ *   session_meta) maps to lineage, anchored at the ancestor's LAST record
+ *   (the child stores only the post-fork suffix); the type is judged by the
+ *   anchor record: user_message → sibling_attempt, anything else →
+ *   forked_from (AC-0002-N-7). If the ancestor file is absent/empty in this
+ *   store, the lineage is kept without atRecordId (anchor source-unavailable).
  *   A sub-agent file has lineage headers too, but invocation wins.
  *
  * Specific mappings:
@@ -109,6 +116,13 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * `<sessionId>:<seq>` (source records have no stable uuids); directory
  * entries are sorted and there are no wall-clock reads, so output is
  * byte-identical across runs.
+ *
+ * listSessions folding (interface/0001): `includeForks` defaults to false —
+ * only each lineage group's HEAD session is listed. Codex has no winner
+ * marker, so HEAD = the most recently updated session in the group (its last
+ * record's timestamp; ties broken by the smaller sessionId, deterministically).
+ * Groups are formed by lineage edges only (invocation is the other dimension
+ * and does not fold).
  *
  * Timestamps: every source line carries an ISO 8601 timestamp per the source
  * schema. Defensively, a line missing it inherits the previous line's
@@ -197,6 +211,18 @@ interface SessionSource {
   lines: RawLine[];
   /** Filename-derived creation time, last-resort timestamp fallback. */
   fallbackTimestamp?: string;
+  /** thread_spawn parent thread, when this rollout is a sub-agent. */
+  parentThreadId?: string;
+  /** Most recent ancestor lineage header (direct fork parent), if any. */
+  ancestorId?: string;
+  /** sub_agent_activity correlations observed in THIS file (it is the parent). */
+  spawnEvents: SpawnEvent[];
+}
+
+/** A sub_agent_activity correlation: spawn call_id → spawned child thread. */
+interface SpawnEvent {
+  callId: string;
+  childThreadId: string;
 }
 
 function parseJsonl(content: string): RawLine[] {
@@ -244,6 +270,29 @@ function sumUsageInto(target: Usage, add: Usage): void {
   }
 }
 
+/**
+ * Extract sub_agent_activity correlations (spawn call_id → child thread id)
+ * from a rollout file's lines. First occurrence of a (callId, childThreadId)
+ * pair in file order wins, matching the dedup policy.
+ */
+function collectSpawnEvents(lines: RawLine[]): SpawnEvent[] {
+  const events: SpawnEvent[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    if (line.type !== "event_msg") continue;
+    const p = line.payload ?? {};
+    if (p.type !== "sub_agent_activity") continue;
+    const callId = p.event_id;
+    const childThreadId = p.agent_thread_id;
+    if (typeof callId !== "string" || typeof childThreadId !== "string") continue;
+    const key = `${callId} ${childThreadId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    events.push({ callId, childThreadId });
+  }
+  return events;
+}
+
 function stringifyOutput(output: unknown): string {
   if (typeof output === "string") return output;
   if (output === undefined || output === null) return "";
@@ -263,6 +312,8 @@ export function projectRecords(
   const records: AhsRecord[] = [];
   const seenCallIds = new Set<string>();
   const seenResultIds = new Set<string>();
+  /** spawn_agent call_id → spawned child thread (forward invocation link). */
+  const spawnLinks = new Map<string, string>();
   let lastModel: string | undefined;
   let lastTimestamp = fallbackTimestamp ?? "";
   let compactionPending = false;
@@ -406,10 +457,17 @@ export function projectRecords(
         });
       }
       // event_msg user_message / agent_message are duplicates of
-      // response_item messages — skipped. sub_agent_activity will feed the
-      // invocation anchor recovery (Plan 02), not records. All other
-      // subtypes (exec_command_end, patch_apply_end, ...) are
+      // response_item messages — skipped. sub_agent_activity feeds the
+      // invocation forward link (tool_result.sessionId), not records of its
+      // own. All other subtypes (exec_command_end, patch_apply_end, ...) are
       // process/telemetry — dropped per spec.
+      if (p.type === "sub_agent_activity") {
+        // The first event for a call_id establishes the spawn correlation
+        // (kind "started" arrives first in practice).
+        if (typeof p.event_id === "string" && typeof p.agent_thread_id === "string") {
+          if (!spawnLinks.has(p.event_id)) spawnLinks.set(p.event_id, p.agent_thread_id);
+        }
+      }
     } else if (line.type === "turn_context") {
       // Only the model is kept; approval/sandbox/permission are dropped.
       if (typeof p.model === "string" && p.model !== "") {
@@ -457,15 +515,38 @@ export function projectRecords(
     };
   }
 
+  // Forward invocation link (ADR-0005): the tool_result paired with a
+  // spawn_agent call carries the spawned child session's id.
+  for (let i = 0; i < records.length; i += 1) {
+    const rec = records[i]!;
+    if (rec.type !== "tool_result") continue;
+    const child = spawnLinks.get(rec.toolCallId);
+    if (child !== undefined) {
+      records[i] = { ...rec, sessionId: child };
+    }
+  }
+
   return records;
+}
+
+/**
+ * Cross-session context for manifest building: every session in the store,
+ * by sessionId — needed to resolve the cross-session anchors (invocation
+ * atRecordId into the parent's tool_call via its sub_agent_activity
+ * correlation; lineage atRecordId at the fork parent's last record).
+ */
+interface ProjectionContext {
+  sourcesById: Map<string, SessionSource>;
+  recordsById: Map<string, AhsRecord[]>;
 }
 
 /** Build the session-level Manifest from raw lines + projected records. */
 function buildManifest(
-  sessionId: string,
-  lines: RawLine[],
+  source: SessionSource,
   records: AhsRecord[],
+  ctx: ProjectionContext,
 ): Manifest {
+  const { sessionId, lines } = source;
   const metas: RawPayload[] = [];
   let model: string | undefined;
   let workspaceRoots: string[] | undefined;
@@ -497,19 +578,44 @@ function buildManifest(
     git.branch !== undefined || git.commit_hash !== undefined || git.repository_url !== undefined;
   const hasUsage = Object.keys(totalUsage).length > 0;
 
-  // Relations: thread_spawn → invocation back-link (anchor recovery +
-  // forward link are Plan 02 work); otherwise a lineage ancestor →
-  // forked_from lineage (most recent first).
-  const source = meta?.source;
-  const parentThreadId =
-    typeof source === "object" ? source.subagent?.thread_spawn?.parent_thread_id : undefined;
-  const ancestorId = metas[1]?.id ?? metas[1]?.session_id;
-  const invocation: Manifest["invocation"] =
-    parentThreadId !== undefined ? { sessionId: parentThreadId } : undefined;
-  const lineage: Manifest["lineage"] =
-    parentThreadId === undefined && ancestorId !== undefined
-      ? { type: "forked_from", sessionId: ancestorId }
-      : undefined;
+  // Relations (ADR-0005):
+  // - thread_spawn → invocation back-link. The atRecordId anchor is resolved
+  //   by correlating this thread's id against the PARENT's sub_agent_activity
+  //   (agent_thread_id → event_id = the spawn_agent call_id), then finding
+  //   that tool_call in the parent's projected records. Unresolvable → anchor
+  //   omitted (source-unavailable).
+  // - Otherwise an ancestor lineage header → lineage, anchored at the
+  //   ancestor's last record with the type judged by that record's role
+  //   (user_message ⇔ sibling_attempt). Ancestor absent/empty → lineage kept
+  //   without an anchor.
+  let invocation: Manifest["invocation"];
+  if (source.parentThreadId !== undefined) {
+    invocation = { sessionId: source.parentThreadId };
+    // Correlate against the parent's sub_agent_activity: agent_thread_id ==
+    // my sessionId → event_id == the parent's spawn_agent call_id → that
+    // tool_call's recordId is the anchor.
+    const parent = ctx.sourcesById.get(source.parentThreadId);
+    const spawn = parent?.spawnEvents.find((e) => e.childThreadId === sessionId);
+    const parentRecords = ctx.recordsById.get(source.parentThreadId);
+    const anchor =
+      spawn === undefined
+        ? undefined
+        : parentRecords?.find((r) => r.type === "tool_call" && r.toolCallId === spawn.callId);
+    if (anchor !== undefined) invocation.atRecordId = anchor.recordId;
+  }
+  let lineage: Manifest["lineage"];
+  if (source.parentThreadId === undefined && source.ancestorId !== undefined) {
+    const parentRecords = ctx.recordsById.get(source.ancestorId);
+    const last = parentRecords?.[parentRecords.length - 1];
+    lineage =
+      last !== undefined
+        ? {
+            type: last.type === "user_message" ? "sibling_attempt" : "forked_from",
+            sessionId: source.ancestorId,
+            atRecordId: last.recordId,
+          }
+        : { type: "forked_from", sessionId: source.ancestorId };
+  }
 
   return {
     sessionId,
@@ -536,6 +642,59 @@ function buildManifest(
       ...(hasUsage ? { totalUsage } : {}),
     },
   };
+}
+
+/**
+ * Group sessions by their lineage edges (union-find) and return each group's
+ * HEAD sessionId. Codex has no winner marker, so HEAD = the most recently
+ * updated session in the group (its last record's timestamp; ties broken by
+ * the smaller sessionId, deterministically). Sessions whose lineage points
+ * outside the store form their own group (they are the visible head).
+ */
+function computeGroupHeads(
+  sessions: SessionSource[],
+  recordsById: Map<string, AhsRecord[]>,
+): Set<string> {
+  const parent = new Map<string, string>();
+  const find = (x: string): string => {
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    let cur = x;
+    while (parent.get(cur) !== cur) {
+      const next = parent.get(cur)!;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  for (const id of recordsById.keys()) parent.set(id, id);
+  for (const s of sessions) {
+    if (!recordsById.has(s.sessionId)) continue;
+    // Only the effective lineage edge groups (invocation is the other
+    // dimension and never folds): thread_spawn children carry no lineage.
+    if (s.parentThreadId !== undefined || s.ancestorId === undefined) continue;
+    if (!recordsById.has(s.ancestorId)) continue; // fork parent not in store
+    const ra = find(s.sessionId);
+    const rb = find(s.ancestorId);
+    if (ra !== rb) parent.set(ra, rb);
+  }
+  const lastTimestamp = (id: string): string => {
+    const records = recordsById.get(id)!;
+    return records[records.length - 1]!.timestamp;
+  };
+  const heads = new Map<string, string>(); // group root -> HEAD sessionId
+  for (const id of recordsById.keys()) {
+    const root = find(id);
+    const current = heads.get(root);
+    if (
+      current === undefined ||
+      lastTimestamp(id) > lastTimestamp(current) ||
+      (lastTimestamp(id) === lastTimestamp(current) && id < current)
+    ) {
+      heads.set(root, id);
+    }
+  }
+  return new Set(heads.values());
 }
 
 export class CodexAdapter implements HarnessAdapter {
@@ -572,13 +731,23 @@ export class CodexAdapter implements HarnessAdapter {
     const lines = parseJsonl(await readFile(filePath, "utf8"));
     // The FIRST session_meta is this rollout's own thread; later ones are
     // ancestor lineage headers — first wins.
-    const meta = lines.find((l) => l.type === "session_meta")?.payload;
+    const metas = lines.filter((l) => l.type === "session_meta").map((l) => l.payload ?? {});
+    const meta = metas[0];
+    const metaSource = meta?.source;
+    const parentThreadId =
+      typeof metaSource === "object"
+        ? metaSource.subagent?.thread_spawn?.parent_thread_id
+        : undefined;
+    const ancestorId = metas[1]?.id ?? metas[1]?.session_id;
     const parsed = parseFilename(path.basename(filePath));
     const source: SessionSource = {
       sessionId: meta?.id ?? meta?.session_id ?? parsed.id,
       filePath,
       lines,
+      spawnEvents: collectSpawnEvents(lines),
       ...(parsed.timestamp !== undefined ? { fallbackTimestamp: parsed.timestamp } : {}),
+      ...(parentThreadId !== undefined ? { parentThreadId } : {}),
+      ...(ancestorId !== undefined ? { ancestorId } : {}),
     };
     return source;
   }
@@ -594,19 +763,28 @@ export class CodexAdapter implements HarnessAdapter {
   async *listSessions(filter?: SessionFilter): AsyncIterable<Manifest> {
     if (filter?.harness !== undefined && filter.harness !== this.harness) return;
     const sessions = await this.loadAll();
+    // Project every file once: manifests need cross-session anchors, and
+    // files with zero projectable content are not AHS sessions at all.
+    const recordsById = new Map<string, AhsRecord[]>();
+    const sourcesById = new Map<string, SessionSource>();
     for (const session of sessions) {
       const records = projectRecords(
         session.sessionId,
         session.lines,
         session.fallbackTimestamp,
       );
-      // Files with zero projectable content are not AHS sessions — skip.
       if (records.length === 0) continue;
-      const manifest = buildManifest(
-        session.sessionId,
-        session.lines,
-        records,
-      );
+      recordsById.set(session.sessionId, records);
+      sourcesById.set(session.sessionId, session);
+    }
+    const ctx: ProjectionContext = { sourcesById, recordsById };
+    const heads =
+      filter?.includeForks === true ? undefined : computeGroupHeads(sessions, recordsById);
+    for (const session of sessions) {
+      const records = recordsById.get(session.sessionId);
+      if (records === undefined) continue;
+      if (heads !== undefined && !heads.has(session.sessionId)) continue;
+      const manifest = buildManifest(session, records, ctx);
       if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) continue;
       yield manifest;
     }

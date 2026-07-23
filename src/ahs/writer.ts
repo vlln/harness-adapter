@@ -155,7 +155,8 @@ export async function writeArchive(
   outDir: string,
 ): Promise<WriteArchiveResult> {
   let manifest: Manifest | undefined;
-  for await (const m of adapter.listSessions()) {
+  // Storage view: look up among ALL sessions, lineage descendants included.
+  for await (const m of adapter.listSessions({ includeForks: true })) {
     if (m.sessionId === sessionId) {
       manifest = m;
       break;
@@ -205,7 +206,10 @@ export async function exportSessions(
   filter?: SessionFilter,
 ): Promise<WriteArchiveResult[]> {
   const results: WriteArchiveResult[] = [];
-  for await (const manifest of adapter.listSessions(filter)) {
+  // An archive is the storage view: default to the FULL set (forks included);
+  // a caller-supplied filter may still narrow it down.
+  const effective: SessionFilter = { includeForks: true, ...filter };
+  for await (const manifest of adapter.listSessions(effective)) {
     results.push(await writeArchive(adapter, manifest.sessionId, outDir));
   }
   return results;
