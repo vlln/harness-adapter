@@ -8,7 +8,7 @@
 
 | Plan | 内容 | 分支 | 状态 | Report |
 |------|------|------|------|--------|
-| [01-plan-schema-validate.md](01-plan-schema-validate.md) | schema + validate 按 ADR-0005 重构（先行，下游全部依赖） | refactor/0009a-schema-validate | pending | — |
+| [01-plan-schema-validate.md](01-plan-schema-validate.md) | schema + validate 按 ADR-0005 重构（先行，下游全部依赖） | refactor/0009a-schema-validate | done | [01-report-schema-validate.md](01-report-schema-validate.md) |
 | [02-plan-adapters.md](02-plan-adapters.md) | 4 个适配器线性化重构（worktree 并行） | refactor/0009b-{claude-code,codex,kimi-code,devin} | pending | — |
 | [03-plan-ahs-report.md](03-plan-ahs-report.md) | 关系存储派生索引 + ahs-report 双视图 + 统一 sweep 复跑 | refactor/0009c-ahs-report | pending | — |
 
