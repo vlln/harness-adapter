@@ -369,6 +369,7 @@ function buildManifest(
     ahsVersion: AHS_VERSION,
     cwd,
     model: summary.current_model_id ?? firstModel ?? "unknown",
+    root: true,
     provider: "xai",
     ...(summary.generated_title !== undefined
       ? { title: summary.generated_title, titleOrigin: "generated" as const }

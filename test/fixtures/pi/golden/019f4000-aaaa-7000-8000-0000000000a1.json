@@ -6,6 +6,7 @@
     "harnessVersion": "3",
     "model": "DeepSeek-V4-Flash",
     "provider": "ollama",
+    "root": true,
     "sessionId": "019f4000-aaaa-7000-8000-0000000000a1",
     "stats": {
       "totalUsage": {

@@ -24,15 +24,15 @@
  *       both carry m-asst-15 (text + tool_call tc-4) and BOTH continue;
  *       node 15's subtree holds the last leaf so it stays main; node 16 →
  *       "sunny-forest#fork-16" anchored at m-asst-15/tool_call/0
- *       (forked_from); the fork's tool_result for tc-4 is ancestor-orphaned
+ *       (rewound_from); the fork's tool_result for tc-4 is ancestor-orphaned
  *       → dropped; suffix = user + assistant]
  *     root 30 (dangling parent 99 — deleted-parent gap): shares nothing →
- *       anchor-less sibling_attempt → "sunny-forest#root-30"
+ *       anchor-less rewound_from → "sunny-forest#root-30"
  *     root 40: leading copy of m-sys-0 → anchored at the harness_message
- *       m-sys-0 (forked_from — the real-data cross-root anchor role) →
+ *       m-sys-0 (rewound_from — the real-data cross-root anchor role) →
  *       "sunny-forest#root-40", suffix user + assistant
  *     root 50: leading copies of m-sys-0 + m-user-1 → anchored at the
- *       user_message m-user-1 (sibling_attempt) → "sunny-forest#root-50",
+ *       user_message m-user-1 (rewound_from) → "sunny-forest#root-50",
  *       suffix = one assistant re-answer
  *   quiet-pond      minimal: no metrics, no title, metadata NULL,
  *                   main_chain_id NULL (HEAD fallback: latest record)
@@ -339,7 +339,7 @@ const NODES: Record<string, FixtureNode[]> = {
       createdAt: T0 + 153,
     },
     // Deleted-parent gap (parent 99 missing) → additional root; shares no
-    // message with the base tree → anchor-less sibling_attempt.
+    // message with the base tree → anchor-less rewound_from.
     {
       nodeId: 30,
       parentNodeId: 99,
@@ -347,7 +347,7 @@ const NODES: Record<string, FixtureNode[]> = {
       createdAt: T0 + 200,
     },
     // Root sharing only the system prompt (the real-data cross-root shape)
-    // → forked_from anchored at harness_message m-sys-0.
+    // → rewound_from anchored at harness_message m-sys-0.
     {
       nodeId: 40,
       parentNodeId: null,
@@ -366,7 +366,7 @@ const NODES: Record<string, FixtureNode[]> = {
       message: { message_id: "m-asst-42", role: "assistant", content: "Alternative exploration." },
       createdAt: T0 + 320,
     },
-    // Root sharing [system, user] prefix → sibling_attempt anchored at
+    // Root sharing [system, user] prefix → rewound_from anchored at
     // user_message m-user-1 (a re-answer to the same prompt).
     {
       nodeId: 50,

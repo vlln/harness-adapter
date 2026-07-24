@@ -111,6 +111,7 @@ describe("ahs-report (AC-0004-N-1)", () => {
         JSON.stringify({
           ...base,
           sessionId: id,
+          root: false,
           invocation: { sessionId: parentId },
         }),
       );
@@ -161,7 +162,7 @@ describe("ahs-report Task view (ADR-0005 §5)", () => {
         usage: { inputTokens: 30, outputTokens: 3 },
       }),
     ],
-    { lineage: { type: "forked_from", sessionId: "task-root", atRecordId: "r1" } },
+    { lineage: { type: "rewound_from", sessionId: "task-root", atRecordId: "r1" } },
   );
 
   it("renders the HEAD chain: stitched prefix + fork suffix, abandoning the cut tail", async () => {
@@ -203,7 +204,7 @@ describe("ahs-report Task view (ADR-0005 §5)", () => {
     expect(report.alternates).toEqual(["task-fork", "task-root"]);
     expect(report.text).toContain("== alternate versions (group task-fork) ==");
     expect(report.text).toContain("HEAD: task-fork");
-    expect(report.text).toContain("- task-fork (HEAD) forked_from task-root @ r1");
+    expect(report.text).toContain("- task-fork (HEAD) rewound_from task-root @ r1");
     expect(report.text).toContain("- task-root (group root)");
     // Alternates are listed, not stitched: the transcript part is unchanged.
     expect(report.text).not.toContain("abandoned direction");
@@ -223,7 +224,7 @@ describe("ahs-report Task view (ADR-0005 §5)", () => {
         userMessage(0, "the prompt", { timestamp: T2 }),
         assistantMessage(1, "retry answer", { timestamp: T2, usage: { inputTokens: 8 } }),
       ],
-      { lineage: { type: "sibling_attempt", sessionId: "base" } },
+      { lineage: { type: "rewound_from", sessionId: "base" } },
     );
     const outDir = path.join(tmp, "retry-from-start");
     await exportSessions(fakeAdapter([base, retry]), outDir);
@@ -262,7 +263,7 @@ describe("ahs-report Task view (ADR-0005 §5)", () => {
     const subFork = makeSession(
       "s-fork",
       [assistantMessage(0, "fork retry", { timestamp: T2, usage: { inputTokens: 5, outputTokens: 1 } })],
-      { lineage: { type: "forked_from", sessionId: "s", atRecordId: "s-r1" } },
+      { lineage: { type: "rewound_from", sessionId: "s", atRecordId: "s-r1" } },
     );
     const outDir = path.join(tmp, "fork-of-subagent");
     await exportSessions(fakeAdapter([parent, sub, subFork]), outDir);

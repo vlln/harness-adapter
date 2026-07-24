@@ -8,6 +8,7 @@
     "harness": "claude-code",
     "harnessVersion": "2.1.205",
     "model": "claude-sonnet-4-5",
+    "root": true,
     "sessionId": "33333333-3333-4333-8333-333333333333",
     "stats": {
       "totalUsage": {

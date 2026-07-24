@@ -28,7 +28,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   becomes a fork session storing only its suffix: sessionId
  *   `<main>/fork/<branch-root id>`, lineage atRecordId = the anchor node's
  *   first projected record in the parent session, type by that record's
- *   type (user_message ⇔ sibling_attempt, else forked_from).
+ *   type (rewound_from).
  * - Chain restarts (parentId null/unknown mid-file) re-anchor to the
  *   previous kept line, preserving a single root.
  *
@@ -540,6 +540,7 @@ function buildManifest(
     cwd: sessionLine?.cwd ?? "",
     model: model ?? "unknown",
     ...(provider !== undefined ? { provider } : {}),
+    root: lineage === undefined,
     ...(lineage !== undefined ? { lineage } : {}),
     stats: {
       turnCount,
@@ -649,7 +650,7 @@ export class PiAdapter implements HarnessAdapter {
           node = node.parent;
         }
         lineage = {
-          type: anchorRec?.type === "user_message" ? "sibling_attempt" : "forked_from",
+          type: "rewound_from",
           sessionId: chain.parentSessionId,
           ...(anchorRec !== undefined ? { atRecordId: anchorRec.recordId } : {}),
         };

@@ -10,9 +10,10 @@
     "lineage": {
       "atRecordId": "eeee0002-0000-4000-8000-000000000002",
       "sessionId": "66666666-6666-4666-8666-666666666666",
-      "type": "forked_from"
+      "type": "rewound_from"
     },
     "model": "claude-opus-4-1",
+    "root": false,
     "sessionId": "66666666-6666-4666-8666-666666666666/fork/eeee0003-0000-4000-8000-000000000003",
     "stats": {
       "totalUsage": {

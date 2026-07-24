@@ -12,6 +12,7 @@
       "sessionId": "22222222-2222-4222-8222-222222222222"
     },
     "model": "claude-opus-4-1",
+    "root": false,
     "sessionId": "abc123",
     "stats": {
       "totalUsage": {

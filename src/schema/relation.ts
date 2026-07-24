@@ -8,19 +8,23 @@ import { z } from "zod";
 
 /**
  * lineage (history dimension) — "where my history comes from".
- * A fork session stores only the post-fork suffix; the shared prefix is
- * stitched by walking lineage back.
- * - forked_from: anchored after an agent-side record (the fork continues
- *   with NEW user input; edit-resend included).
- * - sibling_attempt: anchored after a user_message (a re-answer to the SAME
- *   prompt; competing attempts).
+ * - forked_from: full copy, independent root. The lineage is metadata only
+ *   ("I was copied from X"). The fork carries its own complete history;
+ *   root === true.
+ * - rewound_from: shared prefix, depends on source. The lineage is a
+ *   structural dependency — the session's history is incomplete without
+ *   walking lineage back to the ancestor. root === false.
+ *   sibling_attempt (re-answer to the same prompt) is no longer a separate
+ *   type — it is a rewound_from anchored at a user_message.
  * atRecordId is tri-state (ADR-0005 amendment): a value = anchored;
  * null = the anchor should exist but is source-unavailable (e.g. the
  * ancestor file is missing); absent = retry from the very start (the fork
- * carries its own prompt copy).
+ * carries its own prompt copy). The anchor type (user_message /
+ * assistant_message / harness_message) is expressed by the record itself,
+ * not by the lineage type.
  */
 export const LineageSchema = z.object({
-  type: z.enum(["forked_from", "sibling_attempt"]),
+  type: z.enum(["forked_from", "rewound_from"]),
   /** Parent/source session id. */
   sessionId: z.string(),
   /** Anchor record in the parent session the fork diverges after. */

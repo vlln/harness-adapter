@@ -263,12 +263,15 @@ class FacadeImpl implements HarnessFacade {
     const realGroup = relations.groups.find((g) => g.members.includes(sessionId))!;
 
     // HEAD chain, oldest first (cycle-safe, staying inside the group).
+    // Stop at the first session with root === true (self-contained root).
     const chain: string[] = [];
     const seen = new Set<string>();
     let cur: string | undefined = realGroup.mainSessionId;
     while (cur !== undefined && !seen.has(cur)) {
       seen.add(cur);
       chain.unshift(cur);
+      const member = members.find((m) => m.manifest.sessionId === cur);
+      if (member?.manifest.root) break;
       const edge = lineageParentEdge(relations, cur);
       cur = edge !== undefined && realGroup.members.includes(edge.from) ? edge.from : undefined;
     }

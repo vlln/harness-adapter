@@ -142,23 +142,23 @@ describe("AC-0002-N-7 lineage completeness (anchor resolution + type judgment)",
     assistantMessage(1, "working on it", { recordId: "p-asst" }),
   ]);
 
-  it("passes a forked_from anchored at an agent-side record", () => {
+  it("passes a rewound_from anchored at an agent-side record", () => {
     const fork = makeSession("fork", [userMessage(0, "new direction")], {
-      lineage: { type: "forked_from", sessionId: "parent", atRecordId: "p-asst" },
+      lineage: { type: "rewound_from", sessionId: "parent", atRecordId: "p-asst" },
     });
     expect(validateSessions([parent, fork])).toEqual([]);
   });
 
-  it("passes a sibling_attempt anchored at a user_message", () => {
+  it("passes a rewound_from anchored at a user_message", () => {
     const sibling = makeSession("sibling", [assistantMessage(0, "another answer")], {
-      lineage: { type: "sibling_attempt", sessionId: "parent", atRecordId: "p-user" },
+      lineage: { type: "rewound_from", sessionId: "parent", atRecordId: "p-user" },
     });
     expect(validateSessions([parent, sibling])).toEqual([]);
   });
 
   it("passes a retry-from-start lineage (atRecordId omitted)", () => {
     const retry = makeSession("retry", [userMessage(0, "fix the bug")], {
-      lineage: { type: "sibling_attempt", sessionId: "parent" },
+      lineage: { type: "rewound_from", sessionId: "parent" },
     });
     expect(validateSessions([parent, retry])).toEqual([]);
   });
@@ -167,20 +167,20 @@ describe("AC-0002-N-7 lineage completeness (anchor resolution + type judgment)",
     // Even with the parent missing from the session set, a null anchor
     // (source-unavailable) produces no error — there is nothing to resolve.
     const fork = makeSession("fork", undefined, {
-      lineage: { type: "forked_from", sessionId: "ghost-parent", atRecordId: null },
+      lineage: { type: "rewound_from", sessionId: "ghost-parent", atRecordId: null },
     });
     expect(validateSessions([parent, fork])).toEqual([]);
     // Contrast: the same shape WITHOUT the null (anchor absent) still
     // requires the parent to exist (retry-from-start keeps that check).
     const flagged = makeSession("fork2", undefined, {
-      lineage: { type: "forked_from", sessionId: "ghost-parent" },
+      lineage: { type: "rewound_from", sessionId: "ghost-parent" },
     });
     expect(validateSessions([parent, flagged]).map((e) => e.code)).toContain("lineage-session");
   });
 
   it("flags a lineage pointing at an unknown session (lineage-session)", () => {
     const fork = makeSession("fork", undefined, {
-      lineage: { type: "forked_from", sessionId: "ghost-parent", atRecordId: "p-asst" },
+      lineage: { type: "rewound_from", sessionId: "ghost-parent", atRecordId: "p-asst" },
     });
     const errors = validateSessions([parent, fork]);
     expect(errors.map((e) => e.code)).toContain("lineage-session");
@@ -188,22 +188,18 @@ describe("AC-0002-N-7 lineage completeness (anchor resolution + type judgment)",
 
   it("flags an atRecordId resolving to no record in the parent (lineage-anchor)", () => {
     const fork = makeSession("fork", undefined, {
-      lineage: { type: "forked_from", sessionId: "parent", atRecordId: "no-such-record" },
+      lineage: { type: "rewound_from", sessionId: "parent", atRecordId: "no-such-record" },
     });
     const errors = validateSessions([parent, fork]);
     expect(errors.map((e) => e.code)).toContain("lineage-anchor");
   });
 
-  it("flags a wrong type judgment both ways (lineage-type)", () => {
+  it("flags a wrong lineage type for non-root sessions (lineage-type)", () => {
     const wrongFork = makeSession("fork", undefined, {
-      lineage: { type: "sibling_attempt", sessionId: "parent", atRecordId: "p-asst" },
-    });
-    expect(validateSessions([parent, wrongFork]).map((e) => e.code)).toContain("lineage-type");
-
-    const wrongSibling = makeSession("sibling", undefined, {
+      root: false,
       lineage: { type: "forked_from", sessionId: "parent", atRecordId: "p-user" },
     });
-    expect(validateSessions([parent, wrongSibling]).map((e) => e.code)).toContain("lineage-type");
+    expect(validateSessions([parent, wrongFork]).map((e) => e.code)).toContain("lineage-type");
   });
 });
 

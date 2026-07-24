@@ -179,12 +179,12 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
     for (const s of sessions) expect(s.manifest.invocation).toBeUndefined();
   });
 
-  it("AC-0002-N-7: twin branch stays main, real fork splits with forked_from anchor", () => {
+  it("AC-0002-N-7: twin branch stays main, real fork splits with rewound_from anchor", () => {
     // Dead twin: no session; the shared message lives once in the base.
     expect(sessions.some((s) => s.manifest.sessionId === "sunny-forest#fork-2")).toBe(false);
     const fork = session("sunny-forest#fork-16");
     expect(fork.manifest.lineage).toEqual({
-      type: "forked_from",
+      type: "rewound_from",
       sessionId: "sunny-forest",
       atRecordId: "m-asst-15/tool_call/0",
     });
@@ -194,9 +194,9 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
   });
 
   it("AC-0002-N-7: cross-root lineage anchors by message_id reconciliation + type judgment", () => {
-    // Shared system prefix → harness_message anchor → forked_from.
+    // Shared system prefix → harness_message anchor → rewound_from.
     expect(session("sunny-forest#root-40").manifest.lineage).toEqual({
-      type: "forked_from",
+      type: "rewound_from",
       sessionId: "sunny-forest",
       atRecordId: "m-sys-0",
     });
@@ -204,16 +204,16 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
       "m-user-41",
       "m-asst-42",
     ]);
-    // Shared [system, user] prefix → user_message anchor → sibling_attempt.
+    // Shared [system, user] prefix → user_message anchor → rewound_from.
     expect(session("sunny-forest#root-50").manifest.lineage).toEqual({
-      type: "sibling_attempt",
+      type: "rewound_from",
       sessionId: "sunny-forest",
       atRecordId: "m-user-1",
     });
     expect(session("sunny-forest#root-50").records.map((r) => r.recordId)).toEqual(["m-asst-52"]);
     // Nothing shared → anchor-less retry from start.
     expect(session("sunny-forest#root-30").manifest.lineage).toEqual({
-      type: "sibling_attempt",
+      type: "rewound_from",
       sessionId: "sunny-forest",
     });
     expect(session("sunny-forest#root-30").records.map((r) => r.recordId)).toEqual(["m-sys-30"]);

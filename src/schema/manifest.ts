@@ -34,6 +34,10 @@ export const ManifestSchema = z.object({
   lineage: LineageSchema.optional(),
   /** Call-dimension back-link (invoking session); see ADR-0005. */
   invocation: InvocationSchema.optional(),
+  /** true = self-contained (all history in this session);
+   *  false = must walk lineage/invocation to reconstruct full history.
+   *  Original sessions and forks: true. Rewinds and subagents: false. */
+  root: z.boolean(),
   /** Binding back to the native session for resumption via ACP. */
   acpBinding: z
     .object({

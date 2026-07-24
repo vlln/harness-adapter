@@ -67,26 +67,26 @@ function fixtureSessions(): SessionData[] {
   const subFork = makeSession(
     "sub/fork-1",
     [assistantMessage(0, "fork direction", { timestamp: T2 })],
-    { lineage: { type: "forked_from", sessionId: "sub", atRecordId: "sub-r1" } },
+    { lineage: { type: "rewound_from", sessionId: "sub", atRecordId: "sub-r1" } },
   );
   // Nested fork: transitive inheritance across two lineage hops.
   const subFork2 = makeSession(
     "sub/fork-2",
     [assistantMessage(0, "nested fork", { timestamp: T3 })],
-    { lineage: { type: "sibling_attempt", sessionId: "sub/fork-1" } },
+    { lineage: { type: "rewound_from", sessionId: "sub/fork-1" } },
   );
   // Independent lineage group for the HEAD heuristic: beta updated after
   // alpha; gamma has the same timestamp as beta (tie → smaller id wins).
   const alpha = makeSession("alpha", [userMessage(0, "v1", { timestamp: T1 })]);
   const beta = makeSession("beta", [userMessage(0, "v2", { timestamp: T3 })], {
-    lineage: { type: "forked_from", sessionId: "alpha", atRecordId: "r0" },
+    lineage: { type: "rewound_from", sessionId: "alpha", atRecordId: "r0" },
   });
   const gamma = makeSession("gamma", [userMessage(0, "v3", { timestamp: T3 })], {
-    lineage: { type: "sibling_attempt", sessionId: "alpha", atRecordId: "r0" },
+    lineage: { type: "rewound_from", sessionId: "alpha", atRecordId: "r0" },
   });
   // A dangling back-link (parent not archived): no edge, singleton group.
   const orphan = makeSession("orphan", [userMessage(0, "alone", { timestamp: T1 })], {
-    lineage: { type: "forked_from", sessionId: "not-archived" },
+    lineage: { type: "rewound_from", sessionId: "not-archived" },
     invocation: { sessionId: "not-archived" },
   });
   return [root, sub, subFork, subFork2, alpha, beta, gamma, orphan];
@@ -124,13 +124,13 @@ describe("buildRelations", () => {
       from: "sub",
       to: "sub/fork-1",
       atRecordId: "sub-r1",
-      lineageType: "forked_from",
+      lineageType: "rewound_from",
     });
     expect(lineage).toContainEqual({
       type: "lineage",
       from: "sub/fork-1",
       to: "sub/fork-2",
-      lineageType: "sibling_attempt",
+      lineageType: "rewound_from",
     });
     expect(lineageParentEdge(relations, "sub/fork-1")?.from).toBe("sub");
   });
@@ -139,10 +139,10 @@ describe("buildRelations", () => {
     const sessions: SessionData[] = [
       makeSession("p", [userMessage(0, "q", { timestamp: T1 })]),
       makeSession("f-null", [userMessage(0, "v2", { timestamp: T2 })], {
-        lineage: { type: "forked_from", sessionId: "p", atRecordId: null },
+        lineage: { type: "rewound_from", sessionId: "p", atRecordId: null },
       }),
       makeSession("f-retry", [userMessage(0, "v3", { timestamp: T2 })], {
-        lineage: { type: "sibling_attempt", sessionId: "p" },
+        lineage: { type: "rewound_from", sessionId: "p" },
       }),
     ];
     const rel = buildRelations(sessions);

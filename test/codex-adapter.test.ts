@@ -10,14 +10,14 @@
  *   unchanged-total duplicate.
  * - b2: sub-agent child of a1 (thread_spawn) with ancestor lineage headers
  *   (invocation wins over lineage).
- * - c3: resumed session (forked_from a1), turn_aborted with an unpaired
+ * - c3: resumed session (rewound_from a1), turn_aborted with an unpaired
  *   tool_call, no token_count at all, truncated tail line.
  * - d4: session_meta only (no projectable content) — must be skipped.
  * - g7: session that crashed right after a user_message (its last record is
  *   a user_message).
- * - e5: resumed from g7, re-answering the pending prompt — sibling_attempt
+ * - e5: resumed from g7, re-answering the pending prompt — rewound_from
  *   anchored at g7's user_message (AC-0002-N-7 type judgment).
- * - f6: resumed from c3 (chained fork) — forked_from anchored at c3's last
+ * - f6: resumed from c3 (chained fork) — rewound_from anchored at c3's last
  *   record; also makes f6 the HEAD of the {a1, c3, f6} lineage group.
  */
 
@@ -158,26 +158,26 @@ describe("codex adapter", () => {
   });
 
   it("AC-0002-N-7: lineage anchors resolve and the type is judged by the anchor record", () => {
-    // c3 forked_from a1, anchored at a1's last record (a turn_boundary).
+    // c3 rewound_from a1, anchored at a1's last record (a turn_boundary).
     const a1Last = byId.get(A1)!.records.at(-1)!;
     expect(a1Last.type).toBe("turn_boundary");
     expect(byId.get(C3)!.manifest.lineage).toEqual({
-      type: "forked_from",
+      type: "rewound_from",
       sessionId: A1,
       atRecordId: a1Last.recordId,
     });
     // f6 chained fork from c3, anchored at c3's last record.
     const c3Last = byId.get(C3)!.records.at(-1)!;
     expect(byId.get(F6)!.manifest.lineage).toEqual({
-      type: "forked_from",
+      type: "rewound_from",
       sessionId: C3,
       atRecordId: c3Last.recordId,
     });
-    // e5 anchored at g7's last record — a user_message ⇔ sibling_attempt.
+    // e5 anchored at g7's last record — a user_message ⇔ rewound_from.
     const g7Last = byId.get(G7)!.records.at(-1)!;
     expect(g7Last.type).toBe("user_message");
     expect(byId.get(E5)!.manifest.lineage).toEqual({
-      type: "sibling_attempt",
+      type: "rewound_from",
       sessionId: G7,
       atRecordId: g7Last.recordId,
     });
@@ -506,7 +506,7 @@ describe("codex adapter", () => {
     );
     expect(sessions).toHaveLength(1);
     expect(sessions[0]!.manifest.lineage).toEqual({
-      type: "forked_from",
+      type: "rewound_from",
       sessionId: "019f8000-0000-7000-8000-00000000ff00",
       atRecordId: null,
     });
