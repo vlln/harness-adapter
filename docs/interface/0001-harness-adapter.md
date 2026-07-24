@@ -2,7 +2,7 @@
 title: Interface-0001 HarnessAdapter 契约
 description: HarnessAdapter 只读投影接口：listSessions / readManifest / readRecords，AsyncIterable 返回 AHS Manifest 与 Record；能力声明与错误语义。
 type: interface
-status: proposed
+status: active
 created: 2026-07-21T11:48:45Z
 ---
 
