@@ -38,7 +38,8 @@ created: 2026-07-21T11:48:45Z
 
 | 编号 | 前置条件 | 操作步骤 | 预期结果 | 验证方式 |
 |------|---------|---------|---------|---------|
-| AC-0002-N-1 | 任意源会话（线性完整） | 1. 运行适配器<br>2. 检查输出 record 序列 | record 无 parentId/branch 类结构字段；`seq` 严格递增且连续；session 内无分叉（任何分叉已拆为独立 session + lineage 边） | 自动化 |
+| AC-0002-N-1 | 任意源会话（线性完整） | 1. 运行适配器<br>2. 检查输出 record 序列 | record 无 parentId 类结构字段；`seq` 严格递增且连续（分支内）；session 内分叉表达为 branch 条目 | 自动化 |
+| AC-0002-N-7 | 源会话含分叉（历史维完整） | 1. 运行适配器<br>2. 检查 branches | 每个分叉恰好产出 `branches` 中的一个条目；`parentBranch` 和 `parentRecordId` 指向父分支中真实存在的 record；`HEAD.branch` 存在于 `branches` 中 | 自动化 |
 | AC-0002-N-2 | 源会话含 subagent 单元（调用维完整） | 1. 运行适配器<br>2. 检查 invocation 两链 | 每个 subagent 单元恰好产出一个子 session；子 manifest `invocation.sessionId` 存在；`atRecordId`（有锚时）指向父 session 中真实存在的 tool_call record；父中配对 tool_result 的 `sessionIds` 包含子 sessionId（正回链对账；一次调用产多个子 session 时全部列出） | 自动化 |
 | AC-0002-N-3 | 任意源会话（内容无静默丢失） | 1. 运行适配器<br>2. 对比源与输出 | user/assistant 消息条数与源相等；文本逐字保留 | 自动化 |
 | AC-0002-N-4 | 源会话含 usage 数据（usage 无静默丢失） | 1. 运行适配器<br>2. 汇总 record 级 usage | record 级 usage 求和 ≈ 源会话总量（容差内） | 自动化 |
