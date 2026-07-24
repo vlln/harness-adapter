@@ -701,11 +701,13 @@ export class CodexAdapter implements HarnessAdapter {
     return sessions;
   }
 
-  async *listSessions(filter?: SessionFilter): AsyncIterable<Manifest> {
-    if (filter?.harness !== undefined && filter.harness !== this.harness) return;
+  /**
+   * Project all sessions into manifests. Shared by listSessions and
+   * readManifest because codex manifests need cross-session context
+   * (invocation anchors, lineage/branch folding).
+   */
+  private async projectAllManifests(): Promise<Manifest[]> {
     const sessions = await this.loadAll();
-    // Project every file: manifests need cross-session anchors, and
-    // files with zero projectable content are not AHS sessions at all.
     const recordsById = new Map<string, AhsRecord[]>();
     const sourcesById = new Map<string, SessionSource>();
     for (const session of sessions) {
@@ -720,9 +722,6 @@ export class CodexAdapter implements HarnessAdapter {
     }
     const ctx: ProjectionContext = { sourcesById, recordsById };
 
-    // Build ancestor → descendants map for branch creation.
-    // Subagent sessions carry lineage headers too, but invocation wins
-    // (ADR-0006): they are separate sessions, not branches of the ancestor.
     const descendants = new Map<string, SessionSource[]>();
     for (const session of sessions) {
       if (!recordsById.has(session.sessionId)) continue;
@@ -733,34 +732,23 @@ export class CodexAdapter implements HarnessAdapter {
         else descendants.set(session.ancestorId, [session]);
       }
     }
-
-    // Track which sessions are branches (descendants) so we don't list them separately.
     const isBranch = new Set<string>();
     for (const list of descendants.values()) {
       for (const s of list) isBranch.add(s.sessionId);
     }
 
+    const manifests: Manifest[] = [];
     for (const session of sessions) {
       const records = recordsById.get(session.sessionId);
       if (records === undefined) continue;
 
-      // Subagent sessions: separate sessions with invocation.
       if (session.parentThreadId !== undefined) {
-        if (!recordsById.has(session.parentThreadId)) {
-          // Parent not in store: still list as standalone session.
-        }
-        const manifest = buildManifest(session, records, ctx);
-        if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) continue;
-        yield manifest;
+        manifests.push(buildManifest(session, records, ctx));
         continue;
       }
-
-      // Branch sessions: folded into the ancestor's session, not listed separately.
       if (isBranch.has(session.sessionId)) continue;
 
-      // Root session: build manifest with branches from descendants.
       const branchEntries: Record<string, { parentRecordId: string | null }> = {};
-      const branchRecords = new Map<string, AhsRecord[]>();
       const descList = descendants.get(session.sessionId) ?? [];
       let branchIndex = 0;
       for (const desc of descList) {
@@ -773,12 +761,25 @@ export class CodexAdapter implements HarnessAdapter {
           ? parentRecords[parentRecords.length - 1]!.recordId
           : null;
         branchEntries[branchName] = { parentRecordId: lastRecordId };
-        branchRecords.set(branchName, descRecords);
       }
-      const manifest = buildManifest(session, records, ctx, branchEntries);
+      manifests.push(buildManifest(session, records, ctx, branchEntries));
+    }
+    return manifests;
+  }
+
+  async *listSessions(filter?: SessionFilter): AsyncIterable<Manifest> {
+    if (filter?.harness !== undefined && filter.harness !== this.harness) return;
+    for (const manifest of await this.projectAllManifests()) {
       if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) continue;
       yield manifest;
     }
+  }
+
+  async readManifest(sessionId: string): Promise<Manifest> {
+    const manifests = await this.projectAllManifests();
+    const manifest = manifests.find((m) => m.sessionId === sessionId);
+    if (manifest === undefined) throw new Error(`session not found: ${sessionId}`);
+    return manifest;
   }
 
   async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {

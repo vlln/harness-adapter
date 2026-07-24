@@ -473,6 +473,18 @@ export class GrokAdapter implements HarnessAdapter {
     }
   }
 
+  async readManifest(sessionId: string): Promise<Manifest> {
+    for (const session of await this.discover()) {
+      if (session.sessionId === sessionId) {
+        const fallback = session.summary.created_at ?? EPOCH;
+        const records = projectRecords(session.sessionId, session.chat, session.turns, fallback);
+        if (records.length === 0) break;
+        return buildManifest(session, records, firstAssistantModel(session.chat));
+      }
+    }
+    throw new Error(`session not found: ${sessionId}`);
+  }
+
   async *readRecords(sessionId: string, _branchName?: string): AsyncIterable<AhsRecord> {
     for (const session of await this.discover()) {
       if (session.sessionId === sessionId) {

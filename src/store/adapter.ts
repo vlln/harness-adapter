@@ -31,6 +31,13 @@ export interface HarnessAdapter {
   listSessions(filter?: SessionFilter): AsyncIterable<Manifest>;
 
   /**
+   * Read the Manifest for a single session by ID — direct lookup,
+   * no listSessions scan. Throws when sessionId does not exist (consistent
+   * with readRecords error semantics).
+   */
+  readManifest(sessionId: string): Promise<Manifest>;
+
+  /**
    * Read records for a session branch. Defaults to the HEAD branch when
    * branchName is omitted. Records are returned in file (JSONL line) order
    * within the branch.
