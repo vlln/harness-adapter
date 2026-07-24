@@ -1,0 +1,260 @@
+[
+  {
+    "manifest": {
+      "ahsVersion": "0.1.0",
+      "cwd": "",
+      "harness": "kimi-code",
+      "harnessVersion": "unknown",
+      "model": "moonshot/kimi-k2",
+      "provider": "moonshot",
+      "sessionId": "11111111-2222-4333-8444-555555555555",
+      "stats": {
+        "totalUsage": {
+          "cacheReadTokens": 150,
+          "cacheWriteTokens": 5,
+          "inputTokens": 1200,
+          "outputTokens": 90
+        },
+        "turnCount": 2
+      },
+      "title": "修复登录页空指针",
+      "titleOrigin": "generated"
+    },
+    "records": [
+      {
+        "content": [
+          {
+            "text": "修复登录页空指针",
+            "type": "text"
+          }
+        ],
+        "recordId": "11111111-2222-4333-8444-555555555555:0",
+        "seq": 0,
+        "timestamp": "2026-07-20T10:00:01.001Z",
+        "type": "user_message"
+      },
+      {
+        "content": [
+          {
+            "text": "先定位空指针出现的位置。",
+            "type": "thinking"
+          },
+          {
+            "text": "我来查看登录页代码。",
+            "type": "text"
+          }
+        ],
+        "recordId": "11111111-2222-4333-8444-555555555555:1",
+        "seq": 1,
+        "timestamp": "2026-07-20T10:00:02.200Z",
+        "type": "assistant_message"
+      },
+      {
+        "args": {
+          "path": "/home/test/demo/src",
+          "pattern": "session.user"
+        },
+        "kind": "file_io",
+        "name": "Grep",
+        "recordId": "11111111-2222-4333-8444-555555555555:2",
+        "seq": 2,
+        "status": "completed",
+        "timestamp": "2026-07-20T10:00:02.200Z",
+        "toolCallId": "call_k001",
+        "type": "tool_call"
+      },
+      {
+        "content": "src/auth/login.ts:42:  const user = session.user;",
+        "recordId": "11111111-2222-4333-8444-555555555555:3",
+        "seq": 3,
+        "status": "success",
+        "timestamp": "2026-07-20T10:00:03.000Z",
+        "toolCallId": "call_k001",
+        "type": "tool_result",
+        "usage": {
+          "cacheReadTokens": 100,
+          "cacheWriteTokens": 5,
+          "inputTokens": 800,
+          "outputTokens": 60
+        }
+      },
+      {
+        "content": [
+          {
+            "text": "<system-reminder>后台任务已完成。</system-reminder>",
+            "type": "text"
+          }
+        ],
+        "recordId": "11111111-2222-4333-8444-555555555555:4",
+        "seq": 4,
+        "timestamp": "2026-07-20T10:00:04.001Z",
+        "type": "harness_message"
+      },
+      {
+        "content": [
+          {
+            "text": "已修复空指针。",
+            "type": "text"
+          }
+        ],
+        "recordId": "11111111-2222-4333-8444-555555555555:5",
+        "seq": 5,
+        "timestamp": "2026-07-20T10:00:05.100Z",
+        "type": "assistant_message"
+      },
+      {
+        "goalId": "goal-0001",
+        "reason": "完成登录页修复并验证",
+        "recordId": "11111111-2222-4333-8444-555555555555:6",
+        "seq": 6,
+        "status": "pending",
+        "timestamp": "2026-07-20T10:00:05.100Z",
+        "type": "goal_update"
+      },
+      {
+        "recordId": "11111111-2222-4333-8444-555555555555:7",
+        "seq": 7,
+        "status": "met",
+        "timestamp": "2026-07-20T10:00:09.000Z",
+        "type": "goal_update"
+      },
+      {
+        "model": "moonshot/kimi-k2-turbo",
+        "recordId": "11111111-2222-4333-8444-555555555555:8",
+        "seq": 8,
+        "timestamp": "2026-07-20T10:00:09.100Z",
+        "type": "model_change",
+        "usage": {
+          "cacheReadTokens": 50,
+          "cacheWriteTokens": 0,
+          "inputTokens": 400,
+          "outputTokens": 30
+        }
+      },
+      {
+        "args": {
+          "description": "审查登录页补丁",
+          "prompt": "审查登录页补丁是否正确"
+        },
+        "name": "Agent",
+        "recordId": "11111111-2222-4333-8444-555555555555:9",
+        "seq": 9,
+        "status": "completed",
+        "timestamp": "2026-07-20T10:00:09.250Z",
+        "toolCallId": "call_k002",
+        "type": "tool_call"
+      },
+      {
+        "content": "agent_id: agent-0\nactual_subagent_type: general\nstatus: completed\n\n[summary]\n补丁正确，无回归风险。",
+        "recordId": "11111111-2222-4333-8444-555555555555:10",
+        "seq": 10,
+        "sessionIds": [
+          "11111111-2222-4333-8444-555555555555/agent-0"
+        ],
+        "status": "success",
+        "timestamp": "2026-07-20T10:00:09.260Z",
+        "toolCallId": "call_k002",
+        "type": "tool_result"
+      },
+      {
+        "recordId": "11111111-2222-4333-8444-555555555555:11",
+        "seq": 11,
+        "summary": "## 前文摘要\n用户要求修复登录页空指针，已定位到 login.ts:42。",
+        "timestamp": "2026-07-20T10:00:10.500Z",
+        "type": "compaction"
+      },
+      {
+        "content": [
+          {
+            "text": "<notification>后台任务 x 已完成。</notification>",
+            "type": "text"
+          }
+        ],
+        "recordId": "11111111-2222-4333-8444-555555555555:12",
+        "seq": 12,
+        "timestamp": "2026-07-20T10:00:11.001Z",
+        "type": "harness_message"
+      },
+      {
+        "args": {
+          "command": "npm test"
+        },
+        "kind": "shell",
+        "name": "Bash",
+        "recordId": "11111111-2222-4333-8444-555555555555:13",
+        "seq": 13,
+        "status": "interrupted",
+        "timestamp": "2026-07-20T10:00:12.000Z",
+        "toolCallId": "call_k003",
+        "type": "tool_call"
+      },
+      {
+        "content": [
+          {
+            "text": "# Plan: 修复登录页空指针\n\n## 步骤\n1. 在 `login.ts:42` 对 `session` 做空值保护。\n2. 补充回归测试。\n",
+            "type": "text"
+          }
+        ],
+        "recordId": "11111111-2222-4333-8444-555555555555:14",
+        "seq": 14,
+        "timestamp": "2026-07-20T10:00:12.000Z",
+        "type": "assistant_message"
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "ahsVersion": "0.1.0",
+      "cwd": "",
+      "harness": "kimi-code",
+      "harnessVersion": "unknown",
+      "invocation": {
+        "sessionId": "11111111-2222-4333-8444-555555555555"
+      },
+      "model": "moonshot/kimi-k2",
+      "provider": "moonshot",
+      "sessionId": "11111111-2222-4333-8444-555555555555/agent-0",
+      "stats": {
+        "totalUsage": {
+          "inputTokens": 200,
+          "outputTokens": 20
+        },
+        "turnCount": 1
+      },
+      "title": "修复登录页空指针",
+      "titleOrigin": "generated"
+    },
+    "records": [
+      {
+        "content": [
+          {
+            "text": "审查登录页补丁是否正确",
+            "type": "text"
+          }
+        ],
+        "recordId": "11111111-2222-4333-8444-555555555555/agent-0:0",
+        "seq": 0,
+        "timestamp": "2026-07-20T10:01:41.001Z",
+        "type": "harness_message"
+      },
+      {
+        "content": [
+          {
+            "text": "补丁正确，无回归风险。",
+            "type": "text"
+          }
+        ],
+        "recordId": "11111111-2222-4333-8444-555555555555/agent-0:1",
+        "seq": 1,
+        "timestamp": "2026-07-20T10:01:42.101Z",
+        "type": "assistant_message",
+        "usage": {
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "inputTokens": 200,
+          "outputTokens": 20
+        }
+      }
+    ]
+  }
+]

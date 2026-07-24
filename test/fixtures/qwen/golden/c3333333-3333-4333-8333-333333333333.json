@@ -1,0 +1,90 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/tmp/st",
+    "harness": "qwen-code",
+    "harnessVersion": "0.19.1",
+    "model": "deepseek-v4-flash",
+    "sessionId": "c3333333-3333-4333-8333-333333333333",
+    "stats": {
+      "turnCount": 3
+    }
+  },
+  "records": [
+    {
+      "content": [
+        {
+          "text": "Fix the login timeout",
+          "type": "text"
+        }
+      ],
+      "recordId": "cc000001-0000-4000-8000-000000000001",
+      "seq": 0,
+      "timestamp": "2026-07-22T11:00:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "I'll look at the login flow first.",
+          "type": "text"
+        }
+      ],
+      "model": "deepseek-v4-flash",
+      "recordId": "cc000002-0000-4000-8000-000000000002",
+      "seq": 1,
+      "timestamp": "2026-07-22T11:00:05.000Z",
+      "type": "assistant_message"
+    },
+    {
+      "content": [
+        {
+          "text": "Actually, focus on the backoff strategy.",
+          "type": "text"
+        }
+      ],
+      "recordId": "cc000005-0000-4000-8000-000000000005",
+      "seq": 2,
+      "timestamp": "2026-07-22T11:02:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "I'll inspect the backoff strategy with a quick search.",
+          "type": "text"
+        }
+      ],
+      "model": "deepseek-v4-flash",
+      "recordId": "cc000006-0000-4000-8000-000000000006",
+      "seq": 3,
+      "timestamp": "2026-07-22T11:02:05.000Z",
+      "type": "assistant_message"
+    },
+    {
+      "content": [
+        {
+          "text": "Is the timeout configurable?",
+          "type": "text"
+        }
+      ],
+      "recordId": "cc000007-0000-4000-8000-000000000007",
+      "seq": 4,
+      "timestamp": "2026-07-22T11:03:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "Yes — see the login.timeout setting in config/auth.json.",
+          "type": "text"
+        }
+      ],
+      "model": "deepseek-v4-flash",
+      "recordId": "cc000009-0000-4000-8000-000000000009",
+      "seq": 5,
+      "timestamp": "2026-07-22T11:03:40.000Z",
+      "type": "assistant_message"
+    }
+  ]
+}

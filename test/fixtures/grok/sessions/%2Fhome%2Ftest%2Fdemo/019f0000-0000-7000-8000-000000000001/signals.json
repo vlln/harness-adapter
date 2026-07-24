@@ -1,0 +1,8 @@
+{
+  "turnCount": 2,
+  "userMessageCount": 2,
+  "assistantMessageCount": 3,
+  "toolCallCount": 3,
+  "contextTokensUsed": 12345,
+  "sessionDurationSeconds": 95
+}

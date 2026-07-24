@@ -340,10 +340,10 @@ composerHeaders (metadata) → cloud-synced message content → conversation-sea
 
 | Feature | Pi Agent | Claude Code | Kimi Code | Codex |
 |---------|----------|-------------|-----------|-------|
-| **Sub-agent support** | ❌ | ✅ | ✅ | ❌ |
-| **Storage** | — | Separate JSONL + meta.json | Separate wire.jsonl | — |
-| **Discovery** | — | `subagents/` directory | `state.json.agents` map | — |
-| **Causal link** | — | `parentUuid` + `isSidechain` | `parentAgentId` in state.json | — |
+| **Sub-agent support** | ❌ | ✅ | ✅ | ✅ (thread_spawn, 见下注) |
+| **Storage** | — | Separate JSONL + meta.json | Separate wire.jsonl | Separate rollout files (child thread) |
+| **Discovery** | — | `subagents/` directory | `state.json.agents` map | `session_meta.source.subagent.thread_spawn` |
+| **Causal link** | — | `parentUuid` + `isSidechain` | `parentAgentId` in state.json | `parent_thread_id` in child session_meta |
 | **Agent type** | — | `agentType` in meta.json, `attributionAgent` in records | Agent type in state.json | — |
 | **Nesting depth** | — | `spawnDepth` in meta.json | Not tracked | — |
 
@@ -357,6 +357,8 @@ composerHeaders (metadata) → cloud-synced message content → conversation-sea
 | **Nesting depth** | Not tracked | N/A | N/A | Not tracked |
 
 **Notable:** Qwen Code's sub-agents are "managed" (system-managed background agents like `managed-auto-memory-extractor`) rather than user-invoked. They appear as telemetry events in the main chat stream, not as separate files. Cursor supports sub-composers but their content is cloud-synced.
+
+**Update (2026-07-21, Codex adapter spike):** Codex **does** have sub-agent support — the original ❌ was based on older versions/samples. Child threads are separate rollout files whose `session_meta.source` is `{subagent: {thread_spawn: {parent_thread_id, ...}}}`; the parent's `sub_agent_activity.event_id` (`call_*` id) can serve as the tool-call anchor. Also newly observed record types not covered in the per-harness doc: `developer`-role messages, `turn_aborted`, `thread_goal_updated`, `sub_agent_activity`.
 
 ---
 

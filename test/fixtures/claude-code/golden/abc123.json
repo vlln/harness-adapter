@@ -1,0 +1,99 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/Users/test/Project/demo",
+    "git": {
+      "branch": "main"
+    },
+    "harness": "claude-code",
+    "harnessVersion": "2.1.204",
+    "invocation": {
+      "atRecordId": "bbbb0002-0000-4000-8000-000000000002/tool_use/0",
+      "sessionId": "22222222-2222-4222-8222-222222222222"
+    },
+    "model": "claude-opus-4-1",
+    "sessionId": "abc123",
+    "stats": {
+      "totalUsage": {
+        "cacheReadTokens": 400,
+        "cacheWriteTokens": 200,
+        "inputTokens": 2400,
+        "outputTokens": 150
+      },
+      "turnCount": 1
+    }
+  },
+  "records": [
+    {
+      "content": [
+        {
+          "text": "Search the codebase for parser implementations and report file paths.",
+          "type": "text"
+        }
+      ],
+      "recordId": "cccc0001-0000-4000-8000-000000000001",
+      "seq": 0,
+      "timestamp": "2026-07-15T09:00:05.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "I should grep for parser-related identifiers across the repo.",
+          "type": "thinking"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "recordId": "cccc0002-0000-4000-8000-000000000002",
+      "seq": 1,
+      "timestamp": "2026-07-15T09:00:08.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 200,
+        "inputTokens": 900,
+        "outputTokens": 60
+      }
+    },
+    {
+      "args": {
+        "path": "/Users/test/Project/demo",
+        "pattern": "class .*Parser|parseGeneric"
+      },
+      "name": "Grep",
+      "recordId": "cccc0002-0000-4000-8000-000000000002/tool_use/0",
+      "seq": 2,
+      "status": "completed",
+      "timestamp": "2026-07-15T09:00:08.000Z",
+      "toolCallId": "toolu_sub01AAAAAAAAAAAAAAAAAAA",
+      "type": "tool_call"
+    },
+    {
+      "content": "src/parser.ts:12:class RecursiveDescentParser\nsrc/generics.ts:3:parseGeneric",
+      "recordId": "cccc0003-0000-4000-8000-000000000003",
+      "seq": 3,
+      "status": "success",
+      "timestamp": "2026-07-15T09:00:09.500Z",
+      "toolCallId": "toolu_sub01AAAAAAAAAAAAAAAAAAA",
+      "type": "tool_result"
+    },
+    {
+      "content": [
+        {
+          "text": "Found 3 parser files: src/parser.ts, src/generics.ts, src/ast.ts.",
+          "type": "text"
+        }
+      ],
+      "model": "claude-opus-4-1",
+      "recordId": "cccc0004-0000-4000-8000-000000000004",
+      "seq": 4,
+      "timestamp": "2026-07-15T09:00:12.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 400,
+        "inputTokens": 1500,
+        "outputTokens": 90
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-07-18T08:00:00.000Z","sessionId":"55555555-5555-4555-8555-555555555555","content":"/mode code"}
+{"type":"queue-operation","operation":"dequeue","timestamp":"2026-07-18T08:00:00.100Z","sessionId":"55555555-5555-4555-8555-555555555555"}
+{"type":"mode","mode":"code","uuid":"ffff0001-0000-4000-8000-000000000001","parentUuid":null,"isSidechain":false,"timestamp":"2026-07-18T08:00:00.200Z","sessionId":"55555555-5555-4555-8555-555555555555","cwd":"/Users/test/Project/demo","version":"2.1.206","gitBranch":"main"}
+{"type":"permission-mode","permissionMode":"default","uuid":"ffff0002-0000-4000-8000-000000000002","parentUuid":"ffff0001-0000-4000-8000-000000000001","isSidechain":false,"timestamp":"2026-07-18T08:00:00.300Z","sessionId":"55555555-5555-4555-8555-555555555555","cwd":"/Users/test/Project/demo","version":"2.1.206","gitBranch":"main"}
+{"type":"last-prompt","leafUuid":"ffff0002-0000-4000-8000-000000000002","sessionId":"55555555-5555-4555-8555-555555555555"}
