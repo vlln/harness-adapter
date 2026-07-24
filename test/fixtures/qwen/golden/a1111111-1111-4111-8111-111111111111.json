@@ -1,0 +1,88 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/tmp/st",
+    "harness": "qwen-code",
+    "harnessVersion": "0.19.1",
+    "model": "deepseek-v4-flash",
+    "sessionId": "a1111111-1111-4111-8111-111111111111",
+    "stats": {
+      "durationMs": 32073,
+      "totalUsage": {
+        "cacheReadTokens": 22784,
+        "inputTokens": 88358,
+        "outputTokens": 663,
+        "reasoningTokens": 332
+      },
+      "turnCount": 2
+    }
+  },
+  "records": [
+    {
+      "content": [
+        {
+          "text": "Say hello",
+          "type": "text"
+        }
+      ],
+      "recordId": "aa000001-0000-4000-8000-000000000001",
+      "seq": 0,
+      "timestamp": "2026-07-22T09:00:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "The user just said \"Say hello\", so a friendly greeting is the right reply.",
+          "type": "thinking"
+        },
+        {
+          "text": "Hello! How can I help you today?",
+          "type": "text"
+        }
+      ],
+      "model": "deepseek-v4-flash",
+      "recordId": "aa000004-0000-4000-8000-000000000004",
+      "seq": 1,
+      "timestamp": "2026-07-22T09:00:05.695Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 0,
+        "inputTokens": 29849,
+        "outputTokens": 31,
+        "reasoningTokens": 20
+      }
+    },
+    {
+      "content": [
+        {
+          "text": "What is 2+2?",
+          "type": "text"
+        }
+      ],
+      "recordId": "aa000006-0000-4000-8000-000000000006",
+      "seq": 2,
+      "timestamp": "2026-07-22T09:01:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "2+2 = 4.",
+          "type": "text"
+        }
+      ],
+      "model": "deepseek-v4-flash",
+      "recordId": "aa000007-0000-4000-8000-000000000007",
+      "seq": 3,
+      "timestamp": "2026-07-22T09:01:04.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 11008,
+        "inputTokens": 34564,
+        "outputTokens": 93,
+        "reasoningTokens": 70
+      }
+    }
+  ]
+}

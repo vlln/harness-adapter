@@ -1,0 +1,158 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/home/user/agent-space/agent-platform",
+    "git": {
+      "branch": "main"
+    },
+    "harness": "qwen-code",
+    "harnessVersion": "0.19.1",
+    "model": "deepseek-v4-flash",
+    "sessionId": "b2222222-2222-4222-8222-222222222222",
+    "stats": {
+      "durationMs": 100623,
+      "totalUsage": {
+        "cacheReadTokens": 300,
+        "inputTokens": 11300,
+        "outputTokens": 70,
+        "reasoningTokens": 17
+      },
+      "turnCount": 1
+    }
+  },
+  "records": [
+    {
+      "content": [
+        {
+          "text": "Refactor the parser for nested generics",
+          "type": "text"
+        }
+      ],
+      "recordId": "bb000001-0000-4000-8000-000000000001",
+      "seq": 0,
+      "timestamp": "2026-07-22T10:00:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "I'll search for the parser files first.",
+          "type": "thinking"
+        },
+        {
+          "text": "Let me locate the parser code.",
+          "type": "text"
+        }
+      ],
+      "model": "deepseek-v4-flash",
+      "recordId": "bb000002-0000-4000-8000-000000000002",
+      "seq": 1,
+      "timestamp": "2026-07-22T10:00:05.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 300,
+        "inputTokens": 5200,
+        "outputTokens": 48,
+        "reasoningTokens": 12
+      }
+    },
+    {
+      "args": {
+        "path": "src",
+        "pattern": "parser"
+      },
+      "name": "Grep",
+      "recordId": "bb000002-0000-4000-8000-000000000002/functionCall/0",
+      "seq": 2,
+      "status": "completed",
+      "timestamp": "2026-07-22T10:00:05.000Z",
+      "toolCallId": "call-0001",
+      "type": "tool_call"
+    },
+    {
+      "args": {
+        "pattern": "src/**/*.ts"
+      },
+      "name": "Glob",
+      "recordId": "bb000002-0000-4000-8000-000000000002/functionCall/1",
+      "seq": 3,
+      "status": "completed",
+      "timestamp": "2026-07-22T10:00:05.000Z",
+      "toolCallId": "call-0002",
+      "type": "tool_call"
+    },
+    {
+      "content": "{\"matches\":[\"src/parser.ts:12:export function parseGenerics\"]}",
+      "recordId": "bb000003-0000-4000-8000-000000000003",
+      "seq": 4,
+      "status": "success",
+      "timestamp": "2026-07-22T10:00:07.000Z",
+      "toolCallId": "call-0001",
+      "type": "tool_result"
+    },
+    {
+      "content": "{\"files\":[\"src/parser.ts\",\"src/lexer.ts\"]}",
+      "recordId": "bb000003-0000-4000-8000-000000000003/functionResponse/1",
+      "seq": 5,
+      "status": "success",
+      "timestamp": "2026-07-22T10:00:07.000Z",
+      "toolCallId": "call-0002",
+      "type": "tool_result"
+    },
+    {
+      "content": [
+        {
+          "text": "Found the parser. Now I'll edit it.",
+          "type": "text"
+        }
+      ],
+      "model": "deepseek-v4-flash",
+      "recordId": "bb000004-0000-4000-8000-000000000004",
+      "seq": 6,
+      "timestamp": "2026-07-22T10:00:12.000Z",
+      "type": "assistant_message"
+    },
+    {
+      "args": {
+        "file": "src/parser.ts",
+        "new": "parseNestedGenerics",
+        "old": "parseGenerics"
+      },
+      "name": "Edit",
+      "recordId": "bb000004-0000-4000-8000-000000000004/functionCall/0",
+      "seq": 7,
+      "status": "failed",
+      "timestamp": "2026-07-22T10:00:12.000Z",
+      "toolCallId": "call-0003",
+      "type": "tool_call"
+    },
+    {
+      "content": "{\"error\":\"ENOENT: no such file or directory: src/parser.ts\"}",
+      "recordId": "bb000005-0000-4000-8000-000000000005",
+      "seq": 8,
+      "status": "error",
+      "timestamp": "2026-07-22T10:00:14.000Z",
+      "toolCallId": "call-0003",
+      "type": "tool_result"
+    },
+    {
+      "args": {
+        "command": "npm test"
+      },
+      "model": "deepseek-v4-flash",
+      "name": "Bash",
+      "recordId": "bb000006-0000-4000-8000-000000000006",
+      "seq": 9,
+      "status": "interrupted",
+      "timestamp": "2026-07-22T10:00:20.000Z",
+      "toolCallId": "call-0004",
+      "type": "tool_call",
+      "usage": {
+        "cacheReadTokens": 0,
+        "inputTokens": 6100,
+        "outputTokens": 22,
+        "reasoningTokens": 5
+      }
+    }
+  ]
+}

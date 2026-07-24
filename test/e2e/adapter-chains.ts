@@ -27,6 +27,7 @@ import { ClaudeCodeAdapter } from "../../src/adapters/claude-code/index";
 import { CodexAdapter } from "../../src/adapters/codex/index";
 import { DevinAdapter } from "../../src/adapters/devin/index";
 import { KimiCodeAdapter } from "../../src/adapters/kimi-code/index";
+import { QwenCodeAdapter } from "../../src/adapters/qwen/index";
 import { exportSessions } from "../../src/ahs/writer";
 import type { HarnessAdapter } from "../../src/store/adapter";
 import { createDevinFixture } from "../fixtures/devin-db";
@@ -241,6 +242,7 @@ const CODEX_A1 = "019f8000-0000-7000-8000-0000000000a1";
 const CODEX_B2 = "019f8000-0000-7000-8000-0000000000b2";
 const KIMI_SESSION = "11111111-2222-4333-8444-555555555555";
 const KIMI_CHILD = `${KIMI_SESSION}/agent-0`;
+const QWEN_SESSION_B = "b2222222-2222-4222-8222-222222222222";
 
 const cases: E2eCase[] = [
   {
@@ -268,6 +270,18 @@ const cases: E2eCase[] = [
     rootSessionId: KIMI_SESSION,
     childSessionIds: [KIMI_CHILD],
     transcriptMarkers: [`# ${KIMI_SESSION} [kimi-code`, "→ "],
+  },
+  {
+    name: "qwen",
+    makeAdapter: () => new QwenCodeAdapter(path.join(fixturesDir, "qwen")),
+    rootSessionId: QWEN_SESSION_B,
+    childSessionIds: [],
+    transcriptMarkers: [
+      `# ${QWEN_SESSION_B} [qwen-code`,
+      "→ Grep(",
+      "→ Bash(",
+      "(interrupted)",
+    ],
   },
   {
     name: "devin",
