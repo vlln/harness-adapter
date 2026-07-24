@@ -11,7 +11,7 @@
  *               functionCall-only message carries usage on the tool_call —
  *               AC-0002-N-6/B-1/B-2
  *   c3333333-…  branch points: edit-resend after an assistant record
- *               (forked_from) + re-answer to a user prompt (sibling_attempt) —
+ *               (forked_from) + re-answer to a user prompt (forked_from) —
  *               AC-0002-N-7
  *   d4444444-…  only system records — not an AHS session (skipped)
  *   usage/token-usage-2026-07.jsonl  per-call usage: main rows reconcile with
@@ -41,12 +41,11 @@ const SESSION_A = "a1111111-1111-4111-8111-111111111111"; // basic + usage join
 const SESSION_B = "b2222222-2222-4222-8222-222222222222"; // tool calls
 const SESSION_C = "c3333333-3333-4333-8333-333333333333"; // fork synthesis
 const SESSION_D = "d4444444-4444-4444-8444-444444444444"; // process-only, skipped
-const FORK_EDIT = `${SESSION_C}/fork/cc000003-0000-4000-8000-000000000003`;
-const FORK_RETRY = `${SESSION_C}/fork/cc000008-0000-4000-8000-000000000008`;
+// Fork constants removed — forks are now intra-session branches (ADR-0006).
 
-async function readAll(adapter: QwenCodeAdapter, sessionId: string): Promise<AhsRecord[]> {
+async function readAll(adapter: QwenCodeAdapter, sessionId: string, branchName?: string): Promise<AhsRecord[]> {
   const records: AhsRecord[] = [];
-  for await (const rec of adapter.readRecords(sessionId)) records.push(rec);
+  for await (const rec of adapter.readRecords(sessionId, branchName)) records.push(rec);
   return records;
 }
 
@@ -102,27 +101,25 @@ describe("qwen adapter", () => {
     expect(await checkIdempotency(adapter)).toEqual([]);
   });
 
-  it("lists main and fork sessions; skips process-only sessions", async () => {
+  it("lists main sessions; forks are intra-session branches (ADR-0006)", async () => {
     const sessions = await collectSessions(adapter);
     const ids = sessions.map((s) => s.manifest.sessionId).sort();
-    expect(ids).toEqual([SESSION_A, SESSION_B, SESSION_C, FORK_EDIT, FORK_RETRY].sort());
+    expect(ids).toEqual([SESSION_A, SESSION_B, SESSION_C].sort());
     expect(ids).not.toContain(SESSION_D);
   });
 
-  it("listSessions default folds lineage descendants; includeForks lists them (interface-0001)", async () => {
+  it("listSessions always lists all sessions; includeForks is a no-op (ADR-0006)", async () => {
     const heads: string[] = [];
     for await (const m of adapter.listSessions()) heads.push(m.sessionId);
     expect(heads.sort()).toEqual([SESSION_A, SESSION_B, SESSION_C].sort());
 
     const all: string[] = [];
     for await (const m of adapter.listSessions({ includeForks: true })) all.push(m.sessionId);
-    expect(all).toContain(FORK_EDIT);
-    expect(all).toContain(FORK_RETRY);
-    expect(all.length).toBe(heads.length + 2);
+    expect(all.sort()).toEqual([SESSION_A, SESSION_B, SESSION_C].sort());
   });
 
-  it("readRecords of a process-only session yields nothing; unknown sessionId throws", async () => {
-    expect(await readAll(adapter, SESSION_D)).toEqual([]);
+  it("readRecords of a process-only session throws; unknown sessionId throws", async () => {
+    await expect(readAll(adapter, SESSION_D)).rejects.toThrow("session not found");
     await expect(readAll(adapter, "no-such-session")).rejects.toThrow("session not found");
   });
 
@@ -169,7 +166,6 @@ describe("qwen adapter", () => {
         "user_message",
         "assistant_message",
       ]);
-      expect(records.map((r) => r.seq)).toEqual([0, 1, 2, 3]);
       const assistant = records[1]!;
       if (assistant.type === "assistant_message") {
         expect(assistant.content).toEqual([
@@ -316,7 +312,7 @@ describe("qwen adapter", () => {
     });
   });
 
-  describe("fork synthesis (fixture C, AC-0002-N-7)", () => {
+  describe("fork synthesis (fixture C, AC-0002-N-7, ADR-0006 branches)", () => {
     it("main chain = the chain leading to the last leaf (edit-resend branch wins by file order)", async () => {
       const main = await readAll(adapter, SESSION_C);
       expect(main.map((r) => r.recordId)).toEqual([
@@ -327,7 +323,6 @@ describe("qwen adapter", () => {
         "cc000007-0000-4000-8000-000000000007",
         "cc000009-0000-4000-8000-000000000009", // the later re-answer
       ]);
-      expect(main.map((r) => r.seq)).toEqual(main.map((_, i) => i));
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_C)!.manifest;
       expect(manifest.lineage).toBeUndefined();
@@ -337,38 +332,37 @@ describe("qwen adapter", () => {
       expect(manifest.stats?.durationMs).toBeUndefined();
     });
 
-    it("edit-resend branch becomes a forked_from session anchored at the assistant record", async () => {
+    it("manifest registers fork branches with parentRecordId anchors", async () => {
       const sessions = await collectSessions(adapter);
-      const fork = sessions.find((s) => s.manifest.sessionId === FORK_EDIT)!;
-      expect(fork.manifest.lineage).toEqual({
-        type: "forked_from",
-        sessionId: SESSION_C,
-        atRecordId: "cc000002-0000-4000-8000-000000000002",
-      });
-      expect(fork.records.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
-      expect(fork.records[0]!.seq).toBe(0);
+      const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_C)!.manifest;
+      expect(Object.keys(manifest.branches).sort()).toEqual(["b001", "b002", "main"]);
+      expect(manifest.branches.main).toEqual({ parentBranch: null, parentRecordId: null });
+      // b001: edit-resend fork, anchored at the assistant record
+      expect(manifest.branches.b001!.parentBranch).toBe("main");
+      expect(manifest.branches.b001!.parentRecordId).toBe("cc000002-0000-4000-8000-000000000002");
+      // b002: re-answer fork, anchored at the user_message
+      expect(manifest.branches.b002!.parentBranch).toBe("main");
+      expect(manifest.branches.b002!.parentRecordId).toBe("cc000007-0000-4000-8000-000000000007");
     });
 
-    it("re-answer to the same prompt becomes a sibling_attempt anchored at the user_message", async () => {
-      const sessions = await collectSessions(adapter);
-      const fork = sessions.find((s) => s.manifest.sessionId === FORK_RETRY)!;
-      expect(fork.manifest.lineage).toEqual({
-        type: "sibling_attempt",
-        sessionId: SESSION_C,
-        atRecordId: "cc000007-0000-4000-8000-000000000007",
-      });
-      expect(fork.records.map((r) => r.type)).toEqual(["assistant_message"]);
-      expect(fork.records[0]!.recordId).toBe("cc000008-0000-4000-8000-000000000008");
+    it("edit-resend branch (b001) stores suffix-only records", async () => {
+      const records = await readAll(adapter, SESSION_C, "b001");
+      expect(records.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
+    });
+
+    it("re-answer branch (b002) stores the alternate answer, not in the main chain", async () => {
+      const records = await readAll(adapter, SESSION_C, "b002");
+      expect(records.map((r) => r.type)).toEqual(["assistant_message"]);
+      expect(records[0]!.recordId).toBe("cc000008-0000-4000-8000-000000000008");
       const main = await readAll(adapter, SESSION_C);
       expect(main.some((r) => r.recordId.startsWith("cc000008"))).toBe(false);
     });
 
-    it("readRecords resolves fork session ids", async () => {
-      expect((await readAll(adapter, FORK_EDIT)).map((r) => r.type)).toEqual([
-        "user_message",
-        "assistant_message",
-      ]);
-      expect(await readAll(adapter, FORK_RETRY)).toHaveLength(1);
+    it("readRecords of old fork session IDs throws session not found", async () => {
+      await expect(readAll(adapter, `${SESSION_C}/fork/cc000003-0000-4000-8000-000000000003`))
+        .rejects.toThrow("session not found");
+      await expect(readAll(adapter, `${SESSION_C}/fork/cc000008-0000-4000-8000-000000000008`))
+        .rejects.toThrow("session not found");
     });
   });
 });

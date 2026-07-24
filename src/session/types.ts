@@ -7,11 +7,15 @@ import type { HarnessAdapter, SessionFilter } from "../store/adapter";
 /**
  * Public types of the Session Facade (interface-0003). The authoritative
  * implementation is src/session/facade.ts.
+ *
+ * ADR-0006: Task is now intra-session (session = directory with multiple
+ * branches). The facade projects the HEAD branch and stitches the HEAD
+ * chain for the user view.
  */
 
 /**
  * One item of the conversation projection (interface-0003 messages()
- * mapping table). Order follows seq. `timestamp` is carried on every item
+ * mapping table). Order follows file (JSONL line) order. `timestamp` is carried on every item
  * (including tool items — see the interface; additive, items are unusable
  * on a timeline without it).
  */
@@ -30,7 +34,7 @@ export type ConversationItem =
       timestamp: string;
     };
 
-/** State records exposed as-is (seq order) via events(). */
+/** State records exposed as-is (file order) via events(). */
 export type StateEvent = Extract<
   AhsRecord,
   { type: "turn_boundary" | "model_change" | "compaction" | "goal_update" }
@@ -39,28 +43,28 @@ export type StateEvent = Extract<
 /** Storage view of one session (interface-0003). */
 export interface AhsSession {
   readonly manifest: Manifest;
-  /** Conversation projection (tool pairing done inside the projection). */
+  /** Conversation projection of the HEAD branch (tool pairing done inside). */
   messages(): ConversationItem[];
-  /** State-event timeline (turn_boundary/model_change/compaction/goal_update). */
+  /** State-event timeline of the HEAD branch (turn_boundary/model_change/compaction/goal_update). */
   events(): StateEvent[];
-  /** This session's usage, summed over its own records. */
+  /** This session's usage, summed over HEAD branch records. */
   readonly usage: Usage;
   /** Direct invocation children discoverable in the same store. */
   children(): Promise<AhsSession[]>;
 }
 
-/** User view: a lineage group + its HEAD pointer (interface-0003). */
+/** User view: a session's HEAD chain (ADR-0006: intra-session). */
 export interface AhsTask {
-  readonly groupId: string;
-  /** HEAD session (recency heuristic, same as the relations store). */
+  /** The session this task belongs to. */
+  readonly sessionId: string;
+  /** HEAD branch session view. */
   readonly head: AhsSession;
-  /** All sessions of the group (forks/attempts), sorted by sessionId. */
-  readonly members: AhsSession[];
+  /** Branch names in this session, sorted. */
+  readonly branches: string[];
   /**
-   * HEAD-chain stitching: shared prefixes walked back along lineage
-   * (cut at atRecordId; null = full parent slice; absent = parent
-   * contributes nothing) + the HEAD suffix. One linear conversation,
-   * no duplicated prefix.
+   * HEAD-chain stitching: walk from HEAD branch back through parentBranch
+   * to root branch, cutting at each segment's parentRecordId. One linear
+   * conversation, no duplicated prefix.
    */
   messages(): ConversationItem[];
 }
@@ -71,6 +75,6 @@ export interface HarnessFacade {
   listSessions(filter?: SessionFilter): AsyncIterable<Manifest>;
   /** Storage view. Throws SessionNotFoundError for unknown ids. */
   loadSession(sessionId: string): Promise<AhsSession>;
-  /** User view (lineage group + HEAD). Throws SessionNotFoundError for unknown ids. */
+  /** User view (HEAD chain stitching). Throws SessionNotFoundError for unknown ids. */
   loadTask(sessionId: string): Promise<AhsTask>;
 }

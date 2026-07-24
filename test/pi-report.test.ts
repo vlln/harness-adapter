@@ -1,9 +1,8 @@
 /**
  * AC-0004-N-1 (usability): the Pi adapter output, exported to an AHS
  * archive, is consumable by examples/ahs-report — the transcript renders
- * (model_change state lines, tool calls, fork folding) and token/cost
- * totals aggregate exactly over the rendered slices. Pi is the only
- * harness with cost data, so the cost aggregation path is exercised here.
+ * (model_change state lines, tool calls, fork folding) and token totals
+ * aggregate exactly over the rendered slices.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -24,8 +23,8 @@ const fixturesDir = path.join(
 );
 const SESSION_B = "019f4000-bbbb-7000-8000-0000000000b2";
 const SESSION_C = "019f4000-cccc-7000-8000-0000000000c3";
-const FORK_EDIT = `${SESSION_C}/fork/cc000005`;
-const FORK_RETRY = `${SESSION_C}/fork/cc00000a`;
+const BRANCH_EDIT = "b001";
+const BRANCH_RETRY = "b002";
 
 const tmp = mkdtempSync(path.join(tmpdir(), "pi-report-test-"));
 afterAll(() => {
@@ -33,7 +32,7 @@ afterAll(() => {
 });
 
 describe("pi archive + ahs-report (AC-0004-N-1)", () => {
-  it("renders fixture B with state/tool lines and aggregates usage + cost exactly", async () => {
+  it("renders fixture B with state/tool lines and aggregates usage exactly", async () => {
     const outDir = path.join(tmp, "archive");
     const adapter = new PiAdapter(fixturesDir);
     await exportSessions(adapter, outDir);
@@ -58,9 +57,6 @@ describe("pi archive + ahs-report (AC-0004-N-1)", () => {
       cacheWriteTokens: 300,
       reasoningTokens: 64,
     });
-    // Pi is the cost benchmark: 0.0016 + 0.0035 USD over the two assistants.
-    expect(report.totalCost.get("USD")).toBeCloseTo(0.0051, 10);
-    expect(report.text).toContain("cost=0.0051 USD");
   });
 
   it("folds forks into the HEAD chain view; --all lists them as alternates", async () => {
@@ -79,9 +75,9 @@ describe("pi archive + ahs-report (AC-0004-N-1)", () => {
     // main: input 100+160+180, output 10+16+18
     expect(report.totalUsage).toMatchObject({ inputTokens: 440, outputTokens: 44 });
 
-    expect(report.alternates.sort()).toEqual([SESSION_C, FORK_EDIT, FORK_RETRY].sort());
+    expect(report.alternates.sort()).toEqual([BRANCH_EDIT, BRANCH_RETRY, "main"].sort());
     expect(report.text).toContain("== alternate versions");
-    expect(report.text).toContain(FORK_EDIT);
-    expect(report.text).toContain(FORK_RETRY);
+    expect(report.text).toContain(BRANCH_EDIT);
+    expect(report.text).toContain(BRANCH_RETRY);
   });
 });

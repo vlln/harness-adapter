@@ -3,8 +3,9 @@
  * fixtures involved). Every builder emits schema-valid shapes by default;
  * tests pass overrides to construct negative cases.
  *
- * Linear-session model (ADR-0005): records carry no parentId; seq is the
- * only structural field.
+ * Multi-branch session model (ADR-0006): each session has a branch registry
+ * (branches) and HEAD pointer. Records are per-branch; `records` is the
+ * default/HEAD branch set.
  */
 
 import type { Manifest } from "../src/schema/manifest";
@@ -15,6 +16,7 @@ import type { SessionData } from "../src/validate/index";
 export const BASE_TIME = "2026-07-20T10:00:00.000Z";
 
 export function makeManifest(overrides: Partial<Manifest> = {}): Manifest {
+  const { branches: br, HEAD: hd, ...rest } = overrides;
   return {
     sessionId: "sess-1",
     harness: "fake",
@@ -22,7 +24,11 @@ export function makeManifest(overrides: Partial<Manifest> = {}): Manifest {
     ahsVersion: "0.1.0",
     cwd: "/tmp",
     model: "fake-model",
-    ...overrides,
+    branches: br ?? {
+      main: { parentBranch: null, parentRecordId: null },
+    },
+    HEAD: hd ?? { branch: "main", recordId: null },
+    ...rest,
   };
 }
 
@@ -32,42 +38,32 @@ interface RecordExtras {
   usage?: AhsRecord["usage"];
 }
 
-function base(seq: number, extras: RecordExtras = {}) {
+function base(extras: RecordExtras = {}) {
   return {
-    recordId: extras.recordId ?? `r${seq}`,
-    seq,
+    recordId: extras.recordId ?? "r0",
     timestamp: extras.timestamp ?? BASE_TIME,
     ...(extras.usage !== undefined ? { usage: extras.usage } : {}),
   };
 }
 
-export function userMessage(
-  seq: number,
-  text: string,
-  extras: RecordExtras = {},
-): AhsRecord {
-  return { ...base(seq, extras), type: "user_message", content: [{ type: "text", text }] };
+export function userMessage(text: string, extras: RecordExtras = {}): AhsRecord {
+  return { ...base(extras), type: "user_message", content: [{ type: "text", text }] };
 }
 
-export function assistantMessage(
-  seq: number,
-  text: string,
-  extras: RecordExtras = {},
-): AhsRecord {
+export function assistantMessage(text: string, extras: RecordExtras = {}): AhsRecord {
   return {
-    ...base(seq, extras),
+    ...base(extras),
     type: "assistant_message",
     content: [{ type: "text", text }],
   };
 }
 
 export function toolCall(
-  seq: number,
   toolCallId: string,
   extras: RecordExtras & { name?: string; status?: "completed" | "failed" | "interrupted" } = {},
 ): AhsRecord {
   return {
-    ...base(seq, extras),
+    ...base(extras),
     type: "tool_call",
     toolCallId,
     name: extras.name ?? "Bash",
@@ -77,13 +73,12 @@ export function toolCall(
 }
 
 export function toolResult(
-  seq: number,
   toolCallId: string,
   content: string,
   extras: RecordExtras & { sessionIds?: string[] } = {},
 ): AhsRecord {
   return {
-    ...base(seq, extras),
+    ...base(extras),
     type: "tool_result",
     toolCallId,
     content,
@@ -91,12 +86,19 @@ export function toolResult(
   };
 }
 
-/** A valid minimal session: root user message only. */
-export function makeSession(sessionId: string, records?: AhsRecord[], manifest?: Partial<Manifest>): SessionData {
-  return {
+/** A valid minimal session: root user message only, single "main" branch. */
+export function makeSession(
+  sessionId: string,
+  records?: AhsRecord[],
+  manifest?: Partial<Manifest>,
+  branchRecords?: Record<string, AhsRecord[]>,
+): SessionData {
+  const result: SessionData = {
     manifest: makeManifest({ sessionId, ...manifest }),
-    records: records ?? [userMessage(0, "hi")],
+    records: records ?? [userMessage("hi")],
   };
+  if (branchRecords !== undefined) result.branchRecords = branchRecords;
+  return result;
 }
 
 /** Stub HarnessAdapter returning canned sessions — also exercises the writer's adapter-facing API. */
@@ -107,10 +109,14 @@ export function fakeAdapter(sessions: SessionData[]): HarnessAdapter {
     async *listSessions() {
       for (const s of sessions) yield s.manifest;
     },
-    async *readRecords(sessionId: string) {
+    async *readRecords(sessionId: string, branchName?: string) {
       const session = sessions.find((s) => s.manifest.sessionId === sessionId);
       if (session === undefined) throw new Error(`unknown session: ${sessionId}`);
-      yield* session.records;
+      if (branchName !== undefined && session.branchRecords?.[branchName]) {
+        yield* session.branchRecords[branchName]!;
+      } else {
+        yield* session.records;
+      }
     },
   };
 }

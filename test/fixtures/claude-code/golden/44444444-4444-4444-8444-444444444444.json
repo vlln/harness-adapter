@@ -1,6 +1,16 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "eeee0006-0000-4000-8000-000000000006"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/Users/test/Project/demo",
     "git": {
       "branch": "feature/multi-tool"
@@ -27,7 +37,6 @@
         }
       ],
       "recordId": "eeee0002-0000-4000-8000-000000000002",
-      "seq": 0,
       "timestamp": "2026-07-17T11:00:01.000Z",
       "type": "user_message"
     },
@@ -39,7 +48,6 @@
       "model": "claude-opus-4-1",
       "name": "Bash",
       "recordId": "eeee0003-0000-4000-8000-000000000003",
-      "seq": 1,
       "status": "completed",
       "timestamp": "2026-07-17T11:00:03.000Z",
       "toolCallId": "toolu_multi01AAAAAAAAAAAAAAAA",
@@ -58,7 +66,6 @@
       },
       "name": "Bash",
       "recordId": "eeee0003-0000-4000-8000-000000000003/tool_use/1",
-      "seq": 2,
       "status": "failed",
       "timestamp": "2026-07-17T11:00:03.000Z",
       "toolCallId": "toolu_multi02AAAAAAAAAAAAAAAA",
@@ -72,14 +79,12 @@
         }
       ],
       "recordId": "eeee0005-0000-4000-8000-000000000005",
-      "seq": 3,
       "timestamp": "2026-07-17T11:00:06.000Z",
       "type": "user_message"
     },
     {
       "content": "[{\"type\":\"text\",\"text\":\"build ok\"}]",
       "recordId": "eeee0005-0000-4000-8000-000000000005",
-      "seq": 4,
       "status": "success",
       "timestamp": "2026-07-17T11:00:06.000Z",
       "toolCallId": "toolu_multi01AAAAAAAAAAAAAAAA",
@@ -88,7 +93,6 @@
     {
       "content": "2 tests failed",
       "recordId": "eeee0005-0000-4000-8000-000000000005/tool_result/1",
-      "seq": 5,
       "status": "error",
       "timestamp": "2026-07-17T11:00:06.000Z",
       "toolCallId": "toolu_multi02AAAAAAAAAAAAAAAA",
@@ -103,7 +107,6 @@
       ],
       "model": "claude-opus-4-1",
       "recordId": "eeee0006-0000-4000-8000-000000000006",
-      "seq": 6,
       "timestamp": "2026-07-17T11:00:09.000Z",
       "type": "assistant_message"
     }

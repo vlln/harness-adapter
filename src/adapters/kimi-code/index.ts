@@ -77,7 +77,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   command, not the CreateGoal tool). goal.update WITH a status →
  *   goal_update verdict: "complete" → "met", "blocked" → "unmet", "paused"
  *   → "pending" (still open); goalId omitted (verdict events carry none —
- *   multiple verdicts correlate via seq, per spec). goal.update WITHOUT
+ *   multiple verdicts correlate via emission order, per spec). goal.update WITHOUT
  *   status ({turnsUsed}/{tokensUsed} progress telemetry) and goal.clear
  *   (ambiguous removal, no verdict semantics) are DROPPED.
  *   CreateGoal/UpdateGoal/GetGoal TOOL calls stay ordinary tool_call
@@ -112,9 +112,9 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   createdAt/updatedAt/lastPrompt/custom: dropped (no Manifest home).
  *
  * Causal synthesis: wires are temporal streams without parent links — a
- * linear chain is synthesized per wire (seq = emission index; the linear
+ * linear chain is synthesized per wire (emission order; the linear
  * model has no parentId). Record ids are
- * `<sessionId>:<seq>`; timestamps come from the Unix-ms `time` field
+ * `<sessionId>:<index>`; timestamps come from the Unix-ms `time` field
  * converted to ISO 8601. Directory entries are sorted and there are no
  * wall-clock reads, so output is byte-identical across runs.
  */
@@ -231,7 +231,7 @@ function sumUsageInto(target: Usage, add: Usage): void {
 
 /** Omit that distributes over the AhsRecord discriminated union. */
 type RecordPayload<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
-type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "seq" | "timestamp">;
+type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "timestamp">;
 
 /**
  * Sub-agent forward-link context for one session directory (ADR-0005):
@@ -250,6 +250,12 @@ const AGENT_ID_HEADER = /^agent_id:\s*(\S+)(?:\r?\n|$)/;
 /** Matches one `<subagent agent_id="..."` entry of an `AgentSwarm` result. */
 const SWARM_SUBAGENT_ID = /<subagent\s+agent_id="([^"]+)"/g;
 
+/** Projected wire output: main branch records + optional rewind branches. */
+export interface ProjectedWire {
+  main: AhsRecord[];
+  branches: Record<string, AhsRecord[]>;
+}
+
 /**
  * Project ONE agent's wire.jsonl (+ its plans/ directory) into an AHS
  * record list (a synthesized linear chain). `sessionId` scopes recordIds.
@@ -257,11 +263,61 @@ const SWARM_SUBAGENT_ID = /<subagent\s+agent_id="([^"]+)"/g;
  * whose output names a known sub-agent carries the invocation forward link
  * (`sessionIds` → the child session(s); AgentSwarm results list ALL
  * resolved children).
+ *
+ * Rewind (forked event): when the wire contains a `forked` event, the
+ * stream is split into the main branch (records before the first forked
+ * event) and rewind branches (records after each forked event). The forked
+ * event itself is not emitted as a record.
  */
 export function projectRecords(
   sessionId: string,
   lines: RawLine[],
   planTexts: string[] = [],
+  link?: SubAgentLink,
+): ProjectedWire {
+  // Find forked event positions (split points).
+  const forkPositions: number[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i]!.type === "forked") forkPositions.push(i);
+  }
+
+  if (forkPositions.length === 0) {
+    // No rewind: single main branch.
+    const records = projectSingleStream(sessionId, lines, planTexts, link);
+    return { main: records, branches: {} };
+  }
+
+  // Split the wire at the first forked event.
+  const firstFork = forkPositions[0]!;
+  const mainLines = lines.slice(0, firstFork);
+  const mainRecords = projectSingleStream(sessionId, mainLines, planTexts, link);
+
+  const branches: Record<string, AhsRecord[]> = {};
+  let branchIndex = 0;
+  let prevPos = firstFork;
+  for (let fi = 0; fi < forkPositions.length; fi += 1) {
+    const forkPos = forkPositions[fi]!;
+    const start = forkPos + 1; // skip the forked event itself
+    const end = fi + 1 < forkPositions.length ? forkPositions[fi + 1]! : lines.length;
+    const branchLines = lines.slice(start, end);
+    branchIndex += 1;
+    const branchName = `b${String(branchIndex).padStart(3, "0")}`;
+    branches[branchName] = projectSingleStream(
+      `${sessionId}/${branchName}`,
+      branchLines,
+      [], // plans ride on the main branch only
+      undefined, // invocation links only on the main branch
+    );
+  }
+
+  return { main: mainRecords, branches };
+}
+
+/** Project a single linear stream into AhsRecord[] (no rewind split). */
+function projectSingleStream(
+  sessionId: string,
+  lines: RawLine[],
+  planTexts: string[],
   link?: SubAgentLink,
 ): AhsRecord[] {
   const records: AhsRecord[] = [];
@@ -272,10 +328,8 @@ export function projectRecords(
   let pendingParts: ContentBlock[] = [];
 
   const emit = (timestamp: string, partial: EmittableRecord): void => {
-    const seq = records.length;
     const rec = {
-      recordId: `${sessionId}:${seq}`,
-      seq,
+      recordId: `${sessionId}:${records.length}`,
       timestamp,
       ...(pendingUsage !== undefined ? { usage: pendingUsage } : {}),
       ...partial,
@@ -483,6 +537,7 @@ function buildManifest(
   state: StateJson,
   lines: RawLine[],
   records: AhsRecord[],
+  extraBranches?: Record<string, { parentRecordId: string; records: AhsRecord[] }>,
 ): Manifest {
   let model: string | undefined;
   let provider: string | undefined;
@@ -510,6 +565,16 @@ function buildManifest(
   }
   const hasUsage = Object.keys(totalUsage).length > 0;
 
+  const branches: Manifest["branches"] = {
+    main: { parentBranch: null, parentRecordId: null },
+  };
+  if (extraBranches !== undefined) {
+    for (const [name, info] of Object.entries(extraBranches)) {
+      branches[name] = { parentBranch: "main", parentRecordId: info.parentRecordId };
+    }
+  }
+  const lastRecordId = records.length > 0 ? records[records.length - 1]!.recordId : null;
+
   return {
     sessionId: agent.sessionId,
     harness: "kimi-code",
@@ -521,6 +586,8 @@ function buildManifest(
     ...(state.title !== undefined
       ? { title: state.title, titleOrigin: state.isCustomTitle === true ? ("custom" as const) : ("generated" as const) }
       : {}),
+    branches,
+    HEAD: { branch: "main", recordId: lastRecordId },
     ...(agent.invocation !== undefined ? { invocation: agent.invocation } : {}),
     stats: {
       turnCount,
@@ -649,9 +716,6 @@ export class KimiCodeAdapter implements HarnessAdapter {
 
   async *listSessions(filter?: SessionFilter): AsyncIterable<Manifest> {
     if (filter?.harness !== undefined && filter.harness !== this.harness) return;
-    // includeForks: this adapter NEVER emits lineage (kimi forked events
-    // carry no source session id — source-unavailable), so every session is
-    // its own lineage group's HEAD and the default view equals includeForks.
     for (const session of await this.discover()) {
       const link: SubAgentLink = {
         rootSessionId: session.sessionId,
@@ -659,17 +723,26 @@ export class KimiCodeAdapter implements HarnessAdapter {
       };
       for (const agent of session.agents) {
         const lines = await this.loadWire(agent);
-        const records = projectRecords(agent.sessionId, lines, await this.loadPlans(agent), link);
+        const plans = await this.loadPlans(agent);
+        const projected = projectRecords(agent.sessionId, lines, plans, link);
         // Wires with zero projectable content are not AHS sessions — skip.
-        if (records.length === 0) continue;
-        const manifest = buildManifest(agent, session.state, lines, records);
+        if (projected.main.length === 0) continue;
+        const extraBranches: Record<string, { parentRecordId: string; records: AhsRecord[] }> = {};
+        for (const [name, brecords] of Object.entries(projected.branches)) {
+          if (brecords.length === 0) continue;
+          const parentRecordId = projected.main.length > 0
+            ? projected.main[projected.main.length - 1]!.recordId
+            : "";
+          extraBranches[name] = { parentRecordId, records: brecords };
+        }
+        const manifest = buildManifest(agent, session.state, lines, projected.main, extraBranches);
         if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) continue;
         yield manifest;
       }
     }
   }
 
-  async *readRecords(sessionId: string): AsyncIterable<AhsRecord> {
+  async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
     for (const session of await this.discover()) {
       const link: SubAgentLink = {
         rootSessionId: session.sessionId,
@@ -677,12 +750,20 @@ export class KimiCodeAdapter implements HarnessAdapter {
       };
       for (const agent of session.agents) {
         if (agent.sessionId === sessionId) {
-          yield* projectRecords(
+          const projected = projectRecords(
             agent.sessionId,
             await this.loadWire(agent),
             await this.loadPlans(agent),
             link,
           );
+          const targetBranch = branchName ?? "main";
+          if (targetBranch === "main") {
+            yield* projected.main;
+          } else {
+            const brecords = projected.branches[targetBranch];
+            if (brecords === undefined) throw new Error(`branch not found: ${targetBranch}`);
+            yield* brecords;
+          }
           return;
         }
       }

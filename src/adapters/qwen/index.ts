@@ -47,7 +47,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   order is recency) continues the chain, every other child subtree becomes
  *   a fork session `<sessionId>/fork/<branch-root uuid>` storing only its
  *   suffix, with lineage anchored at the branch point's first projected
- *   record (user_message ⇔ sibling_attempt, else forked_from).
+ *   record (forked_from).
  * - Duplicate lines sharing a uuid keep their first occurrence; kept lines
  *   with an unknown/null parent mid-file re-anchor to the previous kept line
  *   (chain restarts), preserving a single root.
@@ -68,7 +68,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * - `usage_record.jsonl` contributes stats.durationMs (summed across the
  *   session's entries — one entry is appended per CLI run of the session).
  *
- * Determinism (AC-0002-N-5): directory entries are sorted, chains and seq
+ * Determinism (AC-0002-N-5): directory entries are sorted, chains
  * follow file order, recordIds are source uuids, fork ids are derived from
  * source uuids — no wall-clock reads anywhere.
  */
@@ -177,10 +177,8 @@ function stringifyResponse(response: unknown): string {
  */
 export function projectRecords(lines: RawLine[]): AhsRecord[] {
   const records: AhsRecord[] = [];
-  let seq = 0;
   const emit = (rec: AhsRecord): void => {
     records.push(rec);
-    seq += 1;
   };
 
   for (const line of lines) {
@@ -195,7 +193,7 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
         if (typeof part.text === "string") textBlocks.push({ type: "text", text: part.text });
       }
       if (textBlocks.length > 0) {
-        emit({ recordId: uuid, seq, timestamp, type: "user_message", content: textBlocks });
+        emit({ recordId: uuid, timestamp, type: "user_message", content: textBlocks });
       }
       let responseIndex = 0;
       for (const part of parts) {
@@ -211,7 +209,6 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
           typeof response === "object" && response !== null && "error" in response;
         emit({
           recordId,
-          seq,
           timestamp,
           type: "tool_result",
           // GenAI pairs by name when no call id exists.
@@ -245,7 +242,6 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
         emit({
           ...extras,
           recordId: uuid,
-          seq,
           timestamp,
           type: "assistant_message",
           content: contentBlocks,
@@ -265,7 +261,6 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
         emit({
           ...carryExtras,
           recordId,
-          seq,
           timestamp,
           type: "tool_call",
           toolCallId: fc.id ?? `${uuid}/functionCall/${callIndex - 1}`,
@@ -493,7 +488,7 @@ function buildManifest(
   runtime: RuntimeMeta | undefined,
   globalUsage: SessionGlobalUsage | undefined,
   durationMs: number | undefined,
-  lineage?: Lineage,
+  branches?: Record<string, { parentRecordId: string }>,
 ): Manifest {
   const firstWith = <K extends keyof RawLine>(key: K): string | undefined => {
     for (const line of lines) {
@@ -540,6 +535,15 @@ function buildManifest(
   }
 
   const branch = firstWith("gitBranch");
+  const branchRegistry: Manifest["branches"] = {
+    main: { parentBranch: null, parentRecordId: null },
+  };
+  if (branches !== undefined) {
+    for (const [name, info] of Object.entries(branches)) {
+      branchRegistry[name] = { parentBranch: "main", parentRecordId: info.parentRecordId };
+    }
+  }
+  const lastRecordId = records.length > 0 ? records[records.length - 1]!.recordId : null;
   const hasUsage = Object.keys(totalUsage).length > 0;
   return {
     sessionId,
@@ -549,7 +553,8 @@ function buildManifest(
     cwd: firstWith("cwd") ?? runtime?.work_dir ?? "",
     ...(branch !== undefined ? { git: { branch } } : {}),
     model: model ?? "unknown",
-    ...(lineage !== undefined ? { lineage } : {}),
+    branches: branchRegistry,
+    HEAD: { branch: "main", recordId: lastRecordId },
     stats: {
       turnCount,
       ...(hasUsage ? { totalUsage } : {}),
@@ -560,11 +565,14 @@ function buildManifest(
 
 interface ProjectedSession {
   manifest: Manifest;
+  /** Main branch records. */
   records: AhsRecord[];
+  /** Branch name → records. */
+  branchRecords: Map<string, AhsRecord[]>;
 }
 
 interface ProjectedFile {
-  sessions: Map<string, ProjectedSession>;
+  session: ProjectedSession | null;
 }
 
 export class QwenCodeAdapter implements HarnessAdapter {
@@ -696,79 +704,81 @@ export class QwenCodeAdapter implements HarnessAdapter {
     const globalUsage = (await this.loadGlobalUsage()).get(session.sessionId);
     const durationMs = (await this.loadDurations()).get(session.sessionId);
 
-    const sessions = new Map<string, ProjectedSession>();
+    let mainRecords: AhsRecord[] = [];
+    const branchRecords = new Map<string, AhsRecord[]>();
+    const branchMeta: Record<string, { parentRecordId: string }> = {};
+    let branchIndex = 0;
     let isBaseChain = true;
+
     for (const chain of chains) {
       const chainLines = chain.nodes.map((n) => n.line);
       const records = projectRecords(chainLines);
-      let lineage: Lineage | undefined;
-      if (chain.anchor !== undefined && chain.parentSessionId !== undefined) {
-        // Resolve the anchor to the nearest ancestor with a projected record
-        // in the parent session.
+
+      if (chain.anchor === undefined || chain.parentSessionId === undefined) {
+        // Main chain
+        mainRecords = records;
+      } else {
+        // Fork → branch. Resolve the anchor to the nearest ancestor with a
+        // projected record in the parent chain.
         let node: TreeNode | null = chain.anchor;
         let anchorRec: AhsRecord | undefined;
-        const parentRecords = sessions.get(chain.parentSessionId)?.records ?? [];
+        const parentRecords = chain.parentSessionId === session.sessionId
+          ? mainRecords
+          : branchRecords.get(chain.parentSessionId) ?? [];
         while (node !== null && anchorRec === undefined) {
           anchorRec = parentRecords.find((r) => r.recordId === node!.uuid);
           node = node.parent;
         }
-        lineage = {
-          type: anchorRec?.type === "user_message" ? "sibling_attempt" : "forked_from",
-          sessionId: chain.parentSessionId,
-          ...(anchorRec !== undefined ? { atRecordId: anchorRec.recordId } : {}),
-        };
+        branchIndex += 1;
+        const branchName = `b${String(branchIndex).padStart(3, "0")}`;
+        if (records.length > 0) {
+          branchRecords.set(branchName, records);
+          branchMeta[branchName] = {
+            parentRecordId: anchorRec?.recordId ?? "",
+          };
+        }
       }
-      const manifest = buildManifest(
-        chain.sessionId,
-        chainLines,
-        records,
-        session.runtime,
-        isBaseChain ? globalUsage : undefined,
-        isBaseChain ? durationMs : undefined,
-        lineage,
-      );
       isBaseChain = false;
-      sessions.set(chain.sessionId, { manifest, records });
     }
 
-    // Drop sessions with zero projectable records (process-record-only files
-    // are not AHS sessions).
-    for (const [sid, projected] of sessions) {
-      if (projected.records.length === 0) sessions.delete(sid);
-    }
-    return { sessions };
+    if (mainRecords.length === 0) return { session: null };
+
+    const manifest = buildManifest(
+      session.sessionId,
+      lines,
+      mainRecords,
+      session.runtime,
+      globalUsage,
+      durationMs,
+      branchMeta,
+    );
+    return { session: { manifest, records: mainRecords, branchRecords } };
   }
 
   async *listSessions(filter?: SessionFilter): AsyncIterable<Manifest> {
     if (filter?.harness !== undefined && filter.harness !== this.harness) return;
-    const includeForks = filter?.includeForks === true;
     for (const session of await this.discover()) {
-      const { sessions } = await this.projectFile(session);
-      for (const projected of sessions.values()) {
-        const { manifest } = projected;
-        // Default view: group HEADs only — lineage descendants (forks) are
-        // folded away unless includeForks is set (interface-0001).
-        if (!includeForks && manifest.lineage !== undefined) continue;
-        if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) continue;
-        yield manifest;
-      }
+      const { session: projected } = await this.projectFile(session);
+      if (projected === null) continue;
+      if (filter?.cwd !== undefined && projected.manifest.cwd !== filter.cwd) continue;
+      yield projected.manifest;
     }
   }
 
-  async *readRecords(sessionId: string): AsyncIterable<AhsRecord> {
+  async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
     const discovered = await this.discover();
     for (const session of discovered) {
       if (session.sessionId === sessionId) {
-        const { sessions } = await this.projectFile(session);
-        yield* sessions.get(sessionId)?.records ?? [];
-        return;
-      }
-    }
-    for (const session of discovered) {
-      const { sessions } = await this.projectFile(session);
-      const projected = sessions.get(sessionId);
-      if (projected !== undefined) {
-        yield* projected.records;
+        const { session: projected } = await this.projectFile(session);
+        if (projected === null) throw new Error(`session not found: ${sessionId}`);
+        const targetBranch = branchName ?? "main";
+        if (targetBranch === "main") {
+          yield* projected.records;
+        } else {
+          const brecords = projected.branchRecords.get(targetBranch);
+          if (brecords === undefined) throw new Error(`branch not found: ${targetBranch}`);
+          yield* brecords;
+        }
         return;
       }
     }

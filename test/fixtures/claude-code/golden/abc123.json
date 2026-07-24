@@ -1,6 +1,16 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "cccc0004-0000-4000-8000-000000000004"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/Users/test/Project/demo",
     "git": {
       "branch": "main"
@@ -32,7 +42,6 @@
         }
       ],
       "recordId": "cccc0001-0000-4000-8000-000000000001",
-      "seq": 0,
       "timestamp": "2026-07-15T09:00:05.000Z",
       "type": "user_message"
     },
@@ -45,7 +54,6 @@
       ],
       "model": "claude-opus-4-1",
       "recordId": "cccc0002-0000-4000-8000-000000000002",
-      "seq": 1,
       "timestamp": "2026-07-15T09:00:08.000Z",
       "type": "assistant_message",
       "usage": {
@@ -62,7 +70,6 @@
       },
       "name": "Grep",
       "recordId": "cccc0002-0000-4000-8000-000000000002/tool_use/0",
-      "seq": 2,
       "status": "completed",
       "timestamp": "2026-07-15T09:00:08.000Z",
       "toolCallId": "toolu_sub01AAAAAAAAAAAAAAAAAAA",
@@ -71,7 +78,6 @@
     {
       "content": "src/parser.ts:12:class RecursiveDescentParser\nsrc/generics.ts:3:parseGeneric",
       "recordId": "cccc0003-0000-4000-8000-000000000003",
-      "seq": 3,
       "status": "success",
       "timestamp": "2026-07-15T09:00:09.500Z",
       "toolCallId": "toolu_sub01AAAAAAAAAAAAAAAAAAA",
@@ -86,7 +92,6 @@
       ],
       "model": "claude-opus-4-1",
       "recordId": "cccc0004-0000-4000-8000-000000000004",
-      "seq": 4,
       "timestamp": "2026-07-15T09:00:12.000Z",
       "type": "assistant_message",
       "usage": {

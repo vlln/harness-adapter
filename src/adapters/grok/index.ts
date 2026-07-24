@@ -85,8 +85,8 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * HEAD.
  *
  * Causal synthesis: chat_history is a temporal stream without parent
- * links — a linear chain is synthesized (seq = emission index; the linear
- * model has no parentId). Record ids are `<sessionId>:<seq>`; directory
+ * links — a linear chain is synthesized (emission order; the linear
+ * model has no parentId). Record ids are `<sessionId>:<index>`; directory
  * entries are sorted and there are no wall-clock reads, so output is
  * byte-identical across runs.
  */
@@ -164,7 +164,7 @@ function parseJsonl<T>(content: string): T[] {
 
 /** Omit that distributes over the AhsRecord discriminated union. */
 type RecordPayload<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
-type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "seq" | "timestamp">;
+type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "timestamp">;
 
 /**
  * Project ONE session's chat_history into an AHS record list (a
@@ -184,10 +184,8 @@ export function projectRecords(
   let pendingThinking: ContentBlock[] = [];
 
   const emit = (timestamp: string, partial: EmittableRecord): void => {
-    const seq = records.length;
     records.push({
-      recordId: `${sessionId}:${seq}`,
-      seq,
+      recordId: `${sessionId}:${records.length}`,
       timestamp,
       ...partial,
     } as AhsRecord);
@@ -362,6 +360,8 @@ function buildManifest(
       ? signals.sessionDurationSeconds * 1000
       : undefined;
 
+  const lastRecordId = records.length > 0 ? records[records.length - 1]!.recordId : null;
+
   return {
     sessionId: source.sessionId,
     harness: "grok",
@@ -370,6 +370,8 @@ function buildManifest(
     cwd,
     model: summary.current_model_id ?? firstModel ?? "unknown",
     provider: "xai",
+    branches: { main: { parentBranch: null, parentRecordId: null } },
+    HEAD: { branch: "main", recordId: lastRecordId },
     ...(summary.generated_title !== undefined
       ? { title: summary.generated_title, titleOrigin: "generated" as const }
       : {}),
@@ -471,7 +473,7 @@ export class GrokAdapter implements HarnessAdapter {
     }
   }
 
-  async *readRecords(sessionId: string): AsyncIterable<AhsRecord> {
+  async *readRecords(sessionId: string, _branchName?: string): AsyncIterable<AhsRecord> {
     for (const session of await this.discover()) {
       if (session.sessionId === sessionId) {
         const fallback = session.summary.created_at ?? EPOCH;

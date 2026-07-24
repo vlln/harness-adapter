@@ -3,55 +3,37 @@ import type { Manifest } from "../schema/manifest";
 import type { AhsRecord } from "../schema/record";
 
 /**
- * Harness-agnostic AC layer-2 invariant checks (AC-0002 v2, linear-session
- * model per ADR-0005) over projected (Manifest, records) sessions.
+ * Harness-agnostic AC layer-2 invariant checks (AC-0002, multi-branch
+ * session model per ADR-0006) over projected (Manifest, records) sessions.
  * Reusable by every adapter's tests.
  *
- * Relation checks (N-2 invocation reconciliation, N-7 lineage anchors) are
- * cross-session: `validateSessions` takes the FULL session set, and
- * `collectSessions` gathers an adapter's complete output for exactly that.
+ * Relation checks (N-2 invocation reconciliation) are cross-session:
+ * `validateSessions` takes the FULL session set, and `collectSessions`
+ * gathers an adapter's complete output for exactly that.
+ *
+ * Lineage checks (N-7 in ADR-0005) are retired: rewind is now intra-session
+ * branching (see Manifest.branches), and fork lineage is metadata-only
+ * (no structural validation needed).
  */
 
 export interface SessionData {
   manifest: Manifest;
   records: AhsRecord[];
+  /** Optional per-branch records (HEAD branch in `records`). Used by fakeAdapter. */
+  branchRecords?: Record<string, AhsRecord[]>;
 }
 
 export interface InvariantError {
   code:
-    | "seq-order"
     | "invocation-session"
     | "invocation-anchor"
     | "invocation-mismatch"
-    | "lineage-session"
-    | "lineage-anchor"
-    | "lineage-type"
     | "tool-result-match"
-    | "not-idempotent";
+    | "not-idempotent"
+    | "branch-head-branch"
+    | "branch-head-record";
   sessionId: string;
   message: string;
-}
-
-/**
- * AC-0002-N-1: linear shape. The schema already forbids structural fields
- * other than seq (no parentId/branch); here seq must be strictly increasing
- * AND contiguous (step exactly 1) in file order. The first record is the
- * root — there is no parent resolution to check anymore.
- */
-function checkLinear(session: SessionData, errors: InvariantError[]): void {
-  const { records } = session;
-  const sid = session.manifest.sessionId;
-  for (let i = 1; i < records.length; i += 1) {
-    const prev = records[i - 1]!;
-    const cur = records[i]!;
-    if (cur.seq !== prev.seq + 1) {
-      errors.push({
-        code: "seq-order",
-        sessionId: sid,
-        message: `seq not strictly increasing and contiguous at index ${i}: ${prev.seq} -> ${cur.seq}`,
-      });
-    }
-  }
 }
 
 /**
@@ -109,49 +91,30 @@ function checkInvocations(sessions: SessionData[], errors: InvariantError[]): vo
 }
 
 /**
- * AC-0002-N-7 (cross-session): lineage anchor resolution + type judgment.
- * For every manifest with `lineage`:
- * - atRecordId tri-state (ADR-0005 amendment): null = anchor
- *   source-unavailable → ALL lineage checks are skipped (the parent itself
- *   may be missing from the store); absent = retry from start → only the
- *   parent-existence check applies;
- * - otherwise (anchored): the parent session must exist in the session set,
- *   atRecordId must resolve to an existing record in the parent, and the
- *   type judgment must hold: anchored record is a user_message ⇔
- *   sibling_attempt; anything else ⇔ forked_from.
+ * AC-0002 intra-session branch integrity (ADR-0006):
+ * - HEAD.branch must be a key in manifest.branches;
+ * - HEAD.recordId must be null OR must resolve to an existing record in the
+ *   collected (HEAD branch) records.
  */
-function checkLineages(sessions: SessionData[], errors: InvariantError[]): void {
-  const byId = new Map(sessions.map((s) => [s.manifest.sessionId, s]));
-  for (const session of sessions) {
-    const lineage = session.manifest.lineage;
-    if (lineage === undefined) continue;
-    const sid = session.manifest.sessionId;
-    if (lineage.atRecordId === null) continue; // anchor source-unavailable
-    const parent = byId.get(lineage.sessionId);
-    if (parent === undefined) {
+function checkBranchIntegrity(session: SessionData, errors: InvariantError[]): void {
+  const { manifest, records } = session;
+  const sid = manifest.sessionId;
+
+  if (!(manifest.HEAD.branch in manifest.branches)) {
+    errors.push({
+      code: "branch-head-branch",
+      sessionId: sid,
+      message: `HEAD.branch "${manifest.HEAD.branch}" not found in manifest.branches`,
+    });
+  }
+
+  if (manifest.HEAD.recordId !== null) {
+    const found = records.some((r) => r.recordId === manifest.HEAD.recordId);
+    if (!found) {
       errors.push({
-        code: "lineage-session",
+        code: "branch-head-record",
         sessionId: sid,
-        message: `lineage.${lineage.type} points to unknown session ${lineage.sessionId}`,
-      });
-      continue;
-    }
-    if (lineage.atRecordId === undefined) continue; // retry from start
-    const anchor = parent.records.find((r) => r.recordId === lineage.atRecordId);
-    if (anchor === undefined) {
-      errors.push({
-        code: "lineage-anchor",
-        sessionId: sid,
-        message: `lineage.atRecordId ${lineage.atRecordId} resolves to no record in parent session ${lineage.sessionId}`,
-      });
-      continue;
-    }
-    const expected = anchor.type === "user_message" ? "sibling_attempt" : "forked_from";
-    if (lineage.type !== expected) {
-      errors.push({
-        code: "lineage-type",
-        sessionId: sid,
-        message: `lineage anchored at ${anchor.type} record ${anchor.recordId} must be "${expected}", got "${lineage.type}"`,
+        message: `HEAD.recordId "${manifest.HEAD.recordId}" not found in records`,
       });
     }
   }
@@ -208,21 +171,20 @@ function checkToolPairing(session: SessionData, errors: InvariantError[]): void 
 export function validateSessions(sessions: SessionData[]): InvariantError[] {
   const errors: InvariantError[] = [];
   for (const session of sessions) {
-    checkLinear(session, errors);
     checkToolPairing(session, errors);
+    checkBranchIntegrity(session, errors);
   }
   checkInvocations(sessions, errors);
-  checkLineages(sessions, errors);
   return errors;
 }
 
-/** Collect the full adapter output into memory (manifests + records). */
+/** Collect the full adapter output into memory (manifests + HEAD-branch records). */
 export async function collectSessions(adapter: HarnessAdapter): Promise<SessionData[]> {
   const sessions: SessionData[] = [];
-  // Cross-session invariants need the FULL set, lineage descendants included.
+  // Cross-session invariants need the FULL set, fork descendants included.
   for await (const manifest of adapter.listSessions({ includeForks: true })) {
     const records: AhsRecord[] = [];
-    for await (const rec of adapter.readRecords(manifest.sessionId)) {
+    for await (const rec of adapter.readRecords(manifest.sessionId, manifest.HEAD.branch)) {
       records.push(rec);
     }
     sessions.push({ manifest, records });

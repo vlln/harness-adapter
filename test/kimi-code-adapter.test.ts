@@ -129,7 +129,6 @@ describe("kimi-code adapter", () => {
     expect(records).toHaveLength(15);
     records.forEach((rec, i) => {
       expect(rec.recordId).toBe(`${SESSION_ID}:${i}`);
-      expect(rec.seq).toBe(i);
       // Unix-ms `time` converted to ISO 8601.
       expect(rec.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });

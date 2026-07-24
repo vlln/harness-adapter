@@ -7,17 +7,14 @@
     "lineage": {
       "atRecordId": "cc000009",
       "sessionId": "019f4000-cccc-7000-8000-0000000000c3",
-      "type": "sibling_attempt"
+      "type": "rewound_from"
     },
     "model": "DeepSeek-V4-Flash",
     "provider": "ollama",
+    "root": false,
     "sessionId": "019f4000-cccc-7000-8000-0000000000c3/fork/cc00000a",
     "stats": {
       "totalUsage": {
-        "cost": {
-          "amount": 0,
-          "currency": "USD"
-        },
         "inputTokens": 170,
         "outputTokens": 17
       },
@@ -34,16 +31,11 @@
       ],
       "model": "DeepSeek-V4-Flash",
       "recordId": "cc00000a",
-      "seq": 0,
       "timestamp": "2026-07-20T12:03:05.000Z",
       "type": "assistant_message",
       "usage": {
         "cacheReadTokens": 0,
         "cacheWriteTokens": 0,
-        "cost": {
-          "amount": 0,
-          "currency": "USD"
-        },
         "inputTokens": 170,
         "outputTokens": 17,
         "reasoningTokens": 0

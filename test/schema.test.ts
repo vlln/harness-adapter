@@ -9,7 +9,6 @@ import {
 
 const base = {
   recordId: "r1",
-  seq: 0,
   timestamp: "2026-07-21T10:00:00Z",
 };
 
@@ -27,6 +26,8 @@ describe("Manifest", () => {
       provider: "anthropic",
       title: "Fix login bug",
       titleOrigin: "generated",
+      branches: { main: { parentBranch: null, parentRecordId: null } },
+      HEAD: { branch: "main", recordId: null },
       lineage: { type: "forked_from", sessionId: "parent-1", atRecordId: "r7" },
       invocation: { sessionId: "parent-1", atRecordId: "r9" },
       acpBinding: { agentId: "claude", sessionId: "native-id" },
@@ -47,6 +48,8 @@ describe("Manifest", () => {
       ahsVersion: "0.1.0",
       cwd: "/tmp",
       model: "gpt-5",
+      branches: { main: { parentBranch: null, parentRecordId: null } },
+      HEAD: { branch: "main", recordId: null },
     };
     expect(ManifestSchema.parse(minimal).sessionId).toBe("s1");
   });
@@ -114,8 +117,8 @@ describe("lineage / invocation", () => {
     expect(LineageSchema.parse(lin)).toEqual(lin);
   });
 
-  it("parses a sibling_attempt lineage without anchor (retry from start)", () => {
-    const lin = { type: "sibling_attempt", sessionId: "root-1" };
+  it("parses a forked_from lineage without anchor (retry from start)", () => {
+    const lin = { type: "forked_from", sessionId: "root-1" };
     expect(LineageSchema.parse(lin)).toEqual(lin);
   });
 

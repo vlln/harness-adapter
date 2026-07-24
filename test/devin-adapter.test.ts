@@ -3,8 +3,9 @@
  *
  * Fixture: programmatically generated SQLite (test/fixtures/devin-db.ts,
  * synthetic data only). Golden: test/fixtures/devin-golden.json (reviewed).
- * Model: ADR-0005 linear sessions + fork synthesis (per-root sessions,
- * twin-branch skip, shared-prefix lineage anchors, group HEAD pointer).
+ * Model: ADR-0006 multi-branch sessions — forks/rewinds are intra-session
+ * branches, not separate sessions. Only the base session manifest is listed;
+ * branches are accessed via readRecords(sessionId, branchName).
  */
 
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -18,6 +19,7 @@ import { renderReport } from "../examples/ahs-report";
 import { ManifestSchema } from "../src/schema/manifest";
 import { AhsRecordSchema, type AhsRecord } from "../src/schema/record";
 import type { Usage } from "../src/schema/usage";
+import type { Manifest } from "../src/schema/manifest";
 import {
   checkIdempotency,
   collectSessions,
@@ -38,6 +40,24 @@ function session(id: string): SessionData {
   const found = sessions.find((s) => s.manifest.sessionId === id);
   if (found === undefined) throw new Error(`session missing from output: ${id}`);
   return found;
+}
+
+/** Read all records for a branch of a session via the adapter. */
+async function readBranch(adapter: DevinAdapter, sessionId: string, branchName: string): Promise<AhsRecord[]> {
+  const records: AhsRecord[] = [];
+  for await (const rec of adapter.readRecords(sessionId, branchName)) records.push(rec);
+  return records;
+}
+
+/** Read all branch records for a session (across all branches). */
+async function readAllBranches(adapter: DevinAdapter, manifest: Manifest): Promise<AhsRecord[]> {
+  const all: AhsRecord[] = [];
+  for (const branchName of Object.keys(manifest.branches)) {
+    for await (const rec of adapter.readRecords(manifest.sessionId, branchName)) {
+      all.push(rec);
+    }
+  }
+  return all;
 }
 
 function sumRecordUsage(records: AhsRecord[]): Usage {
@@ -74,19 +94,21 @@ describe("adapter shape", () => {
     expect(adapter.capabilities).toEqual({ history: "full", control: false });
   });
 
-  it("lists group HEADs only by default; includeForks lists every session", async () => {
+  it("lists only base session manifests (includeForks is a no-op)", async () => {
     const heads: string[] = [];
     for await (const m of adapter.listSessions()) heads.push(m.sessionId);
     expect(heads).toEqual(["odd-cove", "quiet-pond", "sunny-forest"]);
-    // Full set: same groups, with every lineage descendant.
+
+    // includeForks is a no-op in the multi-branch model — same output.
+    const withForks: string[] = [];
+    for await (const m of adapter.listSessions({ includeForks: true })) withForks.push(m.sessionId);
+    expect(withForks).toEqual(["odd-cove", "quiet-pond", "sunny-forest"]);
+
+    // collectSessions gathers only the listed manifests (HEAD-branch records).
     expect(sessions.map((s) => s.manifest.sessionId)).toEqual([
       "odd-cove",
       "quiet-pond",
       "sunny-forest",
-      "sunny-forest#fork-16",
-      "sunny-forest#root-30",
-      "sunny-forest#root-40",
-      "sunny-forest#root-50",
     ]);
   });
 
@@ -100,33 +122,53 @@ describe("adapter shape", () => {
 
   it("honors the cwd filter", async () => {
     const listed: string[] = [];
-    for await (const m of adapter.listSessions({ cwd: "/work/beta", includeForks: true })) {
+    for await (const m of adapter.listSessions({ cwd: "/work/beta" })) {
       listed.push(m.sessionId);
     }
     expect(listed).toEqual(["quiet-pond"]);
   });
 
-  it("rejects unknown session ids (incl. unknown fork/root forms)", async () => {
+  it("rejects unknown session ids (fork IDs are now branch names, not session IDs)", async () => {
     await expect(async () => {
       for await (const _ of adapter.readRecords("no-such")) void _;
+    }).rejects.toThrow(/session not found/);
+    // Old fork session IDs are now branch names, not sessions.
+    await expect(async () => {
+      for await (const _ of adapter.readRecords("sunny-forest#fork-16")) void _;
+    }).rejects.toThrow(/session not found/);
+    await expect(async () => {
+      for await (const _ of adapter.readRecords("sunny-forest#root-40")) void _;
     }).rejects.toThrow(/session not found/);
     await expect(async () => {
       for await (const _ of adapter.readRecords("sunny-forest#root-999")) void _;
     }).rejects.toThrow(/session not found/);
-    // The dead twin produces no fork session.
-    await expect(async () => {
-      for await (const _ of adapter.readRecords("sunny-forest#fork-2")) void _;
-    }).rejects.toThrow(/session not found/);
-    // The base session has no #root-0 alias anymore.
+    // The base session has no #root-0 alias.
     await expect(async () => {
       for await (const _ of adapter.readRecords("sunny-forest#root-0")) void _;
     }).rejects.toThrow(/session not found/);
   });
 
-  it("reads every session's own linear records", async () => {
-    const fork: AhsRecord[] = [];
-    for await (const rec of adapter.readRecords("sunny-forest#fork-16")) fork.push(rec);
-    expect(fork.map((r) => r.recordId)).toEqual(["m-user-20", "m-asst-21"]);
+  it("reads branch records via readRecords(sessionId, branchName)", async () => {
+    // Read the fork-16 branch records (now branch "b002").
+    const b002 = await readBranch(adapter, "sunny-forest", "b002");
+    expect(b002.map((r) => r.recordId)).toEqual(["m-user-20", "m-asst-21"]);
+
+    // Read the root-40 branch records (now branch "b004").
+    const b004 = await readBranch(adapter, "sunny-forest", "b004");
+    expect(b004.map((r) => r.recordId)).toEqual(["m-user-41", "m-asst-42"]);
+
+    // Read the root-30 branch records (now branch "b003").
+    const b003 = await readBranch(adapter, "sunny-forest", "b003");
+    expect(b003.map((r) => r.recordId)).toEqual(["m-sys-30"]);
+
+    // Read the root-50 branch records (now branch "b005").
+    const b005 = await readBranch(adapter, "sunny-forest", "b005");
+    expect(b005.map((r) => r.recordId)).toEqual(["m-asst-52"]);
+
+    // Unknown branch name throws.
+    await expect(async () => {
+      for await (const _ of adapter.readRecords("sunny-forest", "no-such-branch")) void _;
+    }).rejects.toThrow(/branch not found/);
   });
 });
 
@@ -140,7 +182,9 @@ describe("AC-0001: output is schema-valid (layer 1)", () => {
         recordCount += 1;
       }
     }
-    expect(recordCount).toBe(24);
+    // 3 sessions' HEAD-branch records:
+    // sunny-forest (main): 16, quiet-pond: 1, odd-cove: 1
+    expect(recordCount).toBe(18);
   });
 
   it("AC-0001-E-1: unmappable source content is dropped, output stays valid", () => {
@@ -167,71 +211,74 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
     expect(validateSessions(sessions)).toEqual([]);
   });
 
-  it("AC-0002-N-1: every session is linear (seq contiguous from 0, first record is the root)", () => {
-    for (const s of sessions) {
-      expect(s.records.map((r) => r.seq)).toEqual(s.records.map((_, i) => i));
-    }
+  it("AC-0002-N-1: every session is linear (records in file order, first record is the root)", () => {
     const base = session("sunny-forest");
-    expect(base.records[0]).toMatchObject({ recordId: "m-sys-0", seq: 0 });
+    expect(base.records[0]).toMatchObject({ recordId: "m-sys-0" });
   });
 
   it("AC-0002-N-2: no invocation edges — Devin CLI has no subagent sessions (vacuous)", () => {
     for (const s of sessions) expect(s.manifest.invocation).toBeUndefined();
   });
 
-  it("AC-0002-N-7: twin branch stays main, real fork splits with forked_from anchor", () => {
-    // Dead twin: no session; the shared message lives once in the base.
-    expect(sessions.some((s) => s.manifest.sessionId === "sunny-forest#fork-2")).toBe(false);
-    const fork = session("sunny-forest#fork-16");
-    expect(fork.manifest.lineage).toEqual({
-      type: "forked_from",
-      sessionId: "sunny-forest",
-      atRecordId: "m-asst-15/tool_call/0",
+  it("AC-0002-N-7: twin branch stays main, real fork produces a branch within the session", () => {
+    // Dead twin (node 2): no branch — the shared message lives once in main.
+    expect("b001" in session("sunny-forest").manifest.branches).toBe(false);
+
+    // Real fork (old sunny-forest#fork-16) is now branch "b002" within sunny-forest.
+    const sunny = session("sunny-forest").manifest;
+    expect(sunny.branches).toHaveProperty("b002");
+    expect(sunny.branches["b002"]).toEqual({
+      parentBranch: "main",
+      parentRecordId: "m-asst-15/tool_call/0",
     });
-    // Suffix-only: the twin message and the ancestor-orphaned tool_result
-    // are not stored in the fork.
-    expect(fork.records.map((r) => r.recordId)).toEqual(["m-user-20", "m-asst-21"]);
+    // The branch suffix: user + assistant (ancestor-orphaned tool_result dropped).
   });
 
-  it("AC-0002-N-7: cross-root lineage anchors by message_id reconciliation + type judgment", () => {
-    // Shared system prefix → harness_message anchor → forked_from.
-    expect(session("sunny-forest#root-40").manifest.lineage).toEqual({
-      type: "forked_from",
-      sessionId: "sunny-forest",
-      atRecordId: "m-sys-0",
+  it("AC-0002-N-7: cross-root branches anchor by message_id reconciliation", () => {
+    const sunny = session("sunny-forest").manifest;
+
+    // Root 40 (old sunny-forest#root-40) → branch "b004":
+    // Shared system prefix → anchored at harness_message m-sys-0.
+    expect(sunny.branches["b004"]).toEqual({
+      parentBranch: "main",
+      parentRecordId: "m-sys-0",
     });
-    expect(session("sunny-forest#root-40").records.map((r) => r.recordId)).toEqual([
-      "m-user-41",
-      "m-asst-42",
-    ]);
-    // Shared [system, user] prefix → user_message anchor → sibling_attempt.
-    expect(session("sunny-forest#root-50").manifest.lineage).toEqual({
-      type: "sibling_attempt",
-      sessionId: "sunny-forest",
-      atRecordId: "m-user-1",
+
+    // Root 50 (old sunny-forest#root-50) → branch "b005":
+    // Shared [system, user] prefix → anchored at user_message m-user-1.
+    expect(sunny.branches["b005"]).toEqual({
+      parentBranch: "main",
+      parentRecordId: "m-user-1",
     });
-    expect(session("sunny-forest#root-50").records.map((r) => r.recordId)).toEqual(["m-asst-52"]);
-    // Nothing shared → anchor-less retry from start.
-    expect(session("sunny-forest#root-30").manifest.lineage).toEqual({
-      type: "sibling_attempt",
-      sessionId: "sunny-forest",
+
+    // Root 30 (old sunny-forest#root-30) → branch "b003":
+    // Nothing shared → anchor-less (parentRecordId: null).
+    expect(sunny.branches["b003"]).toEqual({
+      parentBranch: "main",
+      parentRecordId: null,
     });
-    expect(session("sunny-forest#root-30").records.map((r) => r.recordId)).toEqual(["m-sys-30"]);
-    // The base session carries no lineage.
-    expect(session("sunny-forest").manifest.lineage).toBeUndefined();
+
+    // The base session's main branch is the root (no parent).
+    expect(sunny.branches["main"]).toEqual({
+      parentBranch: null,
+      parentRecordId: null,
+    });
   });
 
-  it("AC-0002-N-3: message counts match the source after dedup; text is verbatim", () => {
-    const group = sessions.filter((s) => s.manifest.sessionId.startsWith("sunny-forest"));
-    // Distinct user-role messages in the source group: m-user-1 (+copy),
-    // m-user-10, m-user-12, m-user-18, m-user-20, m-user-41 (+ m-harness-14
-    // routed to harness_message); assistant: m-asst-2 (twins deduped),
-    // m-asst-8, m-asst-15, m-asst-21, m-asst-42, m-asst-52.
-    expect(group.flatMap((s) => s.records).filter((r) => r.type === "user_message")).toHaveLength(6);
-    expect(
-      group.flatMap((s) => s.records).filter((r) => r.type === "assistant_message"),
-    ).toHaveLength(6);
+  it("AC-0002-N-3: message counts match the source after dedup; text is verbatim", async () => {
+    // Read all branches for sunny-forest to count across the full session.
+    const sunnyRecords = await readAllBranches(adapter, session("sunny-forest").manifest);
+
+    // Main branch (HEAD) user messages: m-user-1, m-user-10, m-user-12, m-user-18.
     const base = session("sunny-forest");
+    const baseUserCount = base.records.filter((r) => r.type === "user_message").length;
+    expect(baseUserCount).toBe(4);
+
+    // Across all branches of sunny-forest, all 6 user messages are present.
+    expect(sunnyRecords.filter((r) => r.type === "user_message")).toHaveLength(6);
+    // Assistant messages: m-asst-2 (twins deduped), m-asst-8, m-asst-15, m-asst-21, m-asst-42, m-asst-52.
+    expect(sunnyRecords.filter((r) => r.type === "assistant_message")).toHaveLength(6);
+
     const m2 = base.records.find((r) => r.recordId === "m-asst-2");
     expect(m2).toMatchObject({
       type: "assistant_message",
@@ -271,8 +318,8 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
       outputTokens: 10,
       durationMs: 800,
     });
-    // Manifest stats aggregate this session only; the group-level credit
-    // cost rides on the BASE session (winner-independent, B-4).
+    // Manifest stats aggregate the main branch only; the group-level credit
+    // cost rides on the base session (winner-independent, B-4).
     expect(base.manifest.stats).toEqual({
       turnCount: 4,
       totalUsage: {
@@ -284,10 +331,8 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
       },
       durationMs: 3600000,
     });
-    // Fork sessions carry no cost (no per-chain attribution).
-    for (const id of ["sunny-forest#fork-16", "sunny-forest#root-40"]) {
-      expect(session(id).manifest.stats?.totalUsage?.cost).toBeUndefined();
-    }
+    // The credit cost is on the base session's manifest; branches have no separate manifests.
+    expect(base.manifest.stats?.totalUsage?.cost).toEqual({ amount: 7, currency: "credit" });
   });
 
   it("AC-0002-N-5: two runs are byte-identical", async () => {
@@ -325,26 +370,53 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
     expect(session("odd-cove").manifest.stats?.totalUsage).toBeUndefined();
   });
 
-  it("AC-0002-B-4: winner flip moves only the derived HEAD, never the session set", async () => {
+  it("AC-0002-B-4: winner flip moves only the HEAD branch, never the session set", async () => {
     const dirA = await mkdtemp(path.join(tmpdir(), "devin-b4-a-"));
     const dirB = await mkdtemp(path.join(tmpdir(), "devin-b4-b-"));
     try {
       const adapterA = new DevinAdapter(createDevinFixture(dirA, BASE_TIP_NODE));
       const adapterB = new DevinAdapter(createDevinFixture(dirB, ROOT40_TIP_NODE));
-      const setA = stableSerialize(await collectSessions(adapterA));
-      const setB = stableSerialize(await collectSessions(adapterB));
-      expect(setA).toBe(setB);
-      const headsOf = async (a: DevinAdapter): Promise<string[]> => {
-        const ids: string[] = [];
-        for await (const m of a.listSessions()) ids.push(m.sessionId);
-        return ids;
-      };
-      expect(await headsOf(adapterA)).toEqual(["odd-cove", "quiet-pond", "sunny-forest"]);
-      expect(await headsOf(adapterB)).toEqual([
-        "odd-cove",
-        "quiet-pond",
-        "sunny-forest#root-40",
-      ]);
+
+      // Session IDs are the same regardless of winner.
+      const idsA: string[] = [];
+      for await (const m of adapterA.listSessions()) idsA.push(m.sessionId);
+      const idsB: string[] = [];
+      for await (const m of adapterB.listSessions()) idsB.push(m.sessionId);
+      expect(idsA).toEqual(["odd-cove", "quiet-pond", "sunny-forest"]);
+      expect(idsB).toEqual(["odd-cove", "quiet-pond", "sunny-forest"]);
+
+      // The manifests are identical except for HEAD.branch and HEAD.recordId.
+      const manifestsA = new Map<string, Manifest>();
+      for await (const m of adapterA.listSessions()) manifestsA.set(m.sessionId, m);
+      const manifestsB = new Map<string, Manifest>();
+      for await (const m of adapterB.listSessions()) manifestsB.set(m.sessionId, m);
+
+      // odd-cove and quiet-pond are identical.
+      expect(manifestsA.get("odd-cove")).toEqual(manifestsB.get("odd-cove"));
+      expect(manifestsA.get("quiet-pond")).toEqual(manifestsB.get("quiet-pond"));
+
+      // sunny-forest: only HEAD differs.
+      const sfA = manifestsA.get("sunny-forest")!;
+      const sfB = manifestsB.get("sunny-forest")!;
+      expect(sfA.HEAD.branch).toBe("main");
+      expect(sfB.HEAD.branch).toBe("b004");
+      // HEAD.recordId is from the main branch records (winner-independent) — same.
+      expect(sfA.HEAD.recordId).toBe("m-user-18");
+      expect(sfB.HEAD.recordId).toBe("m-user-18");
+      // Branches are identical.
+      expect(sfA.branches).toEqual(sfB.branches);
+      // Stats are from main branch records — same.
+      expect(sfA.stats).toEqual(sfB.stats);
+
+      // collectSessions reads HEAD-branch records, so the records differ.
+      const setA = await collectSessions(adapterA);
+      const setB = await collectSessions(adapterB);
+      const sfRecordsA = setA.find((s) => s.manifest.sessionId === "sunny-forest")!.records;
+      const sfRecordsB = setB.find((s) => s.manifest.sessionId === "sunny-forest")!.records;
+      expect(sfRecordsA.map((r) => r.recordId)).not.toEqual(sfRecordsB.map((r) => r.recordId));
+      // adapterA reads main branch, adapterB reads b004 branch.
+      expect(sfRecordsA[0]?.recordId).toBe("m-sys-0");
+      expect(sfRecordsB[0]?.recordId).toBe("m-user-41");
     } finally {
       await rm(dirA, { recursive: true, force: true });
       await rm(dirB, { recursive: true, force: true });
@@ -364,56 +436,42 @@ describe("AC-0004: output is usable (layer 4 archive + consumer)", () => {
   it("AC-0004-N-1: archive round-trips and ahs-report aggregates tokens", async () => {
     const archiveDir = await mkdtemp(path.join(tmpdir(), "devin-archive-"));
     try {
+      // includeForks is a no-op in ADR-0006 — only base sessions are written.
       const written = await exportSessions(adapter, archiveDir, { includeForks: true });
       expect(written.map((w) => w.sessionId).sort()).toEqual(
-        [
-          "odd-cove",
-          "quiet-pond",
-          "sunny-forest",
-          "sunny-forest#fork-16",
-          "sunny-forest#root-30",
-          "sunny-forest#root-40",
-          "sunny-forest#root-50",
-        ].sort(),
+        ["odd-cove", "quiet-pond", "sunny-forest"].sort(),
       );
 
+      // Render the base session. In the multi-branch model, headSessionId is the
+      // session ID itself (branching is intra-session). The HEAD chain is just
+      // the main branch (root branch, no parent) — no stitching annotation.
       const report = await renderReport(archiveDir, "sunny-forest");
-      // Task view (ADR-0005 §5): the group's HEAD by the recency heuristic
-      // is sunny-forest#root-50 (latest record); the transcript is the HEAD
-      // chain — sunny-forest's records up to the lineage anchor (system
-      // prompt + first user message) stitched with root-50's suffix.
-      expect(report.headSessionId).toBe("sunny-forest#root-50");
+      expect(report.headSessionId).toBe("sunny-forest");
       expect(report.text).toContain(
-        "# sunny-forest [devin · claude-test-medium] — Alpha Refactor (shared prefix, stitched)",
+        "# sunny-forest [devin · claude-test-medium] — Alpha Refactor",
       );
       expect(report.text).toContain("[user] Refactor the parser.");
-      expect(report.text).toContain("# sunny-forest#root-50 [devin · claude-test-medium]");
-      expect(report.text).toContain("Different answer to the same prompt.");
-      // Folded alternates (and the abandoned tail past the anchor) are NOT
-      // stitched into the default view.
-      expect(report.text).not.toContain("sunny-forest#fork-16");
-      expect(report.text).not.toContain("sunny-forest#root-40");
-      expect(report.text).not.toContain("file contents here");
-      // Aggregation is over the rendered slices only; the metrics records
-      // (m-asst-2, tc-2) live past the anchor in the folded alternate, so
-      // the HEAD chain itself carries no usage (all-zero totals).
-      expect(report.aggregatedSessions).toEqual(["sunny-forest", "sunny-forest#root-50"]);
-      expect(report.totalUsage).toMatchObject({ inputTokens: 0, outputTokens: 0 });
+      // The main branch has usage (m-asst-2, m-asst-5).
+      expect(report.aggregatedSessions).toEqual(["sunny-forest"]);
+      expect(report.totalUsage).toMatchObject({ inputTokens: 150, outputTokens: 30 });
 
-      // Fork sessions are archived under sanitized, resolvable dir names:
-      // invoking with any group member resolves the same group + HEAD, and
-      // --all lists the folded forks as alternate versions.
-      const forkReport = await renderReport(archiveDir, "sunny-forest#root-40", { all: true });
-      expect(forkReport.headSessionId).toBe("sunny-forest#root-50");
-      expect(forkReport.alternates).toEqual([
-        "sunny-forest",
-        "sunny-forest#fork-16",
-        "sunny-forest#root-30",
-        "sunny-forest#root-40",
-        "sunny-forest#root-50",
-      ]);
-      expect(forkReport.text).toContain("== alternate versions (group sunny-forest) ==");
-      expect(forkReport.text).toContain("sunny-forest#root-40");
+      // Old fork session IDs are not in the archive.
+      await expect(renderReport(archiveDir, "sunny-forest#root-40")).rejects.toThrow(
+        /session not in archive/,
+      );
+
+      // --all lists the session's branches as alternate versions.
+      const allReport = await renderReport(archiveDir, "sunny-forest", { all: true });
+      expect(allReport.headSessionId).toBe("sunny-forest");
+      // Alternates are the branch names.
+      expect(allReport.alternates.sort()).toEqual(
+        ["b002", "b003", "b004", "b005", "main"].sort(),
+      );
+      expect(allReport.text).toContain("== alternate versions (session sunny-forest) ==");
+      expect(allReport.text).toContain("b004");
+      expect(allReport.text).toContain("b002");
+      expect(allReport.text).toContain("b003");
+      expect(allReport.text).toContain("b005");
     } finally {
       await rm(archiveDir, { recursive: true, force: true });
     }
@@ -441,5 +499,25 @@ describe("manifest mapping", () => {
       recordId: "node-0",
       type: "user_message",
     });
+  });
+
+  it("manifest has branches and HEAD (ADR-0006 multi-branch model)", () => {
+    const sunny = session("sunny-forest").manifest;
+    expect(sunny.branches).toBeDefined();
+    expect(sunny.HEAD).toBeDefined();
+    expect(sunny.HEAD.branch).toBe("main");
+    expect(sunny.HEAD.recordId).toBe("m-user-18");
+    // "main" is always present as a root branch.
+    expect(sunny.branches["main"]).toEqual({
+      parentBranch: null,
+      parentRecordId: null,
+    });
+    // All branches point to "main" as parent.
+    for (const [name, def] of Object.entries(sunny.branches)) {
+      if (name === "main") continue;
+      expect(def.parentBranch).toBe("main");
+    }
+    // lineage is not present on the base session manifest (it's optional metadata).
+    // The branch definitions carry the fork-point information via parentRecordId.
   });
 });

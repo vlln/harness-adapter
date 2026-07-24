@@ -4,6 +4,37 @@
 
 ---
 
+## [0.2.0] - 2026-07-24
+
+ADR-0006 多分支 session 目录模型。从 v0.1.0 的"扁平 session + 跨 session lineage 回链"重构为"session = 目录 + 多分支 JSONL"。
+
+### Changed
+
+**ADR-0006 多分支 session 目录模型（breaking）**
+
+- Session = 目录（`manifest.json` + `records/<branch>.jsonl`），rewind = session 内分支（`branches` 注册表），不再跨 session
+- Fork = 新 session 目录，`lineage: { type: "forked_from" }` 为元信息
+- `rewound_from` / `sibling_attempt` lineage 类型退役
+- `root` 字段退役（session 目录自包含所有分支）
+- `relations.jsonl` / group / closure 退役（全部可从 manifest 直读）
+- `HEAD` 显式化为 manifest 字段（`{ branch, recordId }`）
+- `readRecords(sessionId, branchName?)` 新增分支参数
+
+**Record 退役 `seq` 字段（breaking）**
+
+- 行序即记录序，`seq` 冗余删除
+- `checkLinear` 不变量退役
+
+### Fixed
+
+- Pi `parentSession` 跨文件指针映射为 `lineage: forked_from`（ADR-0006 下 fork 的标准模式）
+- Pi cost 不再假设 `currency: "USD"`——源端无 currency 时 omit 整个 cost 对象（不留逃生舱）
+
+### 契约文档
+
+- spec v4、ADR-0006 accepted、ADR-0005 superseded、AC 更新
+- interface/0003 session facade → active
+
 ## [0.1.0] - 2026-07-24
 
 首个发布。定义 AHS（Agent History Standard）格式规范，并提供 7 个 Harness 的只读投影适配器、可选归档层与消费方 facade。

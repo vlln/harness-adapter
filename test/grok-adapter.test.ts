@@ -116,7 +116,6 @@ describe("grok adapter", () => {
     expect(records).toHaveLength(16);
     records.forEach((rec, i) => {
       expect(rec.recordId).toBe(`${SESSION_ID}:${i}`);
-      expect(rec.seq).toBe(i);
       expect(rec.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
   });

@@ -10,11 +10,11 @@
  *               compaction + duplicate tool_result + interrupted tool_call —
  *               AC-0002-N-6/B-1
  *   44444444-…  dropped process records (system/mode/attachment) leaving no
- *               seq gaps, multi tool_use, non-string tool_result,
+ *               no file-order gaps, multi tool_use, non-string tool_result,
  *               missing usage — AC-0001-E-1, AC-0002-B-2
  *   55555555-…  only process records — not an AHS session (skipped)
  *   66666666-…  branch points: edit-resend after an assistant record
- *               (forked_from) + re-answer to a user prompt (sibling_attempt);
+ *               (forked_from) + re-answer to a user prompt (forked_from);
  *               main chain = chain to the last leaf — AC-0002-N-7
  *   77777777-…  assistant segments sharing one message.id chain in file
  *               order (no fork); parallel result deliveries in separate user
@@ -48,12 +48,11 @@ const SESSION_D = "44444444-4444-4444-8444-444444444444"; // edge cases
 const SESSION_E = "55555555-5555-4555-8555-555555555555"; // process-only, skipped
 const SESSION_F = "66666666-6666-4666-8666-666666666666"; // fork synthesis
 const SESSION_G = "77777777-7777-4777-8777-777777777777"; // snapshot collapse + parallel deliveries
-const FORK_EDIT = `${SESSION_F}/fork/eeee0003-0000-4000-8000-000000000003`;
-const FORK_RETRY = `${SESSION_F}/fork/eeee0010-0000-4000-8000-000000000010`;
+// Fork constants removed — forks are now intra-session branches (ADR-0006).
 
-async function readAll(adapter: ClaudeCodeAdapter, sessionId: string): Promise<AhsRecord[]> {
+async function readAll(adapter: ClaudeCodeAdapter, sessionId: string, branchName?: string): Promise<AhsRecord[]> {
   const records: AhsRecord[] = [];
-  for await (const rec of adapter.readRecords(sessionId)) records.push(rec);
+  for await (const rec of adapter.readRecords(sessionId, branchName)) records.push(rec);
   return records;
 }
 
@@ -113,7 +112,10 @@ describe("claude-code adapter", () => {
     expect(await checkIdempotency(adapter)).toEqual([]);
   });
 
-  it("lists main, fork and child sessions; skips process-only sessions", async () => {
+  it("lists main and child sessions; forks are intra-session branches (ADR-0006)", async () => {
+    // collectSessions uses includeForks:true which includes invocation
+    // descendants (sub-agents). Fork sessions are now branches within the
+    // main session's manifest, not separate sessions.
     const sessions = await collectSessions(adapter);
     const ids = sessions.map((s) => s.manifest.sessionId).sort();
     expect(ids).toEqual(
@@ -124,8 +126,6 @@ describe("claude-code adapter", () => {
         SESSION_D,
         SESSION_F,
         SESSION_G,
-        FORK_EDIT,
-        FORK_RETRY,
         "abc123",
         "def456",
         "ghi789",
@@ -134,26 +134,25 @@ describe("claude-code adapter", () => {
     expect(ids).not.toContain(SESSION_E);
   });
 
-  it("listSessions default folds lineage descendants; includeForks lists them (interface-0001)", async () => {
+  it("listSessions default lists main sessions; includeForks lists invocation descendants (ADR-0006)", async () => {
     const heads: string[] = [];
     for await (const m of adapter.listSessions()) heads.push(m.sessionId);
-    expect(heads).not.toContain(FORK_EDIT);
-    expect(heads).not.toContain(FORK_RETRY);
-    // Group HEADs: main sessions (main chain = chain to the last leaf) and
-    // invocation children are listed; forks are not.
+    // Default: main sessions only. Sub-agents (invocation descendants) are
+    // folded; forks are intra-session branches, not separate sessions.
     expect(heads.sort()).toEqual(
-      [SESSION_A, SESSION_B, SESSION_C, SESSION_D, SESSION_F, SESSION_G, "abc123", "def456", "ghi789"].sort(),
+      [SESSION_A, SESSION_B, SESSION_C, SESSION_D, SESSION_F, SESSION_G].sort(),
     );
 
     const all: string[] = [];
     for await (const m of adapter.listSessions({ includeForks: true })) all.push(m.sessionId);
-    expect(all).toContain(FORK_EDIT);
-    expect(all).toContain(FORK_RETRY);
-    expect(all.length).toBe(heads.length + 2);
+    // includeForks:true includes invocation descendants (sub-agents).
+    expect(all.sort()).toEqual(
+      [SESSION_A, SESSION_B, SESSION_C, SESSION_D, SESSION_F, SESSION_G, "abc123", "def456", "ghi789"].sort(),
+    );
   });
 
-  it("readRecords of a process-only session yields nothing; unknown sessionId throws", async () => {
-    expect(await readAll(adapter, SESSION_E)).toEqual([]);
+  it("readRecords of a process-only session throws; unknown sessionId throws", async () => {
+    await expect(readAll(adapter, SESSION_E)).rejects.toThrow("session not found");
     await expect(readAll(adapter, "no-such-session")).rejects.toThrow("session not found");
   });
 
@@ -304,10 +303,6 @@ describe("claude-code adapter", () => {
       });
     });
 
-    it("assigns seq in emission order, strictly increasing and contiguous (AC-0002-N-1)", async () => {
-      const records = await readAll(adapter, SESSION_A);
-      expect(records.map((r) => r.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    });
   });
 
   describe("session with subagent file (fixture B)", () => {
@@ -371,7 +366,6 @@ describe("claude-code adapter", () => {
         "tool_result",
         "assistant_message",
       ]);
-      expect(child[0]!.seq).toBe(0);
       expect(sumUsage(child)).toEqual({
         inputTokens: 2400,
         outputTokens: 150,
@@ -385,7 +379,6 @@ describe("claude-code adapter", () => {
     it("groups inline isSidechain records by agentId into a child session (sourceToolUseID anchor)", async () => {
       const child = await readAll(adapter, "def456");
       expect(child.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
-      expect(child[0]!.seq).toBe(0);
 
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === "def456")!.manifest;
@@ -467,7 +460,7 @@ describe("claude-code adapter", () => {
     });
   });
 
-  describe("fork synthesis (fixture F, AC-0002-N-7)", () => {
+  describe("fork synthesis (fixture F, AC-0002-N-7, ADR-0006 branches)", () => {
     it("main chain = the chain leading to the last leaf (edit-resend branch wins by file order)", async () => {
       const main = await readAll(adapter, SESSION_F);
       expect(main.map((r) => r.recordId)).toEqual([
@@ -481,51 +474,49 @@ describe("claude-code adapter", () => {
         "eeee0009-0000-4000-8000-000000000009",
         "eeee0011-0000-4000-8000-000000000011", // the retry's later answer
       ]);
-      expect(main.map((r) => r.seq)).toEqual(main.map((_, i) => i));
-      // The main session carries no lineage and no fork content.
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_F)!.manifest;
       expect(manifest.lineage).toBeUndefined();
       expect(manifest.stats?.turnCount).toBe(3);
     });
 
-    it("edit-resend branch becomes a forked_from session anchored at the assistant record", async () => {
+    it("manifest registers fork branches with parentRecordId anchors", async () => {
       const sessions = await collectSessions(adapter);
-      const fork = sessions.find((s) => s.manifest.sessionId === FORK_EDIT)!;
-      expect(fork.manifest.lineage).toEqual({
-        type: "forked_from", // anchor is an assistant_message (agent-side)
-        sessionId: SESSION_F,
-        atRecordId: "eeee0002-0000-4000-8000-000000000002",
-      });
-      // Suffix only: the fork starts at the branch child, no shared prefix.
-      expect(fork.records.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
-      expect(fork.records.map((r) => r.recordId)).toEqual([
+      const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_F)!.manifest;
+      // main + two fork branches
+      expect(Object.keys(manifest.branches).sort()).toEqual(["b001", "b002", "main"]);
+      expect(manifest.branches.main).toEqual({ parentBranch: null, parentRecordId: null });
+      // b001: edit-resend fork, anchored at the assistant record eeee0002
+      expect(manifest.branches.b001!.parentBranch).toBe("main");
+      expect(manifest.branches.b001!.parentRecordId).toBe("eeee0002-0000-4000-8000-000000000002");
+      // b002: re-answer fork, anchored at the user_message eeee0009
+      expect(manifest.branches.b002!.parentBranch).toBe("main");
+      expect(manifest.branches.b002!.parentRecordId).toBe("eeee0009-0000-4000-8000-000000000009");
+    });
+
+    it("edit-resend branch (b001) stores suffix-only records", async () => {
+      const records = await readAll(adapter, SESSION_F, "b001");
+      expect(records.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
+      expect(records.map((r) => r.recordId)).toEqual([
         "eeee0003-0000-4000-8000-000000000003",
         "eeee0004-0000-4000-8000-000000000004",
       ]);
-      expect(fork.records[0]!.seq).toBe(0);
     });
 
-    it("re-answer to the same prompt becomes a sibling_attempt anchored at the user_message", async () => {
-      const sessions = await collectSessions(adapter);
-      const fork = sessions.find((s) => s.manifest.sessionId === FORK_RETRY)!;
-      expect(fork.manifest.lineage).toEqual({
-        type: "sibling_attempt", // anchor is a user_message
-        sessionId: SESSION_F,
-        atRecordId: "eeee0009-0000-4000-8000-000000000009",
-      });
-      expect(fork.records.map((r) => r.type)).toEqual(["assistant_message"]);
-      expect(fork.records[0]!.recordId).toBe("eeee0010-0000-4000-8000-000000000010");
+    it("re-answer branch (b002) stores the alternate answer, not in the main chain", async () => {
+      const records = await readAll(adapter, SESSION_F, "b002");
+      expect(records.map((r) => r.type)).toEqual(["assistant_message"]);
+      expect(records[0]!.recordId).toBe("eeee0010-0000-4000-8000-000000000010");
       // The competing answer is NOT in the main session.
       const main = await readAll(adapter, SESSION_F);
       expect(main.some((r) => r.recordId.startsWith("eeee0010"))).toBe(false);
     });
 
-    it("readRecords resolves fork session ids", async () => {
-      const records = await readAll(adapter, FORK_EDIT);
-      expect(records.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
-      const retry = await readAll(adapter, FORK_RETRY);
-      expect(retry).toHaveLength(1);
+    it("readRecords of old fork session IDs throws session not found", async () => {
+      await expect(readAll(adapter, `${SESSION_F}/fork/eeee0003-0000-4000-8000-000000000003`))
+        .rejects.toThrow("session not found");
+      await expect(readAll(adapter, `${SESSION_F}/fork/eeee0010-0000-4000-8000-000000000010`))
+        .rejects.toThrow("session not found");
     });
   });
 
@@ -564,11 +555,11 @@ describe("claude-code adapter", () => {
           cacheWriteTokens: 500,
         });
       }
-      // No fork sessions exist for this file.
+      // No fork sessions exist for this file — forks are intra-session branches.
       const sessions = await collectSessions(adapter);
-      expect(
-        sessions.filter((s) => s.manifest.sessionId.startsWith(`${SESSION_G}/fork/`)),
-      ).toEqual([]);
+      const sessionG = sessions.find((s) => s.manifest.sessionId === SESSION_G)!;
+      // Only the main branch exists for this fixture.
+      expect(Object.keys(sessionG.manifest.branches)).toEqual(["main"]);
     });
 
     it("keeps parallel result deliveries (separate user lines, distinct toolCallIds) in one chain", async () => {

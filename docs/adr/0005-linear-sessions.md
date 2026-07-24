@@ -2,13 +2,15 @@
 title: ADR-0005 线性 Session 与两维关系（部分 supersede ADR-0002）
 description: Session 一律线性（删 tree/parentId）；fork/rewind 一律成 session（lineage + atRecordId 锚点）；invocation 两链（tool_result.sessionId 正链 + manifest 回链）；mainness 去 session 化（组级 HEAD 指针）；Task 为用户视角派生概念。
 type: adr
-status: accepted
+status: superseded
 created: 2026-07-23T05:18:21Z
 ---
 
 # ADR-0005: 线性 Session 与两维关系
 
 > **修订记录（2026-07-23）**：① 正链 `tool_result.sessionId` → `sessionIds: string[]`——支持一次调用产多个子 session（Kimi AgentSwarm 真实数据，单产子写单元素数组）；② `lineage.atRecordId` 三态——有值 = 锚定、`null` = 锚点源端不可得、缺省 = 从起点重试（此前 null 与缺省混用，存在歧义）。
+
+> **修订记录（2026-07-24）**：③ lineage 类型重整：`sibling_attempt` 退役（并入 `rewound_from`）；`forked_from` 重新定义为全量复制/独立 root（`root: true`），`rewound_from` 为共享前缀/结构依赖（`root: false`）；④ Manifest 新增 `root: boolean` 字段，显式表达 session 自包含性。
 
 > 本 ADR **部分 supersede [ADR-0002](0002-session-relation-model.md)**：被取代的是"session 历史为单根 tree、分叉允许多子节点"、"Relation 三种类型中的 sibling_attempt 旧定义"、Manifest `isMainChain` 字段。被保留的是"subagent 是独立 session"、"存储层只有 Session 和 Relation 两类实体"的精神。
 
@@ -37,21 +39,27 @@ git 提供了现成的参照系：commit 不可变且线性，分支/HEAD 是可
 ### 2. lineage（历史维）：单一 fork 机制
 
 ```typescript
-lineage?: { type: "forked_from" | "sibling_attempt", sessionId: string, atRecordId?: string }
+lineage?: { type: "forked_from" | "rewound_from", sessionId: string, atRecordId?: string }
 ```
 
-- fork session **只存分叉后的后缀**，共享前缀沿 lineage 回溯拼接。
-- **fork 与 sibling_attempt 的判据（数据判据，与发起者无关）**：看锚点 record 的 role——
-  - `forked_from`：锚在 agent 侧 record（assistant/tool 等）之后。分叉后的首条新 record 是一条**新的 user 输入**——在已完成的一轮之后选择了新方向（编辑重发也归此类：编辑产生新 u′，锚点仍在之前的 a 上）。
-  - `sibling_attempt`：锚在 `user_message` 之后。分叉后的首条新 record 是 **agent 对同一个 prompt 的重新作答**——同一个问题被回答多次，互为竞争（Devin 的 agent 发起重试、用户的手动重试均归此类）。
-- 锚点 `atRecordId` 三态：有值 = 锚定；`null` = 锚点本应存在但源端不可得；缺省 = 从起点重试（fork 自带 prompt 副本）。
-- fork 的 invocation 沿 lineage **传递继承**（fork-of-subagent 的调起者 = 血统源头的调起者），不显式复制。
+- rewind session **只存分叉后的后缀**，共享前缀沿 lineage 回溯拼接（`root: false`，lineage 为结构依赖）。
+- fork session 自包含全部历史（`root: true`），lineage 仅为元信息（"我从哪复制来的"），不依赖源。`forked_from` + `root: true` 表示 lineage 是可选元信息；`rewound_from` + `root: false` 表示 lineage 是结构依赖。
+- **`sibling_attempt` 退役**：不再独立成类型。它本质就是 `rewound_from` 锚于 `user_message` 的普通情况——锚点位置由 atRecordId 自然表达，不须额外类型区分。
+- 锚点 `atRecordId` 三态：有值 = 锚定；`null` = 锚点本应存在但源端不可得；缺省 = 从起点重试（rewind 自带 prompt 副本）。
+- rewind 的 invocation 沿 lineage **传递继承**（rewind-of-subagent 的调起者 = 血统源头的调起者），不显式复制。
 
 ### 3. invocation（调用维）：正链 + 回链
 
 - **正链在历史层**：`tool_result` 增加可选字段 `sessionId`（该调用产生的子 session）。tool_call 不可能携带（调用时 id 未存在）；subagent 在历史层就是普通 tool——调用是普通 tool_call、报告是普通 tool_result、唯一特殊性是返回值里有个 session 句柄。
 - **回链是 session 级属性**：Manifest `invocation?: { sessionId, atRecordId? }`——"谁调用/创建了我"；`atRecordId` 指向父 session 中那次 spawning tool_call 的 recordId（跨 session 引用统一为 recordId 寻址；Kimi 无锚点时省略）。
 - `spawned_by` 作为 relation 类型退役。
+
+### 3.5 root 字段（2026-07-24 amend）
+
+- Manifest 新增 `root: boolean` 字段，显式表达 session 是否自包含：
+  - `root: true` = 所有历史在本 session 的 records 内（原始 session、fork 全量复制）
+  - `root: false` = 需沿 lineage / invocation 回链拼接完整历史（rewind、subagent）
+- 替代原有"无 lineage 且无 invocation ⇒ root"的脆弱推断，使 tree 构建和验证逻辑不再依赖隐式规则。
 
 ### 4. mainness 去 session 化
 
@@ -78,7 +86,7 @@ lineage?: { type: "forked_from" | "sibling_attempt", sessionId: string, atRecord
 - 优点：4 个适配器已实现验证，零返工
 - 缺点：背景中四类摩擦永久存在；facade 的 messages() 需"选存活分支"逻辑；isMainChain 身份 bug 须另打补丁
 
-### 方案 B: sibling_attempt 并入 forked_from（不区分类型）
+### 方案 B: sibling_attempt 并入 rewound_from（不区分类型）
 
 - 优点：类型更少
 - 缺点：竞争语义（多 attempt 择一胜出）是聚合与评审的一等信号（"默认视图走胜出路径"），用锚点 role 派生可行但每个消费方都要重做判断；保留类型名成本极低

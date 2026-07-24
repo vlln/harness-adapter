@@ -6,9 +6,9 @@
  * Coverage: projection mapping table row by row, XOR tool pairing,
  * interrupted → tool item without result, state records → events(),
  * usage sums, children() recursion + silent skip of undiscoverable
- * children, Task group/HEAD/stitching (prefix cut / null anchor /
- * retry-from-start / chained forks), SessionNotFoundError, openHarness
- * registry.
+ * children, Task intra-session HEAD chain stitching (prefix cut /
+ * null parentRecordId / chained branches), SessionNotFoundError,
+ * openHarness registry.
  */
 
 import { describe, expect, it } from "vitest";
@@ -63,33 +63,31 @@ describe("openHarness registry (interface-0003 入口)", () => {
 
 describe("AhsSession (存储视角)", () => {
   const session = makeSession("root", [
-    userMessage(0, "build it", { timestamp: T1 }),
-    assistantMessage(1, "working", { timestamp: T1, usage: { inputTokens: 100, outputTokens: 10 } }),
-    toolCall(2, "tc-1", { name: "Bash", status: "completed", timestamp: T1 }),
-    toolResult(3, "tc-1", "done", { sessionIds: ["sub"], timestamp: T1 }),
-    toolCall(4, "tc-2", { name: "Edit", status: "interrupted", timestamp: T1 }),
-    { ...userMessage(0, "ignored"), seq: 5, recordId: "r5", type: "harness_message" } as never,
+    userMessage("build it", { timestamp: T1 }),
+    assistantMessage("working", { timestamp: T1, usage: { inputTokens: 100, outputTokens: 10 } }),
+    toolCall("tc-1", { name: "Bash", status: "completed", timestamp: T1 }),
+    toolResult("tc-1", "done", { sessionIds: ["sub"], timestamp: T1 }),
+    toolCall("tc-2", { name: "Edit", status: "interrupted", timestamp: T1 }),
+    { ...userMessage("ignored"), recordId: "r5", type: "harness_message" } as never,
     {
       recordId: "r6",
-      seq: 6,
       timestamp: T1,
       type: "turn_boundary",
       phase: "start",
     } as never,
     {
       recordId: "r7",
-      seq: 7,
       timestamp: T1,
       type: "turn_boundary",
       phase: "end",
     } as never,
-    { recordId: "r8", seq: 8, timestamp: T1, type: "model_change", model: "m2" } as never,
-    { recordId: "r9", seq: 9, timestamp: T1, type: "compaction", summary: "s" } as never,
-    { recordId: "r10", seq: 10, timestamp: T1, type: "goal_update", status: "met" } as never,
+    { recordId: "r8", timestamp: T1, type: "model_change", model: "m2" } as never,
+    { recordId: "r9", timestamp: T1, type: "compaction", summary: "s" } as never,
+    { recordId: "r10", timestamp: T1, type: "goal_update", status: "met" } as never,
   ]);
   const facade = createFacade(fakeAdapter([session]));
 
-  it("messages() projects the mapping table row by row, in seq order", async () => {
+  it("messages() projects the mapping table row by row, in file order", async () => {
     const s = await facade.loadSession("root");
     expect(s.manifest.sessionId).toBe("root");
     const items = s.messages();
@@ -110,7 +108,7 @@ describe("AhsSession (存储视角)", () => {
     expect(items[3]).not.toHaveProperty("result");
   });
 
-  it("events() exposes state records in seq order; none leak into messages()", async () => {
+  it("events() exposes state records in file order; none leak into messages()", async () => {
     const s = await facade.loadSession("root");
     expect(s.events().map((e) => `${e.type}${e.type === "turn_boundary" ? `:${e.phase}` : ""}`)).toEqual([
       "turn_boundary:start",
@@ -135,12 +133,12 @@ describe("AhsSession (存储视角)", () => {
 });
 
 describe("tool pairing edge cases (projection-internal, XOR)", () => {
-  it("pairs with the FIRST result in seq order; drops unpaired results defensively", () => {
+  it("pairs with the FIRST result in file order; drops unpaired results defensively", () => {
     const items = projectMessages([
-      toolCall(0, "tc", { name: "Bash" }),
-      toolResult(1, "tc", "first"),
-      toolResult(2, "tc", "second"),
-      toolResult(3, "orphan", "no call for this"),
+      toolCall("tc", { name: "Bash" }),
+      toolResult("tc", "first"),
+      toolResult("tc", "second"),
+      toolResult("orphan", "no call for this"),
     ]);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ kind: "tool", result: { content: "first" } });
@@ -151,20 +149,20 @@ describe("children() (invocation 直接子 session)", () => {
   // root → sub (back-link) + sub → grand (forward link in sub's records);
   // root also forward-links "ghost-child", which is not in the store.
   const root = makeSession("root", [
-    userMessage(0, "go", { timestamp: T1 }),
-    toolCall(1, "tc-1", { name: "Task", status: "completed", recordId: "root-call", timestamp: T1 }),
-    toolResult(2, "tc-1", "sub done", { sessionIds: ["sub", "ghost-child"], timestamp: T1 }),
+    userMessage("go", { timestamp: T1 }),
+    toolCall("tc-1", { name: "Task", status: "completed", recordId: "root-call", timestamp: T1 }),
+    toolResult("tc-1", "sub done", { sessionIds: ["sub", "ghost-child"], timestamp: T1 }),
   ]);
   const sub = makeSession(
     "sub",
     [
-      userMessage(0, "subtask", { timestamp: T1 }),
-      toolCall(1, "tc-2", { name: "Task", status: "completed", timestamp: T1 }),
-      toolResult(2, "tc-2", "grand done", { sessionIds: ["grand"], timestamp: T1 }),
+      userMessage("subtask", { timestamp: T1 }),
+      toolCall("tc-2", { name: "Task", status: "completed", timestamp: T1 }),
+      toolResult("tc-2", "grand done", { sessionIds: ["grand"], timestamp: T1 }),
     ],
     { invocation: { sessionId: "root", atRecordId: "root-call" } },
   );
-  const grand = makeSession("grand", [userMessage(0, "grand task", { timestamp: T1 })], {
+  const grand = makeSession("grand", [userMessage("grand task", { timestamp: T1 })], {
     invocation: { sessionId: "sub" },
   });
   const facade = createFacade(fakeAdapter([root, sub, grand]));
@@ -186,27 +184,36 @@ describe("children() (invocation 直接子 session)", () => {
   });
 });
 
-describe("AhsTask (用户视角：lineage 组 + HEAD 链拼接)", () => {
-  it("stitches the HEAD chain: parent prefix cut at atRecordId + fork suffix, no duplicated prefix", async () => {
-    const base = makeSession("base", [
-      userMessage(0, "build it", { timestamp: T1 }),
-      assistantMessage(1, "first attempt", { timestamp: T1 }),
-      assistantMessage(2, "abandoned direction", { timestamp: T1 }),
-    ]);
-    const fork = makeSession(
-      "fork",
+describe("AhsTask (用户视角：intra-session HEAD chain stitching)", () => {
+  it("stitches the HEAD chain: parent prefix cut at parentRecordId + fork suffix, no duplicated prefix", async () => {
+    // A session with two branches: main (base) and fork-1 (forked from main at r1)
+    const session = makeSession(
+      "sess-1",
       [
-        userMessage(0, "new direction", { timestamp: T2 }),
-        assistantMessage(1, "fork work", { timestamp: T2 }),
+        userMessage("build it", { timestamp: T1, recordId: "r0" }),
+        assistantMessage("first attempt", { timestamp: T1, recordId: "r1" }),
+        assistantMessage("abandoned direction", { timestamp: T1, recordId: "r2" }),
       ],
-      { lineage: { type: "forked_from", sessionId: "base", atRecordId: "r1" } },
+      {
+        branches: {
+          main: { parentBranch: null, parentRecordId: null },
+          "fork-1": { parentBranch: "main", parentRecordId: "r1" },
+        },
+        HEAD: { branch: "fork-1", recordId: "r4" },
+      },
+      {
+        "fork-1": [
+          userMessage("new direction", { timestamp: T2, recordId: "r3" }),
+          assistantMessage("fork work", { timestamp: T2, recordId: "r4" }),
+        ],
+      },
     );
-    const facade = createFacade(fakeAdapter([base, fork]));
+    const facade = createFacade(fakeAdapter([session]));
 
-    const task = await facade.loadTask("base");
-    expect(task.groupId).toBe("base");
-    expect(task.members.map((m) => m.manifest.sessionId)).toEqual(["base", "fork"]);
-    expect(task.head.manifest.sessionId).toBe("fork"); // recency heuristic
+    const task = await facade.loadTask("sess-1");
+    expect(task.sessionId).toBe("sess-1");
+    expect(task.branches).toEqual(["fork-1", "main"]);
+    expect(task.head.manifest.sessionId).toBe("sess-1");
 
     const items = task.messages();
     expect(kinds(items)).toEqual(["user", "assistant", "user", "assistant"]);
@@ -219,63 +226,64 @@ describe("AhsTask (用户视角：lineage 组 + HEAD 链拼接)", () => {
     expect(texts).not.toContain("abandoned direction");
   });
 
-  it("retry-from-start (atRecordId absent): the parent contributes nothing", async () => {
-    const base = makeSession("base", [userMessage(0, "the prompt", { timestamp: T1 })]);
-    const retry = makeSession(
-      "retry",
+  it("null parentRecordId: the parent branch slice is kept in full", async () => {
+    const session = makeSession(
+      "sess-1",
       [
-        userMessage(0, "the prompt", { timestamp: T2 }),
-        assistantMessage(1, "retry answer", { timestamp: T2 }),
+        userMessage("build it", { timestamp: T1, recordId: "r0" }),
+        assistantMessage("work", { timestamp: T1, recordId: "r1" }),
       ],
-      { lineage: { type: "sibling_attempt", sessionId: "base" } },
+      {
+        branches: {
+          main: { parentBranch: null, parentRecordId: null },
+          "fork-1": { parentBranch: "main", parentRecordId: null },
+        },
+        HEAD: { branch: "fork-1", recordId: "r3" },
+      },
+      {
+        "fork-1": [
+          userMessage("continued", { timestamp: T2, recordId: "r2" }),
+          assistantMessage("more work", { timestamp: T2, recordId: "r3" }),
+        ],
+      },
     );
-    const facade = createFacade(fakeAdapter([base, retry]));
-    const task = await facade.loadTask("base");
-    expect(task.head.manifest.sessionId).toBe("retry");
+    const facade = createFacade(fakeAdapter([session]));
+    const task = await facade.loadTask("sess-1");
     const texts = task.messages().map((i) =>
       i.kind === "tool" ? "" : i.content.map((b) => (b.type === "text" ? b.text : "")).join(""),
     );
-    // The fork carries its own prompt copy: exactly one "the prompt".
-    expect(texts).toEqual(["the prompt", "retry answer"]);
+    expect(texts).toEqual(["build it", "work", "continued", "more work"]);
   });
 
-  it("null atRecordId (anchor source-unavailable): the parent slice is kept in full", async () => {
-    const base = makeSession("base", [
-      userMessage(0, "build it", { timestamp: T1 }),
-      assistantMessage(1, "work", { timestamp: T1 }),
-    ]);
-    const fork = makeSession("fork", [userMessage(0, "continued", { timestamp: T2 })], {
-      lineage: { type: "forked_from", sessionId: "base", atRecordId: null },
-    });
-    const facade = createFacade(fakeAdapter([base, fork]));
-    const task = await facade.loadTask("fork");
-    const texts = task.messages().map((i) =>
-      i.kind === "tool" ? "" : i.content.map((b) => (b.type === "text" ? b.text : "")).join(""),
-    );
-    expect(texts).toEqual(["build it", "work", "continued"]);
-  });
-
-  it("chained forks (a → b → c): each segment cut at the next segment's anchor", async () => {
-    const a = makeSession("a", [
-      userMessage(0, "a0", { timestamp: T1 }),
-      assistantMessage(1, "a1", { timestamp: T1 }),
-    ]);
-    const b = makeSession(
-      "b",
+  it("chained branches (main → fork-1 → fork-2): each segment cut at the next segment's anchor", async () => {
+    const session = makeSession(
+      "sess-1",
       [
-        userMessage(0, "b0", { timestamp: T2 }),
-        assistantMessage(1, "b1", { timestamp: T2 }),
-        assistantMessage(2, "b2 abandoned", { timestamp: T2 }),
+        userMessage("a0", { timestamp: T1, recordId: "ra0" }),
+        assistantMessage("a1", { timestamp: T1, recordId: "ra1" }),
       ],
-      { lineage: { type: "forked_from", sessionId: "a", atRecordId: "r1" } },
+      {
+        branches: {
+          main: { parentBranch: null, parentRecordId: null },
+          "fork-1": { parentBranch: "main", parentRecordId: "ra1" },
+          "fork-2": { parentBranch: "fork-1", parentRecordId: "rb1" },
+        },
+        HEAD: { branch: "fork-2", recordId: "rc0" },
+      },
+      {
+        "fork-1": [
+          userMessage("b0", { timestamp: T2, recordId: "rb0" }),
+          assistantMessage("b1", { timestamp: T2, recordId: "rb1" }),
+          assistantMessage("b2 abandoned", { timestamp: T2, recordId: "rb2" }),
+        ],
+        "fork-2": [
+          userMessage("c0", { timestamp: T3, recordId: "rc0" }),
+        ],
+      },
     );
-    const c = makeSession("c", [userMessage(0, "c0", { timestamp: T3 })], {
-      lineage: { type: "forked_from", sessionId: "b", atRecordId: "r1" },
-    });
-    const facade = createFacade(fakeAdapter([a, b, c]));
-    const task = await facade.loadTask("a");
-    expect(task.head.manifest.sessionId).toBe("c");
-    expect(task.members.map((m) => m.manifest.sessionId)).toEqual(["a", "b", "c"]);
+    const facade = createFacade(fakeAdapter([session]));
+    const task = await facade.loadTask("sess-1");
+    expect(task.branches).toEqual(["fork-1", "fork-2", "main"]);
     const texts = task.messages().map((i) =>
       i.kind === "tool" ? "" : i.content.map((b2) => (b2.type === "text" ? b2.text : "")).join(""),
     );

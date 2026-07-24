@@ -18,6 +18,7 @@ import {
   writeArchive,
 } from "../src/ahs/writer";
 import { readBlob, readManifest, readRecords } from "../src/ahs/reader";
+import type { Manifest } from "../src/schema/manifest";
 import type { AhsRecord } from "../src/schema/record";
 import { validateSessions, type SessionData } from "../src/validate/index";
 import {
@@ -34,9 +35,9 @@ afterAll(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-async function readAllRecords(dir: string): Promise<AhsRecord[]> {
+async function readAllRecords(dir: string, manifest: Manifest): Promise<AhsRecord[]> {
   const records: AhsRecord[] = [];
-  for await (const rec of readRecords(dir)) records.push(rec);
+  for await (const rec of readRecords(dir, manifest.HEAD.branch)) records.push(rec);
   return records;
 }
 
@@ -58,16 +59,16 @@ function archiveSnapshot(dir: string): Map<string, string> {
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
 const PARENT_RECORDS = [
-  userMessage(0, "go", { usage: { inputTokens: 10, outputTokens: 5 } }),
-  assistantMessage(1, "working"),
-  toolCall(2, "tc1", { status: "completed" }),
-  toolResult(3, "tc1", "done", { sessionIds: ["child"] }),
+  userMessage("go", { usage: { inputTokens: 10, outputTokens: 5 }, recordId: "r0" }),
+  assistantMessage("working", { recordId: "r1" }),
+  toolCall("tc1", { status: "completed", recordId: "r2" }),
+  toolResult("tc1", "done", { sessionIds: ["child"], recordId: "r3" }),
 ];
 
 describe("archive round-trip", () => {
   const sessions: SessionData[] = [
     makeSession("parent", PARENT_RECORDS),
-    makeSession("child", [userMessage(0, "subtask")], {
+    makeSession("child", [userMessage("subtask")], {
       invocation: { sessionId: "parent", atRecordId: "r2" },
     }),
   ];
@@ -82,7 +83,7 @@ describe("archive round-trip", () => {
     for (const { manifest, records } of sessions) {
       const dir = path.join(outDir, sanitizeSessionId(manifest.sessionId));
       const archivedManifest = await readManifest(dir);
-      const archivedRecords = await readAllRecords(dir);
+      const archivedRecords = await readAllRecords(dir, manifest);
       // Nothing crosses the blob threshold: the archive is an exact copy.
       expect(archivedManifest).toEqual(manifest);
       expect(archivedRecords).toEqual(records);
@@ -150,12 +151,12 @@ describe("blob externalization", () => {
   const EXACTLY_AT = "E".repeat(BLOB_THRESHOLD);
 
   const session = makeSession("blob-session", [
-    userMessage(0, "go"),
-    assistantMessage(1, BIG_TEXT),
-    toolCall(2, "tc1"),
-    toolResult(3, "tc1", BIG_RESULT),
-    toolCall(4, "tc2"),
-    toolResult(5, "tc2", EXACTLY_AT), // at threshold → stays inline (rule is > 64 KiB)
+    userMessage("go"),
+    assistantMessage(BIG_TEXT),
+    toolCall("tc1"),
+    toolResult("tc1", BIG_RESULT),
+    toolCall("tc2"),
+    toolResult("tc2", EXACTLY_AT), // at threshold → stays inline (rule is > 64 KiB)
   ]);
   const adapter = fakeAdapter([session]);
 
@@ -165,7 +166,8 @@ describe("blob externalization", () => {
     expect(result.blobCount).toBe(2);
     const dir = result.dir;
 
-    const archived = await readAllRecords(dir);
+    const archivedManifest = await readManifest(dir);
+    const archived = await readAllRecords(dir, archivedManifest);
     // Oversized assistant text block → blob_ref block.
     const msg = archived[1]!;
     expect(msg.type).toBe("assistant_message");
@@ -200,7 +202,8 @@ describe("blob externalization", () => {
   it("readBlob re-hash detects corrupted blob content", async () => {
     const outDir = path.join(tmp, "blobs-tamper");
     const dir = (await exportSessions(adapter, outDir))[0]!.dir;
-    const archived = await readAllRecords(dir);
+    const archivedManifest2 = await readManifest(dir);
+    const archived = await readAllRecords(dir, archivedManifest2);
     const big = archived[3]!;
     if (big.type !== "tool_result" || typeof big.content === "string") {
       throw new Error("expected blob_ref content");

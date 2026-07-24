@@ -4,13 +4,12 @@
  *
  * Fixture layout (all hand-crafted, no real user data), under
  * test/fixtures/pi/--Users-test-Project-demo--/:
- *   aaaa…00a1  minimal session with cost-bearing usage — AC-0002-N-3/N-4,
- *              cost mapping (pi is the only harness with cost)
+ *   aaaa…00a1  minimal session with usage — AC-0002-N-3/N-4
  *   bbbb…00b2  parallel tool calls (chained results, one isError),
  *              mid-session model_change, an error assistant message
  *              (empty content, projects nothing) — AC-0001-E-1, AC-0002-N-6
  *   cccc…00c3  branch points: edit-resend after an assistant record
- *              (forked_from) + re-answer to a user prompt (sibling_attempt);
+ *              (forked_from) + re-answer to a user prompt (forked_from);
  *              main chain = chain to the last leaf — AC-0002-N-7
  *   dddd…00d4  thinking_level_change before any model_change (dropped),
  *              assistant without usage, interrupted tool_call — AC-0002-B-1/B-2
@@ -34,17 +33,16 @@ const fixturesDir = path.join(
   "pi",
 );
 
-const SESSION_A = "019f4000-aaaa-7000-8000-0000000000a1"; // minimal + cost
+const SESSION_A = "019f4000-aaaa-7000-8000-0000000000a1"; // minimal usage
 const SESSION_B = "019f4000-bbbb-7000-8000-0000000000b2"; // tools + model switch + error msg
 const SESSION_C = "019f4000-cccc-7000-8000-0000000000c3"; // forks
 const SESSION_D = "019f4000-dddd-7000-8000-0000000000d4"; // edge cases
 const SESSION_E = "019f4000-eeee-7000-8000-0000000000e5"; // session record only, skipped
-const FORK_EDIT = `${SESSION_C}/fork/cc000005`;
-const FORK_RETRY = `${SESSION_C}/fork/cc00000a`;
+// Fork constants removed — forks are now intra-session branches (ADR-0006).
 
-async function readAll(adapter: PiAdapter, sessionId: string): Promise<AhsRecord[]> {
+async function readAll(adapter: PiAdapter, sessionId: string, branchName?: string): Promise<AhsRecord[]> {
   const records: AhsRecord[] = [];
-  for await (const rec of adapter.readRecords(sessionId)) records.push(rec);
+  for await (const rec of adapter.readRecords(sessionId, branchName)) records.push(rec);
   return records;
 }
 
@@ -110,25 +108,21 @@ describe("pi adapter", () => {
     expect(await checkIdempotency(adapter)).toEqual([]);
   });
 
-  it("lists main and fork sessions; skips the session-record-only file", async () => {
+  it("lists main sessions; forks are intra-session branches (ADR-0006)", async () => {
     const sessions = await collectSessions(adapter);
     const ids = sessions.map((s) => s.manifest.sessionId).sort();
-    expect(ids).toEqual(
-      [SESSION_A, SESSION_B, SESSION_C, SESSION_D, FORK_EDIT, FORK_RETRY].sort(),
-    );
+    expect(ids).toEqual([SESSION_A, SESSION_B, SESSION_C, SESSION_D].sort());
     expect(ids).not.toContain(SESSION_E);
   });
 
-  it("listSessions default folds lineage descendants; includeForks lists them (interface-0001)", async () => {
+  it("listSessions always lists all sessions; includeForks is a no-op (ADR-0006)", async () => {
     const heads: string[] = [];
     for await (const m of adapter.listSessions()) heads.push(m.sessionId);
     expect(heads.sort()).toEqual([SESSION_A, SESSION_B, SESSION_C, SESSION_D].sort());
 
     const all: string[] = [];
     for await (const m of adapter.listSessions({ includeForks: true })) all.push(m.sessionId);
-    expect(all).toContain(FORK_EDIT);
-    expect(all).toContain(FORK_RETRY);
-    expect(all.length).toBe(heads.length + 2);
+    expect(all.sort()).toEqual([SESSION_A, SESSION_B, SESSION_C, SESSION_D].sort());
   });
 
   it("readRecords of a session-record-only file yields nothing; unknown sessionId throws", async () => {
@@ -151,7 +145,7 @@ describe("pi adapter", () => {
     expect(none).toEqual([]);
   });
 
-  describe("minimal session with cost (fixture A)", () => {
+  describe("minimal session with usage (fixture A)", () => {
     it("maps manifest fields from the session + first model_change records", async () => {
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_A)!.manifest;
@@ -168,7 +162,6 @@ describe("pi adapter", () => {
         inputTokens: 1918,
         outputTokens: 409,
         cacheReadTokens: 256,
-        cost: { amount: 0.0007, currency: "USD" },
       });
     });
 
@@ -191,7 +184,6 @@ describe("pi adapter", () => {
         expect(thinking.model).toBe("DeepSeek-V4-Flash");
         expect(thinking.provider).toBe("ollama");
       }
-      expect(records.map((r) => r.seq)).toEqual([0, 1, 2, 3]);
     });
 
     it("preserves text and thinking verbatim (AC-0002-N-3)", async () => {
@@ -209,7 +201,7 @@ describe("pi adapter", () => {
       }
     });
 
-    it("maps usage including cost and reasoning; drops totalTokens (AC-0002-N-4)", async () => {
+    it("maps usage including reasoning; drops totalTokens (AC-0002-N-4)", async () => {
       const records = await readAll(adapter, SESSION_A);
       const assistant = records[3]!;
       expect(assistant.model).toBe("DeepSeek-V4-Flash");
@@ -219,7 +211,6 @@ describe("pi adapter", () => {
         cacheReadTokens: 256,
         cacheWriteTokens: 0,
         reasoningTokens: 0,
-        cost: { amount: 0.0007, currency: "USD" },
       });
     });
   });
@@ -302,7 +293,7 @@ describe("pi adapter", () => {
     });
   });
 
-  describe("fork synthesis (fixture C, AC-0002-N-7)", () => {
+  describe("fork synthesis (fixture C, AC-0002-N-7, ADR-0006 branches)", () => {
     it("main chain = the chain leading to the last leaf (edited resend + latest retry answer)", async () => {
       const main = await readAll(adapter, SESSION_C);
       expect(main.map((r) => r.recordId)).toEqual([
@@ -315,48 +306,43 @@ describe("pi adapter", () => {
         "cc000009",
         "cc00000b", // the retry's later answer
       ]);
-      expect(main.map((r) => r.seq)).toEqual(main.map((_, i) => i));
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_C)!.manifest;
       expect(manifest.lineage).toBeUndefined();
       expect(manifest.stats?.turnCount).toBe(3);
     });
 
-    it("edit-resend branch becomes a forked_from session anchored at the assistant record", async () => {
+    it("manifest registers fork branches with parentRecordId anchors", async () => {
       const sessions = await collectSessions(adapter);
-      const fork = sessions.find((s) => s.manifest.sessionId === FORK_EDIT)!;
-      expect(fork.manifest.lineage).toEqual({
-        type: "forked_from", // anchor is an assistant_message (agent-side)
-        sessionId: SESSION_C,
-        atRecordId: "cc000004",
-      });
-      // Suffix only: the fork starts at the branch child, no shared prefix.
-      expect(fork.records.map((r) => r.recordId)).toEqual(["cc000005", "cc000006"]);
-      expect(fork.records[0]!.seq).toBe(0);
-      // The fork manifest still carries the file-level cwd/version.
-      expect(fork.manifest.cwd).toBe("/Users/test/Project/demo");
-      expect(fork.manifest.harnessVersion).toBe("3");
+      const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_C)!.manifest;
+      expect(Object.keys(manifest.branches).sort()).toEqual(["b001", "b002", "main"]);
+      expect(manifest.branches.main).toEqual({ parentBranch: null, parentRecordId: null });
+      // b001: edit-resend fork, anchored at the assistant record cc000004
+      expect(manifest.branches.b001!.parentBranch).toBe("main");
+      expect(manifest.branches.b001!.parentRecordId).toBe("cc000004");
+      // b002: re-answer fork, anchored at the user_message cc000009
+      expect(manifest.branches.b002!.parentBranch).toBe("main");
+      expect(manifest.branches.b002!.parentRecordId).toBe("cc000009");
     });
 
-    it("re-answer to the same prompt becomes a sibling_attempt anchored at the user_message", async () => {
-      const sessions = await collectSessions(adapter);
-      const fork = sessions.find((s) => s.manifest.sessionId === FORK_RETRY)!;
-      expect(fork.manifest.lineage).toEqual({
-        type: "sibling_attempt", // anchor is a user_message
-        sessionId: SESSION_C,
-        atRecordId: "cc000009",
-      });
-      expect(fork.records.map((r) => r.recordId)).toEqual(["cc00000a"]);
+    it("edit-resend branch (b001) stores suffix-only records", async () => {
+      const records = await readAll(adapter, SESSION_C, "b001");
+      expect(records.map((r) => r.recordId)).toEqual(["cc000005", "cc000006"]);
+    });
+
+    it("re-answer branch (b002) stores the alternate answer, not in the main chain", async () => {
+      const records = await readAll(adapter, SESSION_C, "b002");
+      expect(records.map((r) => r.recordId)).toEqual(["cc00000a"]);
       // The competing answer is NOT in the main session.
       const main = await readAll(adapter, SESSION_C);
       expect(main.some((r) => r.recordId === "cc00000a")).toBe(false);
     });
 
-    it("readRecords resolves fork session ids", async () => {
-      const records = await readAll(adapter, FORK_EDIT);
-      expect(records.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
-      const retry = await readAll(adapter, FORK_RETRY);
-      expect(retry).toHaveLength(1);
+    it("readRecords of old fork session IDs throws session not found", async () => {
+      await expect(readAll(adapter, `${SESSION_C}/fork/cc000005`))
+        .rejects.toThrow("session not found");
+      await expect(readAll(adapter, `${SESSION_C}/fork/cc00000a`))
+        .rejects.toThrow("session not found");
     });
   });
 
@@ -365,7 +351,6 @@ describe("pi adapter", () => {
       const records = await readAll(adapter, SESSION_D);
       expect(records.some((r) => r.recordId === "dd000001")).toBe(false);
       expect(records.map((r) => r.type)).toEqual(["user_message", "tool_call"]);
-      expect(records.map((r) => r.seq)).toEqual([0, 1]);
     });
 
     it("marks a tool_call without a paired result as interrupted, no synthetic result (AC-0002-B-1)", async () => {

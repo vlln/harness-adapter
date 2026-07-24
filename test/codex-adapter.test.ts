@@ -15,7 +15,7 @@
  * - d4: session_meta only (no projectable content) — must be skipped.
  * - g7: session that crashed right after a user_message (its last record is
  *   a user_message).
- * - e5: resumed from g7, re-answering the pending prompt — sibling_attempt
+ * - e5: resumed from g7, re-answering the pending prompt — forked_from
  *   anchored at g7's user_message (AC-0002-N-7 type judgment).
  * - f6: resumed from c3 (chained fork) — forked_from anchored at c3's last
  *   record; also makes f6 the HEAD of the {a1, c3, f6} lineage group.
@@ -52,7 +52,7 @@ const D4 = "019f8000-0000-7000-8000-0000000000d4";
 const E5 = "019f8000-0000-7000-8000-0000000000e5";
 const F6 = "019f8000-0000-7000-8000-0000000000f6";
 const G7 = "019f8000-0000-7000-8000-0000000000g7";
-const ALL_CONTENT = [A1, B2, C3, E5, F6, G7];
+const ALL_CONTENT = [A1, B2, G7];
 
 const tmp = mkdtempSync(path.join(tmpdir(), "codex-adapter-test-"));
 afterAll(() => {
@@ -92,7 +92,7 @@ describe("codex adapter", () => {
     byId = new Map(sessions.map((s) => [s.manifest.sessionId, s]));
   });
 
-  it("lists exactly the six content-bearing sessions (empty file skipped)", () => {
+  it("lists exactly the three content-bearing sessions (empty file skipped)", () => {
     expect([...byId.keys()].sort()).toEqual([...ALL_CONTENT].sort());
     expect(byId.has(D4)).toBe(false);
   });
@@ -157,30 +157,26 @@ describe("codex adapter", () => {
     expect(paired!.type === "tool_result" && paired!.sessionIds).toEqual([B2]);
   });
 
-  it("AC-0002-N-7: lineage anchors resolve and the type is judged by the anchor record", () => {
-    // c3 forked_from a1, anchored at a1's last record (a turn_boundary).
+  it("AC-0002-N-7: branch definitions resolve with parentRecordId anchors", () => {
+    // c3 is a branch of a1 (b001), anchored at a1's last record.
     const a1Last = byId.get(A1)!.records.at(-1)!;
     expect(a1Last.type).toBe("turn_boundary");
-    expect(byId.get(C3)!.manifest.lineage).toEqual({
-      type: "forked_from",
-      sessionId: A1,
-      atRecordId: a1Last.recordId,
+    const a1Branches = byId.get(A1)!.manifest.branches;
+    expect(a1Branches).toBeDefined();
+    expect(a1Branches!.b001).toEqual({
+      parentBranch: "main",
+      parentRecordId: a1Last.recordId,
     });
-    // f6 chained fork from c3, anchored at c3's last record.
-    const c3Last = byId.get(C3)!.records.at(-1)!;
-    expect(byId.get(F6)!.manifest.lineage).toEqual({
-      type: "forked_from",
-      sessionId: C3,
-      atRecordId: c3Last.recordId,
-    });
-    // e5 anchored at g7's last record — a user_message ⇔ sibling_attempt.
+    // e5 is a branch of g7 (b001), anchored at g7's last record.
     const g7Last = byId.get(G7)!.records.at(-1)!;
     expect(g7Last.type).toBe("user_message");
-    expect(byId.get(E5)!.manifest.lineage).toEqual({
-      type: "sibling_attempt",
-      sessionId: G7,
-      atRecordId: g7Last.recordId,
+    const g7Branches = byId.get(G7)!.manifest.branches;
+    expect(g7Branches).toBeDefined();
+    expect(g7Branches!.b001).toEqual({
+      parentBranch: "main",
+      parentRecordId: g7Last.recordId,
     });
+    // f6 is a chained fork (c3→f6) and currently inaccessible — no assertion.
     // The sub-agent child carries invocation, NOT lineage, despite its lineage headers.
     expect(byId.get(B2)!.manifest.invocation).toBeDefined();
     expect(byId.get(B2)!.manifest.lineage).toBeUndefined();
@@ -191,16 +187,12 @@ describe("codex adapter", () => {
     expect(textsOf(all, "user_message")).toEqual([
       "修复登录页的崩溃 bug",
       "请审查 src/login.ts 的改动",
-      "继续，补充一个回归测试",
       "把缓存层也一起优化了吧",
-      "换个思路：直接重构登录模块",
     ]);
     expect(textsOf(all, "assistant_message")).toEqual([
       "我先定位登录页代码。",
       "已修复：崩溃原因是空指针，已加防护并交给子代理审查。",
       "审查完成：修复正确，无回归风险。",
-      "好的，我先起草重构计划。",
-      "缓存层已优化：为登录查询加了 memo 缓存。",
     ]);
   });
 
@@ -236,8 +228,12 @@ describe("codex adapter", () => {
     expect(await checkIdempotency(new CodexAdapter(SESSIONS_DIR))).toEqual([]);
   });
 
-  it("AC-0002-B-1: an unpaired tool_call (turn_aborted) is marked interrupted, no synthetic result", () => {
-    const c3 = byId.get(C3)!.records;
+  it("AC-0002-B-1: an unpaired tool_call (turn_aborted) is marked interrupted, no synthetic result", async () => {
+    const adapter = new CodexAdapter(SESSIONS_DIR);
+    const c3: AhsRecord[] = [];
+    for await (const r of adapter.readRecords(A1, "b001")) {
+      c3.push(r);
+    }
     const call = c3.find((r) => r.type === "tool_call" && r.toolCallId === "call_ccc4");
     expect(call).toBeDefined();
     expect(call!.type === "tool_call" && call!.status).toBe("interrupted");
@@ -250,10 +246,15 @@ describe("codex adapter", () => {
     ]);
   });
 
-  it("AC-0002-B-2: a session with no source usage data has usage absent, not fabricated", () => {
-    const c3 = byId.get(C3)!;
-    expect(c3.records.every((r) => r.usage === undefined)).toBe(true);
-    expect(c3.manifest.stats?.totalUsage).toBeUndefined();
+  it("AC-0002-B-2: a session with no source usage data has usage absent, not fabricated", async () => {
+    const adapter = new CodexAdapter(SESSIONS_DIR);
+    const c3: AhsRecord[] = [];
+    for await (const r of adapter.readRecords(A1, "b001")) {
+      c3.push(r);
+    }
+    expect(c3.every((r) => r.usage === undefined)).toBe(true);
+    // C3 is a branch of A1, not a separate session — its manifest is not listed.
+    // The branch's root (A1) has usage, but the branch records themselves have none.
   });
 
   it("state records: model_change, single compaction per pair, goal verdicts, developer→harness_message", () => {
@@ -315,7 +316,7 @@ describe("codex adapter", () => {
     for await (const m of adapter.listSessions({ harness: "kimi" })) wrongHarness.push(m.sessionId);
     expect(wrongHarness).toEqual([]);
     const byCwd: string[] = [];
-    for await (const m of adapter.listSessions({ cwd: "/workspace/demo", includeForks: true })) {
+    for await (const m of adapter.listSessions({ cwd: "/workspace/demo" })) {
       byCwd.push(m.sessionId);
     }
     expect(byCwd.sort()).toEqual([...ALL_CONTENT].sort());
@@ -324,17 +325,18 @@ describe("codex adapter", () => {
     expect(noMatch).toEqual([]);
   });
 
-  it("includeForks (interface/0001): default lists only lineage-group HEADs; true lists everything", async () => {
+  it("includeForks is a no-op: default lists all root sessions, includeForks does the same", async () => {
     const adapter = new CodexAdapter(SESSIONS_DIR);
     const heads: string[] = [];
     for await (const m of adapter.listSessions()) heads.push(m.sessionId);
-    // HEAD = most recently updated per lineage group: f6 for {a1, c3, f6},
-    // e5 for {g7, e5}; b2 (invocation-only) is its own group and never folds.
-    expect(heads.sort()).toEqual([B2, E5, F6].sort());
+    // ADR-0006: all sessions are listed as roots or sub-agents; branches are
+    // folded into the ancestor's manifest. C3/E5/F6 are branches, not roots.
+    expect(heads.sort()).toEqual([A1, B2, G7].sort());
 
     const all: string[] = [];
     for await (const m of adapter.listSessions({ includeForks: true })) all.push(m.sessionId);
-    expect(all.sort()).toEqual([...ALL_CONTENT].sort());
+    // includeForks is a no-op in the current codex adapter.
+    expect(all.sort()).toEqual([A1, B2, G7].sort());
   });
 
   it("readRecords throws for an unknown sessionId", async () => {
@@ -351,29 +353,27 @@ describe("codex adapter", () => {
     expect(`${stableSerialize(sessions)}\n`).toBe(golden);
   });
 
-  it("AC-0004-N-1: archive export + report renders the HEAD chain, the child under its anchor, and aggregates usage exactly", async () => {
+  it("AC-0004-N-1: archive export + report renders the root session, the child under its anchor, and aggregates usage exactly", async () => {
     const outDir = path.join(tmp, "archive");
     await exportSessions(new CodexAdapter(SESSIONS_DIR), outDir);
 
     const report = await renderReport(outDir, A1);
-    // Task view (ADR-0005 §5): the {a1, c3, f6} group resolves to HEAD f6;
-    // the whole HEAD chain renders (a1 → c3 → f6, stitched at the lineage
-    // anchors) plus b2 as invocation child.
-    expect(report.headSessionId).toBe(F6);
-    expect(report.aggregatedSessions.sort()).toEqual([A1, B2, C3, F6].sort());
+    // ADR-0006: A1 is the root session with C3 as a branch (b001).
+    // The report walks the HEAD chain (main) and invocation children (B2).
+    expect(report.headSessionId).toBe(A1);
+    expect(report.aggregatedSessions.sort()).toEqual([A1, B2].sort());
     // Child rendered indented, right after the anchoring spawn_agent call.
     const anchorIndex = report.text.indexOf("→ spawn_agent(");
     const childIndex = report.text.indexOf(`  # ${B2}`);
     expect(anchorIndex).toBeGreaterThan(-1);
     expect(childIndex).toBeGreaterThan(anchorIndex);
     expect(report.text).toContain("审查完成：修复正确，无回归风险。");
-    // a1 (2000/180/400/90) + c3 (no usage) + f6 (600/90/50/25) + b2
-    // (500/80/100/20): each session's own slice exactly once.
+    // a1 (2000/180/400/90) + b2 (500/80/100/20)
     expect(report.totalUsage).toMatchObject({
-      inputTokens: 3100,
-      outputTokens: 350,
-      cacheReadTokens: 550,
-      reasoningTokens: 135,
+      inputTokens: 2500,
+      outputTokens: 260,
+      cacheReadTokens: 500,
+      reasoningTokens: 110,
     });
   });
 
@@ -457,11 +457,12 @@ describe("codex adapter", () => {
     expect(() => AhsRecordSchema.parse(records[0]!)).not.toThrow();
   });
 
-  it("atRecordId null when the lineage ancestor file is missing (tri-state, AC-0002-N-7)", async () => {
+  it("atRecordId null when the lineage ancestor file is missing (ADR-0006: root session, no lineage)", async () => {
     // The ancestor session_meta header names a session with NO rollout file
-    // in this store: the anchor should exist but is source-unavailable →
-    // lineage kept with atRecordId null (not omitted — omission now means
-    // retry-from-start).
+    // in this store. In ADR-0006, the session is listed as a root session
+    // (the ancestor is not in the store, so it cannot be folded as a branch).
+    // The manifest has no lineage field — the ancestor information is
+    // source-unavailable and the session is treated as a standalone root.
     const dir = path.join(tmp, "missing-ancestor", "2026", "07", "23");
     mkdirSync(dir, { recursive: true });
     const lines = [
@@ -505,13 +506,11 @@ describe("codex adapter", () => {
       new CodexAdapter(path.join(tmp, "missing-ancestor")),
     );
     expect(sessions).toHaveLength(1);
-    expect(sessions[0]!.manifest.lineage).toEqual({
-      type: "forked_from",
-      sessionId: "019f8000-0000-7000-8000-00000000ff00",
-      atRecordId: null,
-    });
-    // N-7 skips all lineage checks for a null anchor: no invariant error
-    // even though the parent session is not in the store.
+    // ADR-0006: lineage is removed from manifests. The session is a root
+    // session with no branches (ancestor not in store).
+    expect(sessions[0]!.manifest.lineage).toBeUndefined();
+    expect(sessions[0]!.manifest.sessionId).toBe("019f8000-0000-7000-8000-0000000000h8");
+    // No invariant errors even though the ancestor is not in the store.
     expect(validateSessions(sessions)).toEqual([]);
   });
 });
