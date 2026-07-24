@@ -1,6 +1,16 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "99990002-0000-4000-8000-000000000002"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/Users/test/Project/demo",
     "git": {
       "branch": "main"
@@ -11,7 +21,6 @@
       "sessionId": "77777777-7777-4777-8777-777777777777"
     },
     "model": "claude-opus-4-1",
-    "root": false,
     "sessionId": "ghi789",
     "stats": {
       "totalUsage": {

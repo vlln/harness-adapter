@@ -6,12 +6,6 @@ import { ClaudeCodeAdapter } from "../adapters/claude-code/index";
 import { CodexAdapter } from "../adapters/codex/index";
 import { KimiCodeAdapter } from "../adapters/kimi-code/index";
 import { DevinAdapter } from "../adapters/devin/index";
-import {
-  buildRelations,
-  groupOfSession,
-  lineageParentEdge,
-  type RelationSession,
-} from "../ahs/relations";
 import type {
   AhsSession,
   AhsTask,
@@ -26,8 +20,13 @@ import type {
  * memory and projects them; the underlying interface is unchanged (bulk
  * processing of large sessions should still go through readRecords).
  *
+ * ADR-0006: Session = directory with multiple branches. The facade:
+ * - loadSession: materializes all branches, projects HEAD branch.
+ * - loadTask: stitches the HEAD chain (HEAD branch → parentBranch → root).
+ * - childrenOf: unchanged (invocation back-links from manifests).
+ *
  * Everything here depends ONLY on the substrate's contract data (Manifest
- * + records + the two relation dimensions) — never on native storage.
+ * + records + invocation dimension) — never on native storage.
  */
 
 /** Thrown by loadSession/loadTask for an id the store does not list. */
@@ -128,7 +127,7 @@ function sumUsage(records: AhsRecord[]): Usage {
 
 interface MaterializedSession {
   manifest: Manifest;
-  records: AhsRecord[];
+  branchRecords: Map<string, AhsRecord[]>;
 }
 
 class SessionView implements AhsSession {
@@ -142,15 +141,21 @@ class SessionView implements AhsSession {
   }
 
   messages(): ConversationItem[] {
-    return projectMessages(this.session.records);
+    const headBranch = this.session.manifest.HEAD.branch;
+    const records = this.session.branchRecords.get(headBranch) ?? [];
+    return projectMessages(records);
   }
 
   events(): StateEvent[] {
-    return stateEvents(this.session.records);
+    const headBranch = this.session.manifest.HEAD.branch;
+    const records = this.session.branchRecords.get(headBranch) ?? [];
+    return stateEvents(records);
   }
 
   get usage(): Usage {
-    return sumUsage(this.session.records);
+    const headBranch = this.session.manifest.HEAD.branch;
+    const records = this.session.branchRecords.get(headBranch) ?? [];
+    return sumUsage(records);
   }
 
   async children(): Promise<AhsSession[]> {
@@ -160,9 +165,9 @@ class SessionView implements AhsSession {
 
 class TaskView implements AhsTask {
   constructor(
-    readonly groupId: string,
+    readonly sessionId: string,
     readonly head: AhsSession,
-    readonly members: AhsSession[],
+    readonly branches: string[],
     private readonly stitched: ConversationItem[],
   ) {}
 
@@ -178,7 +183,7 @@ class FacadeImpl implements HarnessFacade {
     return this.adapter.listSessions(filter);
   }
 
-  /** All manifests in the store, lineage descendants included. */
+  /** All manifests in the store, fork descendants included. */
   private async allManifests(): Promise<Manifest[]> {
     const manifests: Manifest[] = [];
     for await (const manifest of this.adapter.listSessions({ includeForks: true })) {
@@ -188,10 +193,16 @@ class FacadeImpl implements HarnessFacade {
   }
 
   private async materialize(manifest: Manifest): Promise<MaterializedSession> {
-    const records: AhsRecord[] = [];
-    for await (const rec of this.adapter.readRecords(manifest.sessionId)) records.push(rec);
-    records.sort((a, b) => a.seq - b.seq);
-    return { manifest, records };
+    const branchRecords = new Map<string, AhsRecord[]>();
+    for (const branchName of Object.keys(manifest.branches)) {
+      const records: AhsRecord[] = [];
+      for await (const rec of this.adapter.readRecords(manifest.sessionId, branchName)) {
+        records.push(rec);
+      }
+      records.sort((a, b) => a.seq - b.seq);
+      branchRecords.set(branchName, records);
+    }
+    return { manifest, branchRecords };
   }
 
   async loadSession(sessionId: string): Promise<AhsSession> {
@@ -213,7 +224,10 @@ class FacadeImpl implements HarnessFacade {
     for (const m of manifests) {
       if (m.invocation?.sessionId === session.manifest.sessionId) childIds.add(m.sessionId);
     }
-    for (const rec of session.records) {
+    // Forward links from HEAD branch records.
+    const headBranch = session.manifest.HEAD.branch;
+    const headRecords = session.branchRecords.get(headBranch) ?? [];
+    for (const rec of headRecords) {
       if (rec.type !== "tool_result" || rec.sessionIds === undefined) continue;
       for (const id of rec.sessionIds) childIds.add(id);
     }
@@ -233,78 +247,52 @@ class FacadeImpl implements HarnessFacade {
   }
 
   /**
-   * User view (interface-0003): resolve the session's lineage group and
-   * HEAD, then stitch the HEAD chain. Group resolution scans ALL store
-   * manifests (declared cost for large stores); group/HEAD mechanics are
-   * reused from the relations store (buildRelations).
+   * User view (interface-0003): intra-session HEAD chain stitching
+   * (ADR-0006). Walk from HEAD branch back through parentBranch to the
+   * root branch, cutting at each segment's parentRecordId.
    */
   async loadTask(sessionId: string): Promise<AhsTask> {
     const manifests = await this.allManifests();
-    if (!manifests.some((m) => m.sessionId === sessionId)) {
-      throw new SessionNotFoundError(sessionId);
-    }
-    // Pass 1 (manifests only): lineage-group membership. Grouping uses
-    // lineage edges only, so empty records suffice here.
-    const skeleton = buildRelations(
-      manifests.map((manifest) => ({ manifest, records: [] })),
-    );
-    const group = groupOfSession(skeleton, sessionId)!;
+    const manifest = manifests.find((m) => m.sessionId === sessionId);
+    if (manifest === undefined) throw new SessionNotFoundError(sessionId);
 
-    // Pass 2: materialize the group's members and re-derive HEAD + edges
-    // from real records (recency heuristic, same rule as the relations
-    // store: latest last-record timestamp, tie → smaller sessionId).
-    const members: MaterializedSession[] = [];
-    for (const manifest of manifests) {
-      if (group.members.includes(manifest.sessionId)) {
-        members.push(await this.materialize(manifest));
-      }
-    }
-    const relations = buildRelations(members as RelationSession[]);
-    const realGroup = relations.groups.find((g) => g.members.includes(sessionId))!;
+    const session = await this.materialize(manifest);
 
-    // HEAD chain, oldest first (cycle-safe, staying inside the group).
-    // Stop at the first session with root === true (self-contained root).
-    const chain: string[] = [];
+    // Walk the HEAD chain: HEAD branch → parentBranch → ... → root branch.
+    // Build oldest-first.
+    const chain: { branchName: string; records: AhsRecord[] }[] = [];
     const seen = new Set<string>();
-    let cur: string | undefined = realGroup.mainSessionId;
-    while (cur !== undefined && !seen.has(cur)) {
-      seen.add(cur);
-      chain.unshift(cur);
-      const member = members.find((m) => m.manifest.sessionId === cur);
-      if (member?.manifest.root) break;
-      const edge = lineageParentEdge(relations, cur);
-      cur = edge !== undefined && realGroup.members.includes(edge.from) ? edge.from : undefined;
+    let curBranch: string | null = session.manifest.HEAD.branch;
+    while (curBranch !== null && !seen.has(curBranch)) {
+      seen.add(curBranch);
+      const branchDef: Manifest["branches"][string] | undefined = session.manifest.branches[curBranch];
+      const records = session.branchRecords.get(curBranch) ?? [];
+      chain.unshift({ branchName: curBranch, records });
+      curBranch = branchDef?.parentBranch ?? null;
     }
 
-    // Stitch: prefix slices cut at the next segment's atRecordId anchor
-    // (inclusive); null anchor = cut point unknown → full parent slice;
-    // absent anchor = retry-from-start → parent contributes nothing. A
-    // dangling anchor falls back to the full slice (defensive; AC-0002-N-7
-    // guarantees resolution).
-    const byId = new Map(members.map((m) => [m.manifest.sessionId, m]));
+    // Stitch: each segment cut at the next segment's parentRecordId
+    // (inclusive). null parentRecordId = full parent slice.
     const stitched: ConversationItem[] = [];
     for (let i = 0; i < chain.length; i += 1) {
-      const session = byId.get(chain[i]!)!;
-      let end = session.records.length;
+      const segment = chain[i]!;
+      let end = segment.records.length;
       if (i + 1 < chain.length) {
-        const childEdge = lineageParentEdge(relations, chain[i + 1]!);
-        if (childEdge?.atRecordId === undefined) {
-          end = 0;
-        } else if (childEdge.atRecordId === null) {
-          end = session.records.length;
-        } else {
-          const idx = session.records.findIndex((r) => r.recordId === childEdge.atRecordId);
-          end = idx >= 0 ? idx + 1 : session.records.length;
+        const nextBranchName = chain[i + 1]!.branchName;
+        const nextBranchDef = session.manifest.branches[nextBranchName];
+        const parentRecordId = nextBranchDef?.parentRecordId;
+        if (parentRecordId !== null) {
+          const idx = segment.records.findIndex((r) => r.recordId === parentRecordId);
+          end = idx >= 0 ? idx + 1 : segment.records.length;
         }
+        // null parentRecordId: keep full parent slice (start from beginning).
       }
-      stitched.push(...projectMessages(session.records.slice(0, end)));
+      stitched.push(...projectMessages(segment.records.slice(0, end)));
     }
 
-    const views = members
-      .map((m) => new SessionView(this, m))
-      .sort((a, b) => (a.manifest.sessionId < b.manifest.sessionId ? -1 : 1));
-    const head = views.find((v) => v.manifest.sessionId === realGroup.mainSessionId)!;
-    return new TaskView(realGroup.groupId, head, views, stitched);
+    const headView = new SessionView(this, session);
+    const branches = Object.keys(session.manifest.branches).sort();
+    return new TaskView(sessionId, headView, branches, stitched);
   }
 }
 

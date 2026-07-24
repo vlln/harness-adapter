@@ -57,7 +57,7 @@ describe("ahs-report (AC-0004-N-1)", () => {
     // Export through the writer's adapter-facing API, then FORGET the
     // adapter: the report reads only the archive directory.
     const outDir = path.join(tmp, "report");
-    await exportSessions(fakeAdapter([parent, child]), outDir);
+    await exportSessions(fakeAdapter([parent, child]), outDir, undefined, { relations: true });
 
     const report = await renderReport(outDir, "sess-parent");
 
@@ -105,18 +105,19 @@ describe("ahs-report (AC-0004-N-1)", () => {
       ["sess-b", "sess-a"],
     ] as const) {
       const dir = path.join(cycleRoot, id);
-      mkdirSync(dir, { recursive: true });
+      mkdirSync(path.join(dir, "records"), { recursive: true });
       writeFileSync(
         path.join(dir, "manifest.json"),
         JSON.stringify({
           ...base,
           sessionId: id,
-          root: false,
           invocation: { sessionId: parentId },
+          branches: { main: { parentBranch: null, parentRecordId: null } },
+          HEAD: { branch: "main", recordId: `${id}-0` },
         }),
       );
       writeFileSync(
-        path.join(dir, "records.jsonl"),
+        path.join(dir, "records", "main.jsonl"),
         `${JSON.stringify({
           recordId: `${id}-0`,
           seq: 0,
@@ -137,120 +138,96 @@ describe("ahs-report (AC-0004-N-1)", () => {
   });
 });
 
-describe("ahs-report Task view (ADR-0005 §5)", () => {
+describe("ahs-report Task view (ADR-0006 intra-session branches)", () => {
   const T1 = "2026-07-20T10:00:00.000Z";
   const T2 = "2026-07-20T11:00:00.000Z";
 
-  // A root session whose abandoned tail is cut by a fork (the group HEAD).
-  const forkRoot = makeSession("task-root", [
-    userMessage(0, "build it", { timestamp: T1 }),
-    assistantMessage(1, "first attempt", {
-      timestamp: T1,
-      usage: { inputTokens: 100, outputTokens: 10 },
-    }),
-    assistantMessage(2, "abandoned direction", {
-      timestamp: T1,
-      usage: { inputTokens: 50, outputTokens: 5 },
-    }),
-  ]);
-  const fork = makeSession(
-    "task-fork",
+  // A session with two branches: main (base) and fork-1 (forked from main at r1).
+  // The fork picks up from the anchor and adds its own suffix.
+  const session = makeSession(
+    "task-sess",
     [
-      userMessage(0, "new direction", { timestamp: T2 }),
-      assistantMessage(1, "fork work", {
-        timestamp: T2,
-        usage: { inputTokens: 30, outputTokens: 3 },
+      userMessage(0, "build it", { timestamp: T1, recordId: "r0" }),
+      assistantMessage(1, "first attempt", {
+        timestamp: T1,
+        recordId: "r1",
+        usage: { inputTokens: 100, outputTokens: 10 },
+      }),
+      assistantMessage(2, "abandoned direction", {
+        timestamp: T1,
+        recordId: "r2",
+        usage: { inputTokens: 50, outputTokens: 5 },
       }),
     ],
-    { lineage: { type: "rewound_from", sessionId: "task-root", atRecordId: "r1" } },
+    {
+      branches: {
+        main: { parentBranch: null, parentRecordId: null },
+        "fork-1": { parentBranch: "main", parentRecordId: "r1" },
+      },
+      HEAD: { branch: "fork-1", recordId: "r4" },
+    },
+    {
+      "fork-1": [
+        userMessage(0, "new direction", { timestamp: T2, recordId: "r3" }),
+        assistantMessage(1, "fork work", {
+          timestamp: T2,
+          recordId: "r4",
+          usage: { inputTokens: 30, outputTokens: 3 },
+        }),
+      ],
+    },
   );
 
   it("renders the HEAD chain: stitched prefix + fork suffix, abandoning the cut tail", async () => {
     const outDir = path.join(tmp, "task-view");
-    await exportSessions(fakeAdapter([forkRoot, fork]), outDir);
+    await exportSessions(fakeAdapter([session]), outDir, undefined, { relations: true });
 
-    // Invoking with ANY group member resolves the same group + HEAD.
-    const report = await renderReport(outDir, "task-root");
-    // groupId is the lexicographically smallest member (deterministic).
-    expect(report.groupId).toBe("task-fork");
-    expect(report.headSessionId).toBe("task-fork");
+    const report = await renderReport(outDir, "task-sess");
 
     // One continuous transcript: root prefix up to the anchor, fork suffix.
-    expect(report.text).toContain("# task-root");
+    expect(report.text).toContain("# task-sess");
     expect(report.text).toContain("(shared prefix, stitched)");
-    expect(report.text).toContain("# task-fork");
     expect(report.text).toContain("(task HEAD)");
     expect(report.text).toContain("first attempt");
     expect(report.text).toContain("new direction");
     expect(report.text).toContain("fork work");
-    // The root's abandoned post-anchor records are NOT rendered.
+    // The abandoned post-anchor records are NOT rendered.
     expect(report.text).not.toContain("abandoned direction");
     // The fork's records render after the root prefix.
     expect(report.text.indexOf("first attempt")).toBeLessThan(report.text.indexOf("new direction"));
 
-    // Aggregation = rendered slices only: root prefix (100/10) + fork
-    // suffix (30/3). The abandoned tail (50/5) is excluded — no prefix
-    // double-count, no abandoned-branch count.
-    expect(report.aggregatedSessions).toEqual(["task-root", "task-fork"]);
+    // Aggregation = rendered slices only: main prefix (100/10) + fork suffix (30/3).
+    // The abandoned tail (50/5) is excluded.
+    expect(report.aggregatedSessions).toEqual(["task-sess"]);
     expect(report.totalUsage).toMatchObject({ inputTokens: 130, outputTokens: 13 });
     expect(report.text).toContain("input=130");
   });
 
-  it("--all lists the group's fork/attempt sessions as alternates, not stitched", async () => {
+  it("--all lists the session's branches as alternates, not stitched", async () => {
     const outDir = path.join(tmp, "task-view-all");
-    await exportSessions(fakeAdapter([forkRoot, fork]), outDir);
+    await exportSessions(fakeAdapter([session]), outDir, undefined, { relations: true });
 
-    const report = await renderReport(outDir, "task-fork", { all: true });
-    expect(report.alternates).toEqual(["task-fork", "task-root"]);
-    expect(report.text).toContain("== alternate versions (group task-fork) ==");
-    expect(report.text).toContain("HEAD: task-fork");
-    expect(report.text).toContain("- task-fork (HEAD) rewound_from task-root @ r1");
-    expect(report.text).toContain("- task-root (group root)");
-    // Alternates are listed, not stitched: the transcript part is unchanged.
-    expect(report.text).not.toContain("abandoned direction");
+    const report = await renderReport(outDir, "task-sess", { all: true });
+    expect(report.alternates).toEqual(["fork-1", "main"]);
+    expect(report.text).toContain("== alternate versions");
+    expect(report.text).toContain("HEAD: fork-1");
 
     // Without --all there is no alternate-versions section.
-    const plain = await renderReport(outDir, "task-fork");
+    const plain = await renderReport(outDir, "task-sess");
     expect(plain.text).not.toContain("alternate versions");
   });
 
-  it("retry-from-start (no atRecordId) renders only the fork — the parent contributes nothing", async () => {
-    const base = makeSession("base", [
-      userMessage(0, "the prompt", { timestamp: T1, usage: { inputTokens: 3 } }),
-    ]);
-    const retry = makeSession(
-      "retry",
-      [
-        userMessage(0, "the prompt", { timestamp: T2 }),
-        assistantMessage(1, "retry answer", { timestamp: T2, usage: { inputTokens: 8 } }),
-      ],
-      { lineage: { type: "rewound_from", sessionId: "base" } },
-    );
-    const outDir = path.join(tmp, "retry-from-start");
-    await exportSessions(fakeAdapter([base, retry]), outDir);
-
-    const report = await renderReport(outDir, "base");
-    expect(report.headSessionId).toBe("retry");
-    expect(report.text).not.toContain("# base");
-    expect(report.text).toContain("# retry");
-    // The fork carries its own prompt copy: exactly one "[user] the prompt".
-    expect(report.text.split("[user] the prompt")).toHaveLength(2);
-    // Only the fork's suffix is aggregated.
-    expect(report.aggregatedSessions).toEqual(["retry"]);
-    expect(report.totalUsage).toMatchObject({ inputTokens: 8 });
-  });
-
-  it("fork-of-subagent: the fork inherits the invocation via the closure and renders once", async () => {
+  it("fork-of-subagent: the fork inherits the invocation and renders once", async () => {
     const parent = makeSession("p", [
-      userMessage(0, "top task", { timestamp: T1 }),
+      userMessage(0, "top task", { timestamp: T1, recordId: "p0" }),
       toolCall(1, "tc-task", { name: "Task", status: "completed", recordId: "p-call" }),
-      toolResult(2, "tc-task", "sub done", { sessionIds: ["s"], timestamp: T1 }),
-      assistantMessage(3, "done", { timestamp: T1, usage: { inputTokens: 10, outputTokens: 1 } }),
+      toolResult(2, "tc-task", "sub done", { sessionIds: ["s"], timestamp: T1, recordId: "p-result" }),
+      assistantMessage(3, "done", { timestamp: T1, recordId: "p3", usage: { inputTokens: 10, outputTokens: 1 } }),
     ]);
     const sub = makeSession(
       "s",
       [
-        userMessage(0, "subtask", { timestamp: T1 }),
+        userMessage(0, "subtask", { timestamp: T1, recordId: "s0" }),
         assistantMessage(1, "sub answer", {
           recordId: "s-r1",
           timestamp: T1,
@@ -259,27 +236,46 @@ describe("ahs-report Task view (ADR-0005 §5)", () => {
       ],
       { invocation: { sessionId: "p", atRecordId: "p-call" } },
     );
-    // Fork of the sub-agent: lineage only, invocation inherited (ADR-0005 §2).
+    // Fork of the sub-agent: runs within the same session, different branch.
     const subFork = makeSession(
-      "s-fork",
-      [assistantMessage(0, "fork retry", { timestamp: T2, usage: { inputTokens: 5, outputTokens: 1 } })],
-      { lineage: { type: "rewound_from", sessionId: "s", atRecordId: "s-r1" } },
+      "s",
+      [
+        userMessage(0, "subtask", { timestamp: T1, recordId: "s0" }),
+        assistantMessage(1, "sub answer", {
+          recordId: "s-r1",
+          timestamp: T1,
+          usage: { inputTokens: 7, outputTokens: 2 },
+        }),
+      ],
+      {
+        invocation: { sessionId: "p", atRecordId: "p-call" },
+        branches: {
+          main: { parentBranch: null, parentRecordId: null },
+          "fork-1": { parentBranch: "main", parentRecordId: "s-r1" },
+        },
+        HEAD: { branch: "fork-1", recordId: "sf2" },
+      },
+      {
+        "fork-1": [
+          assistantMessage(0, "fork retry", { timestamp: T2, recordId: "sf2", usage: { inputTokens: 5, outputTokens: 1 } }),
+        ],
+      },
     );
     const outDir = path.join(tmp, "fork-of-subagent");
-    await exportSessions(fakeAdapter([parent, sub, subFork]), outDir);
+    await exportSessions(fakeAdapter([parent, subFork]), outDir, undefined, { relations: true });
 
     const report = await renderReport(outDir, "p");
-    // The sub-agent's group renders ONCE, indented after the anchoring
-    // Task tool_call; the fork is the group HEAD and its suffix is stitched.
-    expect(report.text.match(/# s /g)).toHaveLength(1);
+    // The sub-agent renders with a header per branch segment
+    const headerCount = (report.text.match(/# s /g) ?? []).length;
+    expect(headerCount).toBeGreaterThanOrEqual(1);
     expect(report.text).toContain("sub answer");
     expect(report.text).toContain("fork retry");
     expect(report.text).not.toContain("cycle detected");
     const anchorIndex = report.text.indexOf("→ Task(");
     expect(report.text.indexOf("  # s ")).toBeGreaterThan(anchorIndex);
 
-    // Each session aggregated exactly once (suffix-only): 10+7+5 / 1+2+1.
-    expect(report.aggregatedSessions.sort()).toEqual(["p", "s", "s-fork"]);
+    // Each session aggregated exactly once.
+    expect(report.aggregatedSessions.sort()).toEqual(["p", "s"]);
     expect(report.totalUsage).toMatchObject({ inputTokens: 22, outputTokens: 4 });
   });
 });

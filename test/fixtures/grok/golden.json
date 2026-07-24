@@ -1,13 +1,22 @@
 [
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "019f0000-0000-7000-8000-000000000001:15"
+      },
       "ahsVersion": "0.1.0",
+      "branches": {
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
+      },
       "cwd": "/home/test/demo",
       "harness": "grok",
       "harnessVersion": "0.2.93-test",
       "model": "grok-4.5",
       "provider": "xai",
-      "root": true,
       "sessionId": "019f0000-0000-7000-8000-000000000001",
       "stats": {
         "durationMs": 95000,
@@ -190,13 +199,22 @@
   },
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "019f0000-0000-7000-8000-000000000002:1"
+      },
       "ahsVersion": "0.1.0",
+      "branches": {
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
+      },
       "cwd": "/home/test/demo",
       "harness": "grok",
       "harnessVersion": "0.2.93-test",
       "model": "grok-4.5",
       "provider": "xai",
-      "root": true,
       "sessionId": "019f0000-0000-7000-8000-000000000002",
       "stats": {
         "turnCount": 0

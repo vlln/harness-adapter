@@ -3,8 +3,9 @@
  * fixtures involved). Every builder emits schema-valid shapes by default;
  * tests pass overrides to construct negative cases.
  *
- * Linear-session model (ADR-0005): records carry no parentId; seq is the
- * only structural field.
+ * Multi-branch session model (ADR-0006): each session has a branch registry
+ * (branches) and HEAD pointer. Records are per-branch; `records` is the
+ * default/HEAD branch set.
  */
 
 import type { Manifest } from "../src/schema/manifest";
@@ -15,9 +16,7 @@ import type { SessionData } from "../src/validate/index";
 export const BASE_TIME = "2026-07-20T10:00:00.000Z";
 
 export function makeManifest(overrides: Partial<Manifest> = {}): Manifest {
-  const { root: rootOverride, ...rest } = overrides;
-  const lineage = rest.lineage;
-  const invocation = rest.invocation;
+  const { branches: br, HEAD: hd, ...rest } = overrides;
   return {
     sessionId: "sess-1",
     harness: "fake",
@@ -25,10 +24,11 @@ export function makeManifest(overrides: Partial<Manifest> = {}): Manifest {
     ahsVersion: "0.1.0",
     cwd: "/tmp",
     model: "fake-model",
+    branches: br ?? {
+      main: { parentBranch: null, parentRecordId: null },
+    },
+    HEAD: hd ?? { branch: "main", recordId: null },
     ...rest,
-    root: rootOverride ?? !(
-      (lineage?.type === "rewound_from") || invocation
-    ),
   };
 }
 
@@ -97,12 +97,19 @@ export function toolResult(
   };
 }
 
-/** A valid minimal session: root user message only. */
-export function makeSession(sessionId: string, records?: AhsRecord[], manifest?: Partial<Manifest>): SessionData {
-  return {
+/** A valid minimal session: root user message only, single "main" branch. */
+export function makeSession(
+  sessionId: string,
+  records?: AhsRecord[],
+  manifest?: Partial<Manifest>,
+  branchRecords?: Record<string, AhsRecord[]>,
+): SessionData {
+  const result: SessionData = {
     manifest: makeManifest({ sessionId, ...manifest }),
     records: records ?? [userMessage(0, "hi")],
   };
+  if (branchRecords !== undefined) result.branchRecords = branchRecords;
+  return result;
 }
 
 /** Stub HarnessAdapter returning canned sessions — also exercises the writer's adapter-facing API. */
@@ -113,10 +120,14 @@ export function fakeAdapter(sessions: SessionData[]): HarnessAdapter {
     async *listSessions() {
       for (const s of sessions) yield s.manifest;
     },
-    async *readRecords(sessionId: string) {
+    async *readRecords(sessionId: string, branchName?: string) {
       const session = sessions.find((s) => s.manifest.sessionId === sessionId);
       if (session === undefined) throw new Error(`unknown session: ${sessionId}`);
-      yield* session.records;
+      if (branchName !== undefined && session.branchRecords?.[branchName]) {
+        yield* session.branchRecords[branchName]!;
+      } else {
+        yield* session.records;
+      }
     },
   };
 }

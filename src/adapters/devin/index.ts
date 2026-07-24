@@ -209,13 +209,15 @@ type RecordSpecific =
 interface SessionProjection {
   sessionId: string;
   records: AhsRecord[];
-  lineage?: Manifest["lineage"];
+  /** Branch name → branch info. */
+  branches?: Record<string, { parentRecordId: string | null; records: AhsRecord[] }>;
 }
 
 interface GroupProjection {
-  sessions: SessionProjection[];
-  /** Session the group HEAD points at (main_chain tip's owner, else fallback). */
-  headSessionId: string;
+  /** The single projected session with branches. */
+  session: SessionProjection;
+  /** Branch name the group HEAD points at (main_chain tip's owner, else "main"). */
+  headBranch: string;
 }
 
 /** All root node_ids of a session's forest (NULL or missing parents). */
@@ -326,8 +328,9 @@ function emitMessage(
 }
 
 /**
- * Project one Devin session row (a forest) into linear AHS sessions.
- * Returns null when the forest has no roots or the base chain is empty.
+ * Project one Devin session row (a forest) into a single AHS session with
+ * branches (ADR-0006). All roots are merged into one session; non-base roots
+ * and intra-tree forks become branches.
  */
 function projectGroup(row: SessionRow, nodes: NodeRow[]): GroupProjection | null {
   const byId = new Map<number, NodeRow>();
@@ -365,26 +368,28 @@ function projectGroup(row: SessionRow, nodes: NodeRow[]): GroupProjection | null
   const roots = findRoots(nodes);
   if (roots.length === 0) return null;
 
-  const sessions: SessionProjection[] = [];
-  // message_id → anchor ref, across all sessions projected so far.
+  // message_id → anchor ref, across all branches projected so far.
   const groupIndex = new Map<string, EmittedRef>();
-  // toolCallIds seen in all sessions projected so far (orphan-result rule).
+  // toolCallIds seen in all branches projected so far (orphan-result rule).
   const groupCallIds = new Set<string>();
-  // node → session that emitted it (for HEAD tip resolution).
-  const nodeSession = new Map<number, string>();
+  // node → branch name that emitted it (for HEAD resolution).
+  const nodeBranch = new Map<number, string>();
+
+  let mainRecords: AhsRecord[] = [];
+  const branches: NonNullable<SessionProjection["branches"]> = {};
+  let branchCounter = 0;
 
   /**
-   * Project one linear chain starting at `startNodeId` into a session.
-   * Off-main children spawn fork sessions recursively. `spawnAnchor` is the
-   * fork's divergence point when the branch itself shares no leading
-   * messages; `fallbackParentId` receives anchor-less lineage edges.
+   * Project one linear chain starting at `startNodeId` into the session.
+   * Off-main children spawn fork branches recursively. `spawnAnchor` is the
+   * fork's divergence point; `fallbackParentId` receives anchor-less entries.
    */
   const processChain = (
     startNodeId: number,
     sessionId: string,
     inheritedIndex: Map<string, EmittedRef>,
     ancestorCallIds: Set<string>,
-    ctx: { isBase: boolean; spawnAnchor?: EmittedRef; fallbackParentId: string },
+    ctx: { isBase: boolean; spawnAnchor?: EmittedRef; fallbackParentId: string; branchName: string },
   ): void => {
     const index = new Map(inheritedIndex);
     const callIds = new Set(ancestorCallIds);
@@ -406,7 +411,7 @@ function projectGroup(row: SessionRow, nodes: NodeRow[]): GroupProjection | null
         // Leading shared-prefix copy: skip; candidate lineage anchor.
         leadingAnchor = index.get(messageId);
         currentAnchor = leadingAnchor;
-        nodeSession.set(node.node_id, leadingAnchor!.sessionId);
+        nodeBranch.set(node.node_id, leadingAnchor!.sessionId);
       } else if (msg !== undefined) {
         const appended = emitMessage(node, msg, records, {
           seenResults,
@@ -417,7 +422,7 @@ function projectGroup(row: SessionRow, nodes: NodeRow[]): GroupProjection | null
           const last = appended[appended.length - 1]!;
           currentAnchor = { sessionId, recordId: last.recordId, type: last.type };
           index.set(messageId, currentAnchor);
-          nodeSession.set(node.node_id, sessionId);
+          nodeBranch.set(node.node_id, ctx.branchName);
           for (const rec of appended) {
             if (rec.type === "tool_call") callIds.add(rec.toolCallId);
           }
@@ -457,21 +462,15 @@ function projectGroup(row: SessionRow, nodes: NodeRow[]): GroupProjection | null
 
     if (records.length === 0) return; // fully-shared branch: no session
 
-    const lineage = ctx.isBase
-      ? undefined
-      : ((): Manifest["lineage"] => {
-          const anchor = leadingAnchor ?? ctx.spawnAnchor;
-          if (anchor === undefined) {
-            // Retry from the very start: the fork carries its own prompt.
-            return { type: "rewound_from", sessionId: ctx.fallbackParentId };
-          }
-          return {
-            type: "rewound_from",
-            sessionId: anchor.sessionId,
-            atRecordId: anchor.recordId,
-          };
-        })();
-    sessions.push({ sessionId, records, ...(lineage !== undefined ? { lineage } : {}) });
+    if (ctx.isBase) {
+      mainRecords = records;
+    } else {
+      const anchor = leadingAnchor ?? ctx.spawnAnchor;
+      branches[ctx.branchName] = {
+        parentRecordId: anchor?.recordId ?? null,
+        records,
+      };
+    }
 
     for (const [mid, ref] of index) {
       if (ref.sessionId === sessionId) groupIndex.set(mid, ref);
@@ -479,10 +478,13 @@ function projectGroup(row: SessionRow, nodes: NodeRow[]): GroupProjection | null
     for (const callId of callIds) groupCallIds.add(callId);
 
     for (const fork of forks) {
+      branchCounter += 1;
+      const forkBranchName = `b${String(branchCounter).padStart(3, "0")}`;
       processChain(fork.nodeId, `${row.id}#fork-${fork.nodeId}`, index, callIds, {
         isBase: false,
         ...(fork.anchor !== undefined ? { spawnAnchor: fork.anchor } : {}),
         fallbackParentId: sessionId,
+        branchName: forkBranchName,
       });
     }
   };
@@ -491,42 +493,36 @@ function projectGroup(row: SessionRow, nodes: NodeRow[]): GroupProjection | null
   processChain(baseRoot, row.id, new Map(), new Set(), {
     isBase: true,
     fallbackParentId: row.id,
+    branchName: "main",
   });
-  if (sessions.length === 0) return null;
+  if (mainRecords.length === 0) return null;
   for (const root of roots.slice(1)) {
+    branchCounter += 1;
+    const branchName = `b${String(branchCounter).padStart(3, "0")}`;
     processChain(root, `${row.id}#root-${root}`, groupIndex, groupCallIds, {
       isBase: false,
       fallbackParentId: row.id,
+      branchName,
     });
   }
 
-  sessions.sort((a, b) => (a.sessionId < b.sessionId ? -1 : 1));
-
-  // Group HEAD: the session that emitted the main_chain tip; fallback = the
-  // session with the latest last-record timestamp (tie: lowest sessionId).
-  let head: SessionProjection | undefined;
+  // Group HEAD: the branch that emitted the main_chain tip; fallback = "main".
+  let headBranch = "main";
   if (row.main_chain_id !== null) {
-    const owner = nodeSession.get(row.main_chain_id);
-    head = sessions.find((s) => s.sessionId === owner);
-  }
-  if (head === undefined) {
-    let bestTs = "";
-    for (const s of sessions) {
-      const ts = s.records[s.records.length - 1]?.timestamp ?? "";
-      if (head === undefined || ts > bestTs) {
-        head = s;
-        bestTs = ts;
-      }
-    }
+    const owner = nodeBranch.get(row.main_chain_id);
+    if (owner !== undefined) headBranch = owner;
   }
 
-  return { sessions, headSessionId: head!.sessionId };
+  return {
+    session: { sessionId: row.id, records: mainRecords, branches },
+    headBranch,
+  };
 }
 
 function buildManifest(
   row: SessionRow,
   projection: SessionProjection,
-  extra: { includeCost?: boolean },
+  extra: { includeCost?: boolean; headBranch?: string },
 ): Manifest {
   const totalUsage: Usage = {};
   let turnCount = 0;
@@ -551,6 +547,19 @@ function buildManifest(
   }
   const hasUsage = Object.keys(totalUsage).length > 0;
 
+  const branches: Manifest["branches"] = {
+    main: { parentBranch: null, parentRecordId: null },
+  };
+  if (projection.branches !== undefined) {
+    for (const [name, info] of Object.entries(projection.branches)) {
+      branches[name] = { parentBranch: "main", parentRecordId: info.parentRecordId ?? null };
+    }
+  }
+  const headBranch = extra.headBranch ?? "main";
+  const lastRecordId = projection.records.length > 0
+    ? projection.records[projection.records.length - 1]!.recordId
+    : null;
+
   return {
     sessionId: projection.sessionId,
     harness: "devin",
@@ -559,8 +568,8 @@ function buildManifest(
     cwd: row.working_directory,
     model: row.model,
     ...(row.title !== null ? { title: row.title, titleOrigin: "custom" as const } : {}),
-    root: projection.lineage === undefined,
-    ...(projection.lineage !== undefined ? { lineage: projection.lineage } : {}),
+    branches,
+    HEAD: { branch: headBranch, recordId: lastRecordId },
     stats: {
       turnCount,
       ...(hasUsage ? { totalUsage } : {}),
@@ -614,34 +623,32 @@ export class DevinAdapter implements HarnessAdapter {
         const group = this.projectRow(db, row);
         if (group === null) continue;
         if (filter?.cwd !== undefined && row.working_directory !== filter.cwd) continue;
-        for (const projection of group.sessions) {
-          if (filter?.includeForks !== true && projection.sessionId !== group.headSessionId) {
-            continue;
-          }
-          yield buildManifest(row, projection, {
-            includeCost: projection.sessionId === row.id,
-          });
-        }
+        yield buildManifest(row, group.session, {
+          includeCost: true,
+          headBranch: group.headBranch,
+        });
       }
     } finally {
       db.close();
     }
   }
 
-  async *readRecords(sessionId: string): AsyncIterable<AhsRecord> {
-    // Parse the `<slug>#root-<nodeId>` / `<slug>#fork-<nodeId>` forms.
-    const match = /^(.*)#(?:root|fork)-(\d+)$/.exec(sessionId);
-    const slug = match?.[1] ?? sessionId;
+  async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
     const db = this.open();
     try {
-      const rows = this.loadSessions(db).filter((r) => r.id === slug);
+      const rows = this.loadSessions(db).filter((r) => r.id === sessionId);
       const row = rows[0];
       if (row === undefined) throw new Error(`session not found: ${sessionId}`);
       const group = this.projectRow(db, row);
       if (group === null) throw new Error(`session not found: ${sessionId}`);
-      const projection = group.sessions.find((s) => s.sessionId === sessionId);
-      if (projection === undefined) throw new Error(`session not found: ${sessionId}`);
-      yield* projection.records;
+      const targetBranch = branchName ?? group.headBranch;
+      if (targetBranch === "main") {
+        yield* group.session.records;
+      } else {
+        const brecords = group.session.branches?.[targetBranch]?.records;
+        if (brecords === undefined) throw new Error(`branch not found: ${targetBranch}`);
+        yield* brecords;
+      }
     } finally {
       db.close();
     }

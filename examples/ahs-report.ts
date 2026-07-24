@@ -2,26 +2,25 @@
 /**
  * ahs-report — AC layer-4 consumer proof (AC-0004), Task view (ADR-0005 §5).
  *
- * Reads ONLY an AHS archive (manifest.json + records.jsonl per session dir)
- * — never an adapter, never native storage. Given any session of a lineage
- * group, it resolves the group's HEAD pointer and renders the HEAD chain as
- * ONE continuous linear transcript: shared prefixes are stitched by walking
- * lineage back-links (parent records up to the atRecordId anchor) and each
- * fork contributes only its suffix. Invocation children (manifest
- * invocation back-links + closure-inherited fork-of-subagent links) are
- * rendered indented right after their anchoring tool_call, recursively;
- * children without an anchor render after the parent's records. Cycles are
- * cut defensively.
+ * Reads ONLY an AHS archive (manifest.json + per-branch records JSONL per
+ * session dir) — never an adapter, never native storage. Given a session,
+ * it walks the session's intra-session branch tree from HEAD back through
+ * parentBranch to render the HEAD chain as ONE continuous linear transcript:
+ * shared prefixes are stitched by walking branch parentRecordId back-links
+ * and each branch contributes only its suffix. Invocation children (manifest
+ * invocation back-links) are rendered indented right after their anchoring
+ * tool_call, recursively; children without an anchor render after the parent's
+ * records. Cycles are cut defensively.
  *
  * Aggregation: every session contributes only the usage of its OWN rendered
- * slice (suffix-only for forks — a stitched prefix belongs to the ancestor
- * session's slice, so no prefix is ever double-counted). The total equals
+ * slice (suffix-only for branches — a stitched prefix belongs to the ancestor
+ * branch's slice, so no prefix is ever double-counted). The total equals
  * the record-level sum over exactly the rendered records.
  *
  * Usage:
  *   node_modules/.bin/vite-node examples/ahs-report.ts <archiveRoot> <sessionId> [--all]
- *     --all   also list the lineage group's fork/attempt sessions as
- *             alternate versions (they are NOT stitched into the transcript)
+ *     --all   also list the session's branches as alternate versions (they are
+ *             NOT stitched into the transcript)
  * (vite-node ships with vitest; plain `node --experimental-strip-types`
  * does not resolve the extensionless src imports.)
  *
@@ -35,12 +34,9 @@ import { readManifest, readRecords } from "../src/ahs/reader";
 import {
   buildRelations,
   effectiveInvocation,
-  groupOfSession,
-  lineageParentEdge,
-  type Relations,
   type RelationSession,
 } from "../src/ahs/relations";
-import type { Manifest } from "../src/schema/manifest";
+import type { Branch, Manifest } from "../src/schema/manifest";
 import type { AhsRecord, ContentBlock } from "../src/schema/record";
 import type { Usage } from "../src/schema/usage";
 
@@ -144,7 +140,7 @@ function usageLine(prefix: string, usage: Usage, costs: Map<string, number>): st
 }
 
 export interface ReportOptions {
-  /** Also list the lineage group's fork/attempt sessions as alternates. */
+  /** Also list the session's branches as alternate versions. */
   all?: boolean;
 }
 
@@ -153,30 +149,28 @@ export interface ReportResult {
   /** Aggregated usage over exactly the rendered record slices. */
   totalUsage: Usage;
   totalCost: Map<string, number>;
-  /** sessionIds whose slices were rendered (walk order, HEAD chain first). */
+  /** sessionIds whose slices were rendered (walk order). */
   aggregatedSessions: string[];
-  /** The resolved Task: lineage group + HEAD pointer (ADR-0005 §5). */
-  groupId: string;
+  /** The entry session ID. */
+  sessionId: string;
+  /** The entry session ID (same as sessionId — branching is intra-session). */
   headSessionId: string;
-  /** All members of the resolved lineage group (sorted). */
+  /** Branch names from the entry session (sorted). */
   alternates: string[];
 }
 
-/** An invocation child task, deduped by lineage group. */
+/** An invocation child session, deduped by sessionId. */
 interface ChildTask {
-  groupId: string;
-  /** Any member of the group (used only to locate the group). */
-  entryId: string;
+  sessionId: string;
   /** Anchoring tool_call recordId in the parent, when known. */
   anchor?: string;
 }
 
 /**
  * Render the Task-view transcript + cost report for one archived session,
- * reading ONLY the archive. The session's lineage group + HEAD pointer are
- * resolved from the derived relations (rebuilt in-memory from manifests +
- * records; relations.jsonl is the same derivation persisted for other
- * consumers).
+ * reading ONLY the archive. The session's intra-session branch chain is
+ * resolved from the session's manifest (branches + HEAD); relations are
+ * rebuilt in-memory from manifests + records for invocation children.
  */
 export async function renderReport(
   archiveRoot: string,
@@ -184,7 +178,8 @@ export async function renderReport(
   options?: ReportOptions,
 ): Promise<ReportResult> {
   const archive = await loadArchive(archiveRoot);
-  if (archive.get(sessionId) === undefined) {
+  const entrySession = archive.get(sessionId);
+  if (entrySession === undefined) {
     throw new Error(`session not in archive: ${sessionId}`);
   }
 
@@ -192,28 +187,26 @@ export async function renderReport(
   const sessions = new Map<string, RelationSession>();
   for (const [sid, session] of [...archive.entries()].sort()) {
     const records: AhsRecord[] = [];
-    for await (const rec of readRecords(session.dir)) records.push(rec);
+    for (const branchName of Object.keys(session.manifest.branches)) {
+      for await (const rec of readRecords(session.dir, branchName)) {
+        records.push(rec);
+      }
+    }
     sessions.set(sid, { manifest: session.manifest, records });
   }
-  const relations: Relations = buildRelations([...sessions.values()]);
+  const relations = buildRelations([...sessions.values()]);
 
-  // Invocation children per parent session, deduped by lineage group (a
-  // fork-of-subagent inherits the parent's invocation through the closure —
-  // rendering the group once via its HEAD covers both the sub-agent and
-  // its forks).
+  // Invocation children per parent session, deduped by sessionId.
   const childrenOf = new Map<string, ChildTask[]>();
   for (const [sid, session] of sessions) {
     const effective = effectiveInvocation(relations, sid);
     if (effective === undefined || !sessions.has(effective.sessionId)) continue;
-    const group = groupOfSession(relations, sid);
-    if (group === undefined) continue;
     const anchor = session.manifest.invocation?.atRecordId ?? effective.atRecordId;
     const list = childrenOf.get(effective.sessionId) ?? [];
-    const existing = list.find((c) => c.groupId === group.groupId);
+    const existing = list.find((c) => c.sessionId === sid);
     if (existing === undefined) {
       list.push({
-        groupId: group.groupId,
-        entryId: sid,
+        sessionId: sid,
         ...(anchor !== undefined ? { anchor } : {}),
       });
     } else if (existing.anchor === undefined && anchor !== undefined) {
@@ -221,70 +214,71 @@ export async function renderReport(
     }
     childrenOf.set(effective.sessionId, list);
   }
-  for (const list of childrenOf.values()) list.sort((a, b) => (a.groupId < b.groupId ? -1 : 1));
+  for (const list of childrenOf.values()) list.sort((a, b) => (a.sessionId < b.sessionId ? -1 : 1));
 
   const lines: string[] = [];
   const totalUsage: Usage = {};
   const totalCost = new Map<string, number>();
   const aggregatedSessions: string[] = [];
-  const visitedGroups = new Set<string>();
+  const visitedSessions = new Set<string>();
 
   const renderTask = async (entryId: string, depth: number): Promise<void> => {
-    const group = groupOfSession(relations, entryId);
-    if (group === undefined) return;
+    const session = sessions.get(entryId);
+    if (session === undefined) return;
     const indent = "  ".repeat(depth);
-    if (visitedGroups.has(group.groupId)) {
-      lines.push(`${indent}[cycle detected: group ${group.groupId} — skipped]`);
+    if (visitedSessions.has(entryId)) {
+      lines.push(`${indent}[cycle detected: session ${entryId} — skipped]`);
       return;
     }
-    visitedGroups.add(group.groupId);
+    visitedSessions.add(entryId);
 
-    // HEAD chain: walk lineage back-links from the HEAD to the chain root
-    // (cycle-safe, staying inside the group), oldest first.
-    const chain: string[] = [];
+    const { manifest } = session;
+
+    // HEAD chain: walk from HEAD branch back through parentBranch to root
+    // branch (cycle-safe), oldest first.
+    const chain: { branchName: string; records: AhsRecord[] }[] = [];
     const seen = new Set<string>();
-    let cur: string | undefined = group.mainSessionId;
-    while (cur !== undefined && !seen.has(cur)) {
-      seen.add(cur);
-      chain.unshift(cur);
-      const edge = lineageParentEdge(relations, cur);
-      cur = edge !== undefined && group.members.includes(edge.from) ? edge.from : undefined;
+    let curBranch: string | null = manifest.HEAD.branch;
+    while (curBranch !== null && !seen.has(curBranch)) {
+      seen.add(curBranch);
+      const branchDef: Branch | undefined = manifest.branches[curBranch];
+      const branchRecords: AhsRecord[] = [];
+      const sessionDir = archive.get(entryId)!.dir;
+      for await (const rec of readRecords(sessionDir, curBranch)) {
+        branchRecords.push(rec);
+      }
+      chain.unshift({ branchName: curBranch, records: branchRecords });
+      curBranch = branchDef?.parentBranch ?? null;
     }
 
-    for (let i = 0; i < chain.length; i += 1) {
-      const sid = chain[i]!;
-      const session = sessions.get(sid)!;
-      const records = session.records;
+    aggregatedSessions.push(entryId);
 
-      // Slice: the shared-prefix part this session contributes to the HEAD
-      // chain. Ends at the next segment's lineage anchor (inclusive); a
-      // retry-from-start child (atRecordId absent) means this session
-      // contributes nothing; a null anchor (source-unavailable) means the
-      // cut point is unknown — keep the full session (defensive). A
-      // dangling anchor falls back to the full session (defensive —
-      // AC-0002-N-7 guarantees resolution).
+    for (let i = 0; i < chain.length; i += 1) {
+      const segment = chain[i]!;
+      const records = segment.records;
+
+      // Slice: ends at the next segment's parentRecordId (inclusive).
+      // null parentRecordId = keep full parent slice.
       let end = records.length;
       if (i + 1 < chain.length) {
-        const childEdge = lineageParentEdge(relations, chain[i + 1]!);
-        if (childEdge?.atRecordId === undefined) {
-          end = 0;
-        } else if (childEdge.atRecordId === null) {
-          end = records.length;
-        } else {
-          const idx = records.findIndex((r) => r.recordId === childEdge.atRecordId);
+        const nextBranchName = chain[i + 1]!.branchName;
+        const nextBranchDef = manifest.branches[nextBranchName];
+        const parentRecordId = nextBranchDef?.parentRecordId;
+        if (parentRecordId !== null && parentRecordId !== undefined) {
+          const idx = records.findIndex((r) => r.recordId === parentRecordId);
           end = idx >= 0 ? idx + 1 : records.length;
         }
+        // null parentRecordId: keep full parent slice.
       }
       if (end === 0) continue;
 
       const isHead = i + 1 === chain.length;
-      const { manifest } = session;
       const title = manifest.title !== undefined ? ` — ${manifest.title}` : "";
       const annotation =
         chain.length > 1 ? (isHead ? " (task HEAD)" : " (shared prefix, stitched)") : "";
-      lines.push(`${indent}# ${sid} [${manifest.harness} · ${manifest.model}]${title}${annotation}`);
+      lines.push(`${indent}# ${entryId} [${manifest.harness} · ${manifest.model}]${title}${annotation}`);
 
-      const children = childrenOf.get(sid) ?? [];
+      const children = childrenOf.get(entryId) ?? [];
       const anchored = new Map<string, ChildTask[]>();
       const unanchored: ChildTask[] = [];
       for (const child of children) {
@@ -305,53 +299,51 @@ export async function renderReport(
         if (rec.usage !== undefined) addUsage(sliceUsage, rec.usage, sliceCost);
         if (rec.type === "tool_call") {
           for (const child of anchored.get(rec.recordId) ?? []) {
-            renderedChildren.add(child.groupId);
-            await renderTask(child.entryId, depth + 1);
+            renderedChildren.add(child.sessionId);
+            await renderTask(child.sessionId, depth + 1);
           }
         }
       }
-      // Fallback: children whose anchor is not in the rendered slice (or who
-      // have none) render after the parent's records.
+      // Fallback: children whose anchor is not in the rendered slice.
       for (const child of [...anchored.values()].flat().concat(unanchored)) {
-        if (renderedChildren.has(child.groupId)) continue;
-        renderedChildren.add(child.groupId);
-        await renderTask(child.entryId, depth + 1);
+        if (renderedChildren.has(child.sessionId)) continue;
+        renderedChildren.add(child.sessionId);
+        await renderTask(child.sessionId, depth + 1);
       }
 
-      aggregatedSessions.push(sid);
       addUsage(totalUsage, sliceUsage, sliceCost);
       for (const [currency, amount] of sliceCost) {
         totalCost.set(currency, (totalCost.get(currency) ?? 0) + amount);
       }
-      lines.push(usageLine(`${indent}  cost (${sid}): `, sliceUsage, sliceCost));
+      lines.push(usageLine(`${indent}  cost (${entryId}): `, sliceUsage, sliceCost));
     }
   };
 
-  const rootGroup = groupOfSession(relations, sessionId)!;
   await renderTask(sessionId, 0);
 
   lines.push("");
   lines.push(`== cost summary (${aggregatedSessions.length} session(s)) ==`);
   lines.push(usageLine("total: ", totalUsage, totalCost));
 
-  const alternates = [...rootGroup.members].sort();
+  const entryManifest = entrySession.manifest;
+  const alternates = Object.keys(entryManifest.branches).sort();
   if (options?.all === true && alternates.length > 1) {
     lines.push("");
-    lines.push(`== alternate versions (group ${rootGroup.groupId}) ==`);
-    lines.push(`HEAD: ${rootGroup.mainSessionId}`);
-    for (const member of alternates) {
-      const edge = lineageParentEdge(relations, member);
-      const marker = member === rootGroup.mainSessionId ? " (HEAD)" : "";
-      if (edge === undefined) {
-        lines.push(`- ${member}${marker} (group root)`);
+    lines.push(`== alternate versions (session ${sessionId}) ==`);
+    lines.push(`HEAD: ${entryManifest.HEAD.branch}`);
+    for (const branchName of alternates) {
+      const branchDef = entryManifest.branches[branchName]!;
+      const marker = branchName === entryManifest.HEAD.branch ? " (HEAD)" : "";
+      if (branchDef.parentBranch === null) {
+        lines.push(`- ${branchName}${marker} (root branch)`);
       } else {
         const anchor =
-          edge.atRecordId === null
+          branchDef.parentRecordId === null
             ? " (anchor source-unavailable)"
-            : edge.atRecordId !== undefined
-              ? ` @ ${edge.atRecordId}`
-              : " (retry from start)";
-        lines.push(`- ${member}${marker} ${edge.lineageType ?? ""} ${edge.from}${anchor}`);
+            : branchDef.parentRecordId !== undefined && branchDef.parentRecordId !== null
+              ? ` @ ${branchDef.parentRecordId}`
+              : "";
+        lines.push(`- ${branchName}${marker} forked_from ${branchDef.parentBranch}${anchor}`);
       }
     }
   }
@@ -361,8 +353,8 @@ export async function renderReport(
     totalUsage,
     totalCost,
     aggregatedSessions,
-    groupId: rootGroup.groupId,
-    headSessionId: rootGroup.mainSessionId,
+    sessionId,
+    headSessionId: sessionId,
     alternates,
   };
 }

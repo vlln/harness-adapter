@@ -1,7 +1,21 @@
 [
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "019f8000-0000-7000-8000-0000000000a1:17"
+      },
       "ahsVersion": "0.1.0",
+      "branches": {
+        "b001": {
+          "parentBranch": "main",
+          "parentRecordId": "019f8000-0000-7000-8000-0000000000a1:17"
+        },
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
+      },
       "cwd": "/workspace/demo",
       "git": {
         "branch": "main",
@@ -12,7 +26,6 @@
       "harnessVersion": "0.142.5",
       "model": "gpt-5.5",
       "provider": "openai",
-      "root": true,
       "sessionId": "019f8000-0000-7000-8000-0000000000a1",
       "stats": {
         "totalUsage": {
@@ -226,7 +239,17 @@
   },
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "019f8000-0000-7000-8000-0000000000b2:3"
+      },
       "ahsVersion": "0.1.0",
+      "branches": {
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
+      },
       "cwd": "/workspace/demo",
       "harness": "codex",
       "harnessVersion": "0.142.5",
@@ -236,7 +259,6 @@
       },
       "model": "gpt-5.5",
       "provider": "openai",
-      "root": false,
       "sessionId": "019f8000-0000-7000-8000-0000000000b2",
       "stats": {
         "totalUsage": {
@@ -302,78 +324,26 @@
   },
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "019f8000-0000-7000-8000-0000000000g7:1"
+      },
       "ahsVersion": "0.1.0",
-      "cwd": "/workspace/demo",
-      "harness": "codex",
-      "harnessVersion": "0.142.5",
-      "lineage": {
-        "atRecordId": "019f8000-0000-7000-8000-0000000000a1:17",
-        "sessionId": "019f8000-0000-7000-8000-0000000000a1",
-        "type": "rewound_from"
-      },
-      "model": "gpt-5.5",
-      "provider": "openai",
-      "root": false,
-      "sessionId": "019f8000-0000-7000-8000-0000000000c3",
-      "stats": {
-        "turnCount": 1
-      },
-      "workspaceRoots": [
-        "/workspace/demo"
-      ]
-    },
-    "records": [
-      {
-        "phase": "start",
-        "recordId": "019f8000-0000-7000-8000-0000000000c3:0",
-        "seq": 0,
-        "timestamp": "2026-07-22T11:00:00.200Z",
-        "turnId": "turn-r1",
-        "type": "turn_boundary"
-      },
-      {
-        "content": [
-          {
-            "text": "继续，补充一个回归测试",
-            "type": "text"
-          }
-        ],
-        "recordId": "019f8000-0000-7000-8000-0000000000c3:1",
-        "seq": 1,
-        "timestamp": "2026-07-22T11:00:01.000Z",
-        "type": "user_message"
-      },
-      {
-        "args": {
-          "cmd": "npm test"
+      "branches": {
+        "b001": {
+          "parentBranch": "main",
+          "parentRecordId": "019f8000-0000-7000-8000-0000000000g7:1"
         },
-        "name": "exec_command",
-        "recordId": "019f8000-0000-7000-8000-0000000000c3:2",
-        "seq": 2,
-        "status": "interrupted",
-        "timestamp": "2026-07-22T11:00:02.000Z",
-        "toolCallId": "call_ccc4",
-        "type": "tool_call"
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
       },
-      {
-        "phase": "end",
-        "recordId": "019f8000-0000-7000-8000-0000000000c3:3",
-        "seq": 3,
-        "timestamp": "2026-07-22T11:00:03.000Z",
-        "turnId": "turn-r1",
-        "type": "turn_boundary"
-      }
-    ]
-  },
-  {
-    "manifest": {
-      "ahsVersion": "0.1.0",
       "cwd": "/workspace/demo",
       "harness": "codex",
       "harnessVersion": "0.142.5",
       "model": "gpt-5.5",
       "provider": "openai",
-      "root": true,
       "sessionId": "019f8000-0000-7000-8000-0000000000g7",
       "stats": {
         "turnCount": 1
@@ -402,148 +372,6 @@
         "seq": 1,
         "timestamp": "2026-07-22T13:00:01.000Z",
         "type": "user_message"
-      }
-    ]
-  },
-  {
-    "manifest": {
-      "ahsVersion": "0.1.0",
-      "cwd": "/workspace/demo",
-      "harness": "codex",
-      "harnessVersion": "0.142.5",
-      "lineage": {
-        "atRecordId": "019f8000-0000-7000-8000-0000000000c3:3",
-        "sessionId": "019f8000-0000-7000-8000-0000000000c3",
-        "type": "rewound_from"
-      },
-      "model": "gpt-5.5",
-      "provider": "openai",
-      "root": false,
-      "sessionId": "019f8000-0000-7000-8000-0000000000f6",
-      "stats": {
-        "totalUsage": {
-          "cacheReadTokens": 50,
-          "inputTokens": 600,
-          "outputTokens": 90,
-          "reasoningTokens": 25
-        },
-        "turnCount": 1
-      },
-      "workspaceRoots": [
-        "/workspace/demo"
-      ]
-    },
-    "records": [
-      {
-        "phase": "start",
-        "recordId": "019f8000-0000-7000-8000-0000000000f6:0",
-        "seq": 0,
-        "timestamp": "2026-07-22T14:00:00.200Z",
-        "turnId": "turn-f1",
-        "type": "turn_boundary"
-      },
-      {
-        "content": [
-          {
-            "text": "换个思路：直接重构登录模块",
-            "type": "text"
-          }
-        ],
-        "recordId": "019f8000-0000-7000-8000-0000000000f6:1",
-        "seq": 1,
-        "timestamp": "2026-07-22T14:00:01.000Z",
-        "type": "user_message"
-      },
-      {
-        "content": [
-          {
-            "text": "好的，我先起草重构计划。",
-            "type": "text"
-          }
-        ],
-        "recordId": "019f8000-0000-7000-8000-0000000000f6:2",
-        "seq": 2,
-        "timestamp": "2026-07-22T14:00:05.000Z",
-        "type": "assistant_message",
-        "usage": {
-          "cacheReadTokens": 50,
-          "inputTokens": 600,
-          "outputTokens": 90,
-          "reasoningTokens": 25
-        }
-      },
-      {
-        "phase": "end",
-        "recordId": "019f8000-0000-7000-8000-0000000000f6:3",
-        "seq": 3,
-        "timestamp": "2026-07-22T14:00:06.000Z",
-        "turnId": "turn-f1",
-        "type": "turn_boundary"
-      }
-    ]
-  },
-  {
-    "manifest": {
-      "ahsVersion": "0.1.0",
-      "cwd": "/workspace/demo",
-      "harness": "codex",
-      "harnessVersion": "0.142.5",
-      "lineage": {
-        "atRecordId": "019f8000-0000-7000-8000-0000000000g7:1",
-        "sessionId": "019f8000-0000-7000-8000-0000000000g7",
-        "type": "rewound_from"
-      },
-      "model": "gpt-5.5",
-      "provider": "openai",
-      "root": false,
-      "sessionId": "019f8000-0000-7000-8000-0000000000e5",
-      "stats": {
-        "totalUsage": {
-          "cacheReadTokens": 100,
-          "inputTokens": 800,
-          "outputTokens": 120,
-          "reasoningTokens": 40
-        },
-        "turnCount": 1
-      },
-      "workspaceRoots": [
-        "/workspace/demo"
-      ]
-    },
-    "records": [
-      {
-        "phase": "start",
-        "recordId": "019f8000-0000-7000-8000-0000000000e5:0",
-        "seq": 0,
-        "timestamp": "2026-07-23T09:00:00.200Z",
-        "turnId": "turn-e1",
-        "type": "turn_boundary"
-      },
-      {
-        "content": [
-          {
-            "text": "缓存层已优化：为登录查询加了 memo 缓存。",
-            "type": "text"
-          }
-        ],
-        "recordId": "019f8000-0000-7000-8000-0000000000e5:1",
-        "seq": 1,
-        "timestamp": "2026-07-23T09:00:05.000Z",
-        "type": "assistant_message",
-        "usage": {
-          "cacheReadTokens": 100,
-          "inputTokens": 800,
-          "outputTokens": 120,
-          "reasoningTokens": 40
-        }
-      },
-      {
-        "phase": "end",
-        "recordId": "019f8000-0000-7000-8000-0000000000e5:2",
-        "seq": 2,
-        "timestamp": "2026-07-23T09:00:06.000Z",
-        "turnId": "turn-e1",
-        "type": "turn_boundary"
       }
     ]
   }

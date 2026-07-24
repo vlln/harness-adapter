@@ -1,11 +1,20 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "dd000003"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/Users/test/Project/demo",
     "harness": "pi",
     "harnessVersion": "3",
     "model": "unknown",
-    "root": true,
     "sessionId": "019f4000-dddd-7000-8000-0000000000d4",
     "stats": {
       "turnCount": 1

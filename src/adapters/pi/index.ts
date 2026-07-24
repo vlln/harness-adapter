@@ -4,7 +4,6 @@ import path from "node:path";
 
 import type { Manifest } from "../../schema/manifest";
 import type { AhsRecord, ContentBlock } from "../../schema/record";
-import type { Lineage } from "../../schema/relation";
 import type { Usage } from "../../schema/usage";
 import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
 
@@ -486,7 +485,7 @@ function buildManifest(
   sessionId: string,
   lines: RawLine[],
   records: AhsRecord[],
-  lineage?: Lineage,
+  branches?: Record<string, { parentRecordId: string }>,
 ): Manifest {
   const sessionLine = lines.find((l) => l.type === "session");
 
@@ -529,6 +528,16 @@ function buildManifest(
   }
   if (hasCost) totalUsage.cost = { amount: costAmount, currency: "USD" };
 
+  const branchRegistry: Manifest["branches"] = {
+    main: { parentBranch: null, parentRecordId: null },
+  };
+  if (branches !== undefined) {
+    for (const [name, info] of Object.entries(branches)) {
+      branchRegistry[name] = { parentBranch: "main", parentRecordId: info.parentRecordId };
+    }
+  }
+  const lastRecordId = records.length > 0 ? records[records.length - 1]!.recordId : null;
+
   const hasUsage = Object.keys(totalUsage).length > 0;
   return {
     sessionId,
@@ -540,8 +549,8 @@ function buildManifest(
     cwd: sessionLine?.cwd ?? "",
     model: model ?? "unknown",
     ...(provider !== undefined ? { provider } : {}),
-    root: lineage === undefined,
-    ...(lineage !== undefined ? { lineage } : {}),
+    branches: branchRegistry,
+    HEAD: { branch: "main", recordId: lastRecordId },
     stats: {
       turnCount,
       ...(hasUsage ? { totalUsage } : {}),
@@ -552,15 +561,18 @@ function buildManifest(
 /** One fully projected session (manifest + records) of a source file. */
 interface ProjectedSession {
   manifest: Manifest;
+  /** Main branch records. */
   records: AhsRecord[];
+  /** Branch name → records. */
+  branchRecords: Map<string, AhsRecord[]>;
 }
 
 /** All sessions projected from one file (main chain + forks). */
 interface ProjectedFile {
   /** The session record's id (present even when nothing projects). */
   fileSessionId?: string;
-  /** sessionId → projected session, in deterministic listing order. */
-  sessions: Map<string, ProjectedSession>;
+  /** The single projected session with branches. */
+  session: ProjectedSession | null;
 }
 
 export class PiAdapter implements HarnessAdapter {
@@ -614,8 +626,7 @@ export class PiAdapter implements HarnessAdapter {
   private async doProjectFile(filePath: string): Promise<ProjectedFile> {
     const lines = parseJsonl(await readFile(filePath, "utf8"));
     const sessionId = lines.find((l) => l.type === "session")?.id;
-    const sessions = new Map<string, ProjectedSession>();
-    if (sessionId === undefined) return { sessions };
+    if (sessionId === undefined) return { session: null };
 
     const roots = buildTree(lines);
     const chains = linearize(roots, sessionId);
@@ -635,65 +646,72 @@ export class PiAdapter implements HarnessAdapter {
       }
     }
 
+    let mainRecords: AhsRecord[] = [];
+    const branchRecords = new Map<string, AhsRecord[]>();
+    const branchMeta: Record<string, { parentRecordId: string }> = {};
+    let branchIndex = 0;
+
     for (const chain of chains) {
       const chainLines = chain.nodes.map((n) => n.line);
       const records = projectRecords(chainLines, seenToolResults, fileModel);
-      let lineage: Lineage | undefined;
-      if (chain.anchor !== undefined && chain.parentSessionId !== undefined) {
-        // Resolve the anchor to the nearest ancestor with a projected
-        // record in the parent session.
+
+      if (chain.anchor === undefined || chain.parentSessionId === undefined) {
+        // Main chain
+        mainRecords = records;
+      } else {
+        // Fork → branch. Resolve the anchor to the nearest ancestor with a
+        // projected record in the parent chain.
         let node: TreeNode | null = chain.anchor;
         let anchorRec: AhsRecord | undefined;
-        const parentRecords = sessions.get(chain.parentSessionId)?.records ?? [];
+        const parentRecords = chain.parentSessionId === sessionId
+          ? mainRecords
+          : branchRecords.get(chain.parentSessionId) ?? [];
         while (node !== null && anchorRec === undefined) {
           anchorRec = parentRecords.find((r) => r.recordId === node!.id);
           node = node.parent;
         }
-        lineage = {
-          type: "rewound_from",
-          sessionId: chain.parentSessionId,
-          ...(anchorRec !== undefined ? { atRecordId: anchorRec.recordId } : {}),
-        };
+        branchIndex += 1;
+        const branchName = `b${String(branchIndex).padStart(3, "0")}`;
+        if (records.length > 0) {
+          branchRecords.set(branchName, records);
+          branchMeta[branchName] = {
+            parentRecordId: anchorRec?.recordId ?? "",
+          };
+        }
       }
-      // Every chain's Manifest reads the file-level lines: the session
-      // record (cwd/version) and the file's first model_change belong to no
-      // chain but feed every Manifest projected from this file.
-      const manifest = buildManifest(chain.sessionId, lines, records, lineage);
-      sessions.set(chain.sessionId, { manifest, records });
     }
 
-    // Drop sessions with zero projectable records (a file holding only a
-    // session record is not an AHS session).
-    for (const [sid, projected] of sessions) {
-      if (projected.records.length === 0) sessions.delete(sid);
-    }
-    return { fileSessionId: sessionId, sessions };
+    if (mainRecords.length === 0) return { fileSessionId: sessionId, session: null };
+
+    const manifest = buildManifest(sessionId, lines, mainRecords, branchMeta);
+    return {
+      fileSessionId: sessionId,
+      session: { manifest, records: mainRecords, branchRecords },
+    };
   }
 
   async *listSessions(filter?: SessionFilter): AsyncIterable<Manifest> {
     if (filter?.harness !== undefined && filter.harness !== this.harness) return;
-    const includeForks = filter?.includeForks === true;
     for (const filePath of await this.discover()) {
-      const { sessions } = await this.projectFile(filePath);
-      for (const projected of sessions.values()) {
-        const { manifest } = projected;
-        // Default view: group HEADs only — lineage descendants (forks) are
-        // folded away unless includeForks is set (interface-0001). The main
-        // chain is the HEAD: it leads to the last leaf of the append-only
-        // file, i.e. the most recently updated chain of the group.
-        if (!includeForks && manifest.lineage !== undefined) continue;
-        if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) continue;
-        yield manifest;
-      }
+      const { session } = await this.projectFile(filePath);
+      if (session === null) continue;
+      if (filter?.cwd !== undefined && session.manifest.cwd !== filter.cwd) continue;
+      yield session.manifest;
     }
   }
 
-  async *readRecords(sessionId: string): AsyncIterable<AhsRecord> {
+  async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
     for (const filePath of await this.discover()) {
-      const { fileSessionId, sessions } = await this.projectFile(filePath);
-      const projected = sessions.get(sessionId);
-      if (projected !== undefined) {
-        yield* projected.records;
+      const { fileSessionId, session } = await this.projectFile(filePath);
+      if (session !== null && fileSessionId === sessionId) {
+        const targetBranch = branchName ?? "main";
+        if (targetBranch === "main") {
+          yield* session.records;
+        } else {
+          const brecords = session.branchRecords.get(targetBranch);
+          if (brecords === undefined) throw new Error(`branch not found: ${targetBranch}`);
+          yield* brecords;
+        }
         return;
       }
       // A file whose session record projects zero records (process-only) is

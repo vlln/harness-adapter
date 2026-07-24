@@ -1,12 +1,21 @@
 [
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "node-0"
+      },
       "ahsVersion": "0.1.0",
+      "branches": {
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
+      },
       "cwd": "/work/gamma",
       "harness": "devin",
       "harnessVersion": "unknown",
       "model": "devin-mini",
-      "root": true,
       "sessionId": "odd-cove",
       "stats": {
         "durationMs": 60000,
@@ -30,12 +39,21 @@
   },
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "m-q-0"
+      },
       "ahsVersion": "0.1.0",
+      "branches": {
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
+      },
       "cwd": "/work/beta",
       "harness": "devin",
       "harnessVersion": "unknown",
       "model": "devin-mini",
-      "root": true,
       "sessionId": "quiet-pond",
       "stats": {
         "durationMs": 0,
@@ -59,12 +77,37 @@
   },
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "m-user-18"
+      },
       "ahsVersion": "0.1.0",
+      "branches": {
+        "b002": {
+          "parentBranch": "main",
+          "parentRecordId": "m-asst-15/tool_call/0"
+        },
+        "b003": {
+          "parentBranch": "main",
+          "parentRecordId": null
+        },
+        "b004": {
+          "parentBranch": "main",
+          "parentRecordId": "m-sys-0"
+        },
+        "b005": {
+          "parentBranch": "main",
+          "parentRecordId": "m-user-1"
+        },
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
+      },
       "cwd": "/work/alpha",
       "harness": "devin",
       "harnessVersion": "unknown",
       "model": "claude-test-medium",
-      "root": true,
       "sessionId": "sunny-forest",
       "stats": {
         "durationMs": 3600000,
@@ -283,173 +326,6 @@
         "seq": 15,
         "timestamp": "2025-07-08T18:42:40.000Z",
         "type": "user_message"
-      }
-    ]
-  },
-  {
-    "manifest": {
-      "ahsVersion": "0.1.0",
-      "cwd": "/work/alpha",
-      "harness": "devin",
-      "harnessVersion": "unknown",
-      "lineage": {
-        "atRecordId": "m-asst-15/tool_call/0",
-        "sessionId": "sunny-forest",
-        "type": "rewound_from"
-      },
-      "model": "claude-test-medium",
-      "root": false,
-      "sessionId": "sunny-forest#fork-16",
-      "stats": {
-        "durationMs": 3600000,
-        "turnCount": 1
-      },
-      "title": "Alpha Refactor",
-      "titleOrigin": "custom"
-    },
-    "records": [
-      {
-        "content": [
-          {
-            "text": "fork direction",
-            "type": "text"
-          }
-        ],
-        "recordId": "m-user-20",
-        "seq": 0,
-        "timestamp": "2025-07-08T18:42:32.000Z",
-        "type": "user_message"
-      },
-      {
-        "content": [
-          {
-            "text": "Fork answer.",
-            "type": "text"
-          }
-        ],
-        "recordId": "m-asst-21",
-        "seq": 1,
-        "timestamp": "2025-07-08T18:42:33.000Z",
-        "type": "assistant_message"
-      }
-    ]
-  },
-  {
-    "manifest": {
-      "ahsVersion": "0.1.0",
-      "cwd": "/work/alpha",
-      "harness": "devin",
-      "harnessVersion": "unknown",
-      "lineage": {
-        "sessionId": "sunny-forest",
-        "type": "rewound_from"
-      },
-      "model": "claude-test-medium",
-      "root": false,
-      "sessionId": "sunny-forest#root-30",
-      "stats": {
-        "durationMs": 3600000,
-        "turnCount": 0
-      },
-      "title": "Alpha Refactor",
-      "titleOrigin": "custom"
-    },
-    "records": [
-      {
-        "content": [
-          {
-            "text": "Orphaned context.",
-            "type": "text"
-          }
-        ],
-        "recordId": "m-sys-30",
-        "seq": 0,
-        "timestamp": "2025-07-08T18:43:20.000Z",
-        "type": "harness_message"
-      }
-    ]
-  },
-  {
-    "manifest": {
-      "ahsVersion": "0.1.0",
-      "cwd": "/work/alpha",
-      "harness": "devin",
-      "harnessVersion": "unknown",
-      "lineage": {
-        "atRecordId": "m-sys-0",
-        "sessionId": "sunny-forest",
-        "type": "rewound_from"
-      },
-      "model": "claude-test-medium",
-      "root": false,
-      "sessionId": "sunny-forest#root-40",
-      "stats": {
-        "durationMs": 3600000,
-        "turnCount": 1
-      },
-      "title": "Alpha Refactor",
-      "titleOrigin": "custom"
-    },
-    "records": [
-      {
-        "content": [
-          {
-            "text": "Try differently.",
-            "type": "text"
-          }
-        ],
-        "recordId": "m-user-41",
-        "seq": 0,
-        "timestamp": "2025-07-08T18:45:10.000Z",
-        "type": "user_message"
-      },
-      {
-        "content": [
-          {
-            "text": "Alternative exploration.",
-            "type": "text"
-          }
-        ],
-        "recordId": "m-asst-42",
-        "seq": 1,
-        "timestamp": "2025-07-08T18:45:20.000Z",
-        "type": "assistant_message"
-      }
-    ]
-  },
-  {
-    "manifest": {
-      "ahsVersion": "0.1.0",
-      "cwd": "/work/alpha",
-      "harness": "devin",
-      "harnessVersion": "unknown",
-      "lineage": {
-        "atRecordId": "m-user-1",
-        "sessionId": "sunny-forest",
-        "type": "rewound_from"
-      },
-      "model": "claude-test-medium",
-      "root": false,
-      "sessionId": "sunny-forest#root-50",
-      "stats": {
-        "durationMs": 3600000,
-        "turnCount": 0
-      },
-      "title": "Alpha Refactor",
-      "titleOrigin": "custom"
-    },
-    "records": [
-      {
-        "content": [
-          {
-            "text": "Different answer to the same prompt.",
-            "type": "text"
-          }
-        ],
-        "recordId": "m-asst-52",
-        "seq": 0,
-        "timestamp": "2025-07-08T18:46:42.000Z",
-        "type": "assistant_message"
       }
     ]
   }

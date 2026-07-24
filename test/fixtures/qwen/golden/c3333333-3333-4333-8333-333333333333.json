@@ -1,11 +1,28 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "cc000009-0000-4000-8000-000000000009"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "b001": {
+        "parentBranch": "main",
+        "parentRecordId": "cc000002-0000-4000-8000-000000000002"
+      },
+      "b002": {
+        "parentBranch": "main",
+        "parentRecordId": "cc000007-0000-4000-8000-000000000007"
+      },
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/tmp/st",
     "harness": "qwen-code",
     "harnessVersion": "0.19.1",
     "model": "deepseek-v4-flash",
-    "root": true,
     "sessionId": "c3333333-3333-4333-8333-333333333333",
     "stats": {
       "turnCount": 3
