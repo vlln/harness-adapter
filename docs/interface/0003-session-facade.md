@@ -2,7 +2,7 @@
 title: Interface-0003 Session Facade 契约
 description: langchain 风格的消费方 facade：loadSession/loadTask 双视图、messages 投影、usage 聚合、children 递归；构建在 HarnessAdapter 流式底层之上。
 type: interface
-status: proposed
+status: active
 created: 2026-07-23T06:30:00Z
 ---
 
