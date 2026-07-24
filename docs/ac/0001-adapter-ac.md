@@ -44,7 +44,7 @@ created: 2026-07-21T11:48:45Z
 | AC-0002-N-4 | 源会话含 usage 数据（usage 无静默丢失） | 1. 运行适配器<br>2. 汇总 record 级 usage | record 级 usage 求和 ≈ 源会话总量（容差内） | 自动化 |
 | AC-0002-N-5 | 任意源会话（幂等） | 1. 同一输入运行适配器两次 | 两次输出逐字节一致 | 自动化 |
 | AC-0002-N-6 | 任意源会话（tool 配对） | 1. 运行适配器<br>2. 检查 tool_call/tool_result | 每个 `tool_call` 恰有配对 `tool_result`，或 `status === "interrupted"`，二者必居其一；同一 toolCallId 多个 result 时仅保留文件序第一条 | 自动化 |
-| AC-0002-N-7 | 源会话含分叉（历史维完整） | 1. 运行适配器<br>2. 检查 lineage | 每个分叉恰好产出一个 fork session（只存后缀）；`lineage.sessionId` 存在；`atRecordId`（非 null 时）指向父 session 中真实存在的 record；类型判据正确：锚点为 user_message ⇔ `sibling_attempt`，否则 `forked_from` | 自动化 |
+| AC-0002-N-7 | 源会话含分叉（历史维完整） | 1. 运行适配器<br>2. 检查 lineage | 每个分叉恰好产出一个 rewind session（只存后缀）；`lineage.sessionId` 存在；`atRecordId`（非 null 时）指向父 session 中真实存在的 record；类型为 `rewound_from`；`root: false` | 自动化 |
 
 ## 边界场景
 
