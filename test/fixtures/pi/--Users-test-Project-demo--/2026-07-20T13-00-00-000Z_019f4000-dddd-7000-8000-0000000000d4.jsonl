@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"019f4000-dddd-7000-8000-0000000000d4","timestamp":"2026-07-20T13:00:00.000Z","cwd":"/Users/test/Project/demo"}
+{"type":"thinking_level_change","id":"dd000001","parentId":null,"timestamp":"2026-07-20T13:00:00.010Z","thinkingLevel":"off"}
+{"type":"message","id":"dd000002","parentId":"dd000001","timestamp":"2026-07-20T13:00:05.000Z","message":{"role":"user","content":[{"type":"text","text":"fix the build"}],"timestamp":1785010805000}}
+{"type":"message","id":"dd000003","parentId":"dd000002","timestamp":"2026-07-20T13:00:09.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"call_99_ZZZZ","name":"bash","arguments":{"command":"make"}}],"api":"openai-completions","provider":"ollama","model":"DeepSeek-V4-Flash","stopReason":"aborted","timestamp":1785010809000}}

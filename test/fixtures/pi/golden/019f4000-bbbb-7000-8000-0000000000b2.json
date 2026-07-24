@@ -1,0 +1,153 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/Users/test/Project/demo",
+    "harness": "pi",
+    "harnessVersion": "3",
+    "model": "DeepSeek-V4-Flash",
+    "provider": "ollama",
+    "sessionId": "019f4000-bbbb-7000-8000-0000000000b2",
+    "stats": {
+      "totalUsage": {
+        "cacheReadTokens": 100,
+        "cacheWriteTokens": 300,
+        "cost": {
+          "amount": 0.0051,
+          "currency": "USD"
+        },
+        "inputTokens": 3100,
+        "outputTokens": 160,
+        "reasoningTokens": 64
+      },
+      "turnCount": 1
+    }
+  },
+  "records": [
+    {
+      "model": "DeepSeek-V4-Flash",
+      "provider": "ollama",
+      "recordId": "bb000001",
+      "seq": 0,
+      "timestamp": "2026-07-20T11:00:00.010Z",
+      "type": "model_change"
+    },
+    {
+      "model": "DeepSeek-V4-Flash",
+      "provider": "ollama",
+      "recordId": "bb000002",
+      "seq": 1,
+      "timestamp": "2026-07-20T11:00:00.020Z",
+      "type": "model_change"
+    },
+    {
+      "content": [
+        {
+          "text": "run the tests and read the config",
+          "type": "text"
+        }
+      ],
+      "recordId": "bb000003",
+      "seq": 2,
+      "timestamp": "2026-07-20T11:00:05.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "Two independent reads; run them in parallel.",
+          "type": "thinking"
+        }
+      ],
+      "model": "DeepSeek-V4-Flash",
+      "recordId": "bb000004",
+      "seq": 3,
+      "timestamp": "2026-07-20T11:00:09.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 300,
+        "cost": {
+          "amount": 0.0016,
+          "currency": "USD"
+        },
+        "inputTokens": 2200,
+        "outputTokens": 120,
+        "reasoningTokens": 64
+      }
+    },
+    {
+      "args": {
+        "command": "npx vitest run"
+      },
+      "name": "bash",
+      "recordId": "bb000004/toolCall/0",
+      "seq": 4,
+      "status": "completed",
+      "timestamp": "2026-07-20T11:00:09.000Z",
+      "toolCallId": "call_00_AAAA",
+      "type": "tool_call"
+    },
+    {
+      "args": {
+        "path": "config.toml"
+      },
+      "name": "read",
+      "recordId": "bb000004/toolCall/1",
+      "seq": 5,
+      "status": "failed",
+      "timestamp": "2026-07-20T11:00:09.000Z",
+      "toolCallId": "call_01_BBBB",
+      "type": "tool_call"
+    },
+    {
+      "content": "12 tests passed",
+      "recordId": "bb000005",
+      "seq": 6,
+      "status": "success",
+      "timestamp": "2026-07-20T11:00:12.000Z",
+      "toolCallId": "call_00_AAAA",
+      "type": "tool_result"
+    },
+    {
+      "content": "Error: ENOENT: no such file or directory",
+      "recordId": "bb000006",
+      "seq": 7,
+      "status": "error",
+      "timestamp": "2026-07-20T11:00:12.500Z",
+      "toolCallId": "call_01_BBBB",
+      "type": "tool_result"
+    },
+    {
+      "model": "grok-4.5",
+      "provider": "grok",
+      "recordId": "bb000007",
+      "seq": 8,
+      "timestamp": "2026-07-20T11:01:00.000Z",
+      "type": "model_change"
+    },
+    {
+      "content": [
+        {
+          "text": "Tests pass; the config file is missing.",
+          "type": "text"
+        }
+      ],
+      "model": "grok-4.5",
+      "recordId": "bb000009",
+      "seq": 9,
+      "timestamp": "2026-07-20T11:01:20.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 100,
+        "cacheWriteTokens": 0,
+        "cost": {
+          "amount": 0.0035,
+          "currency": "USD"
+        },
+        "inputTokens": 900,
+        "outputTokens": 40,
+        "reasoningTokens": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/Users/test/Project/demo",
+    "harness": "pi",
+    "harnessVersion": "3",
+    "model": "DeepSeek-V4-Flash",
+    "provider": "ollama",
+    "sessionId": "019f4000-aaaa-7000-8000-0000000000a1",
+    "stats": {
+      "totalUsage": {
+        "cacheReadTokens": 256,
+        "cost": {
+          "amount": 0.0007,
+          "currency": "USD"
+        },
+        "inputTokens": 1918,
+        "outputTokens": 409
+      },
+      "turnCount": 1
+    }
+  },
+  "records": [
+    {
+      "model": "DeepSeek-V4-Flash",
+      "provider": "ollama",
+      "recordId": "aa000001",
+      "seq": 0,
+      "timestamp": "2026-07-20T10:00:00.010Z",
+      "type": "model_change"
+    },
+    {
+      "model": "DeepSeek-V4-Flash",
+      "provider": "ollama",
+      "recordId": "aa000002",
+      "seq": 1,
+      "timestamp": "2026-07-20T10:00:00.020Z",
+      "type": "model_change"
+    },
+    {
+      "content": [
+        {
+          "text": "say hello",
+          "type": "text"
+        }
+      ],
+      "recordId": "aa000003",
+      "seq": 2,
+      "timestamp": "2026-07-20T10:00:05.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "The user wants a greeting.",
+          "type": "thinking"
+        },
+        {
+          "text": "Hello!",
+          "type": "text"
+        }
+      ],
+      "model": "DeepSeek-V4-Flash",
+      "recordId": "aa000004",
+      "seq": 3,
+      "timestamp": "2026-07-20T10:00:08.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 256,
+        "cacheWriteTokens": 0,
+        "cost": {
+          "amount": 0.0007,
+          "currency": "USD"
+        },
+        "inputTokens": 1918,
+        "outputTokens": 409,
+        "reasoningTokens": 0
+      }
+    }
+  ]
+}

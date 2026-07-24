@@ -1,7 +1,7 @@
 /**
  * System-test e2e — real adapter → archive → ahs-report CLI chains.
  *
- * For each of the 5 formal adapters the full chain runs end to end:
+ * For each of the 7 formal adapters the full chain runs end to end:
  *   1. the adapter reads its synthetic repo fixture (test/fixtures/*),
  *   2. exportSessions writes an AHS archive into a temp dir,
  *   3. examples/ahs-report.ts runs as a REAL CLI subprocess (vite-node,
@@ -28,6 +28,7 @@ import { CodexAdapter } from "../../src/adapters/codex/index";
 import { DevinAdapter } from "../../src/adapters/devin/index";
 import { GrokAdapter } from "../../src/adapters/grok/index";
 import { KimiCodeAdapter } from "../../src/adapters/kimi-code/index";
+import { PiAdapter } from "../../src/adapters/pi/index";
 import { QwenCodeAdapter } from "../../src/adapters/qwen/index";
 import { exportSessions } from "../../src/ahs/writer";
 import type { HarnessAdapter } from "../../src/store/adapter";
@@ -245,6 +246,7 @@ const KIMI_SESSION = "11111111-2222-4333-8444-555555555555";
 const KIMI_CHILD = `${KIMI_SESSION}/agent-0`;
 const GROK_SESSION = "019f0000-0000-7000-8000-000000000001";
 const QWEN_SESSION_B = "b2222222-2222-4222-8222-222222222222";
+const PI_SESSION_C = "019f4000-cccc-7000-8000-0000000000c3";
 
 const cases: E2eCase[] = [
   {
@@ -295,6 +297,27 @@ const cases: E2eCase[] = [
       "→ Grep(",
       "→ Bash(",
       "(interrupted)",
+    ],
+  },
+  {
+    name: "pi",
+    makeAdapter: () => new PiAdapter(path.join(fixturesDir, "pi")),
+    rootSessionId: PI_SESSION_C,
+    // Lineage forks (edit-resend + retry) are folded in the default view;
+    // --all lists them as alternate versions.
+    childSessionIds: [],
+    transcriptMarkers: [
+      `# ${PI_SESSION_C} [pi`,
+      "─ model change → DeepSeek-V4-Flash",
+      "edited follow-up",
+      "new answer to the retry",
+    ],
+    absentMarkers: ["original follow-up", "old answer to the retry"],
+    skipToolResultLine: true,
+    allRunMarkers: [
+      `HEAD: ${PI_SESSION_C}`,
+      `${PI_SESSION_C}/fork/cc000005`,
+      `${PI_SESSION_C}/fork/cc00000a`,
     ],
   },
   {
