@@ -170,6 +170,8 @@ Uses **OpenAI content block format**: `content[]` array of `{type: "text", text:
 }
 ```
 
+> **Errata (2026-07-24, formal adapter sweep — see docs/plans/0012-grok-adapter/01-report-grok.md):** the shape above is the older form. Real data observed at implementation time (Grok `0.2.106`, 9 sessions / 35 tool results) uses `{"type":"tool_result","tool_call_id":"...","content":"..."}` — no `result`, no `status`, and no error marker at all, so a failed call is indistinguishable from a successful one. Consumers should treat `{tool_call_id, content}` as canonical and merely tolerate the documented `{result, status}` form.
+
 ---
 
 ## Storage Layer 2: `updates.jsonl` (Streaming Delta Log)
@@ -328,6 +330,8 @@ The most comprehensive metrics of any observed harness:
 }
 ```
 
+> **Errata (2026-07-24, formal adapter sweep — see docs/plans/0012-grok-adapter/01-report-grok.md):** the token metrics in this file are context-window occupancy, not request-level usage. `contextTokensUsed` (together with `contextWindowUsage` / `contextWindowTokens`) measures how full the context window is; it is NOT a sum of per-request input/output tokens, and `chat_history.jsonl` carries no record-level usage blocks either. Consumers needing usage figures (input/output/cache sums) will find no honest source in Grok's local storage — do not treat these aggregates as usage data. The genuinely useful session stats here are `turnCount` and `sessionDurationSeconds`.
+
 ---
 
 ## Storage Layer 6: `session_search.sqlite` (FTS5 Index)
@@ -401,6 +405,8 @@ The `updates.jsonl` provides a finer-grained view of the same events as streamin
 | Tool call | `{id, name, arguments}` (arguments is JSON string) |
 | Tool result | `{tool_call_id, result, status}` |
 | System reminders | User-type messages with `synthetic_reason: "system_reminder"` |
+
+> **Errata (2026-07-24):** the Tool result row shows the older shape — see the Tool Result errata above; the observed form is `{tool_call_id, content}` with no `status`.
 
 ---
 
