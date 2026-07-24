@@ -10,7 +10,7 @@
  *              mid-session model_change, an error assistant message
  *              (empty content, projects nothing) — AC-0001-E-1, AC-0002-N-6
  *   cccc…00c3  branch points: edit-resend after an assistant record
- *              (rewound_from) + re-answer to a user prompt (rewound_from);
+ *              (forked_from) + re-answer to a user prompt (forked_from);
  *              main chain = chain to the last leaf — AC-0002-N-7
  *   dddd…00d4  thinking_level_change before any model_change (dropped),
  *              assistant without usage, interrupted tool_call — AC-0002-B-1/B-2

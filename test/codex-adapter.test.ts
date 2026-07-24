@@ -10,14 +10,14 @@
  *   unchanged-total duplicate.
  * - b2: sub-agent child of a1 (thread_spawn) with ancestor lineage headers
  *   (invocation wins over lineage).
- * - c3: resumed session (rewound_from a1), turn_aborted with an unpaired
+ * - c3: resumed session (forked_from a1), turn_aborted with an unpaired
  *   tool_call, no token_count at all, truncated tail line.
  * - d4: session_meta only (no projectable content) — must be skipped.
  * - g7: session that crashed right after a user_message (its last record is
  *   a user_message).
- * - e5: resumed from g7, re-answering the pending prompt — rewound_from
+ * - e5: resumed from g7, re-answering the pending prompt — forked_from
  *   anchored at g7's user_message (AC-0002-N-7 type judgment).
- * - f6: resumed from c3 (chained fork) — rewound_from anchored at c3's last
+ * - f6: resumed from c3 (chained fork) — forked_from anchored at c3's last
  *   record; also makes f6 the HEAD of the {a1, c3, f6} lineage group.
  */
 

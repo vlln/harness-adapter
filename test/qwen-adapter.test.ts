@@ -11,7 +11,7 @@
  *               functionCall-only message carries usage on the tool_call —
  *               AC-0002-N-6/B-1/B-2
  *   c3333333-…  branch points: edit-resend after an assistant record
- *               (rewound_from) + re-answer to a user prompt (rewound_from) —
+ *               (forked_from) + re-answer to a user prompt (forked_from) —
  *               AC-0002-N-7
  *   d4444444-…  only system records — not an AHS session (skipped)
  *   usage/token-usage-2026-07.jsonl  per-call usage: main rows reconcile with

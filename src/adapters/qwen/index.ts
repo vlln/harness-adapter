@@ -47,7 +47,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   order is recency) continues the chain, every other child subtree becomes
  *   a fork session `<sessionId>/fork/<branch-root uuid>` storing only its
  *   suffix, with lineage anchored at the branch point's first projected
- *   record (rewound_from).
+ *   record (forked_from).
  * - Duplicate lines sharing a uuid keep their first occurrence; kept lines
  *   with an unknown/null parent mid-file re-anchor to the previous kept line
  *   (chain restarts), preserving a single root.

@@ -27,7 +27,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   becomes a fork session storing only its suffix: sessionId
  *   `<main>/fork/<branch-root id>`, lineage atRecordId = the anchor node's
  *   first projected record in the parent session, type by that record's
- *   type (rewound_from).
+ *   type (forked_from).
  * - Chain restarts (parentId null/unknown mid-file) re-anchor to the
  *   previous kept line, preserving a single root.
  *

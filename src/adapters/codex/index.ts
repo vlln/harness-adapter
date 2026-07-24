@@ -68,8 +68,8 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   replayed (verified on real data). The most recent ancestor (the second
  *   session_meta) maps to lineage, anchored at the ancestor's LAST record
  *   (the child stores only the post-fork suffix); the type is judged by the
- *   anchor record: rewound_from.
- *   rewound_from (AC-0002-N-7). If the ancestor file is absent/empty in this
+ *   anchor record: forked_from.
+ *   forked_from (AC-0002-N-7). If the ancestor file is absent/empty in this
  *   store, the lineage is kept with `atRecordId: null` (anchor
  *   source-unavailable, tri-state per the ADR-0005 amendment).
  *   A sub-agent file has lineage headers too, but invocation wins.
