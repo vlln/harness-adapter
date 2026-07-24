@@ -1043,6 +1043,26 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
     }
   }
 
+  async readManifest(sessionId: string): Promise<Manifest> {
+    const discovered = await this.discover();
+    // Fast path: a main session file named by the id.
+    for (const session of discovered) {
+      if (session.sessionId === sessionId) {
+        const { sessions } = await this.projectFile(session);
+        const projected = sessions.get(sessionId);
+        if (projected === undefined) throw new Error(`session not found: ${sessionId}`);
+        return projected.manifest;
+      }
+    }
+    // Fork sessions and sub-agent sessions: scan projected files.
+    for (const session of discovered) {
+      const { sessions } = await this.projectFile(session);
+      const projected = sessions.get(sessionId);
+      if (projected !== undefined) return projected.manifest;
+    }
+    throw new Error(`session not found: ${sessionId}`);
+  }
+
   async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
     const discovered = await this.discover();
     // Fast path: a main session file named by the id.

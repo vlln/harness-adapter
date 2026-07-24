@@ -765,6 +765,18 @@ export class QwenCodeAdapter implements HarnessAdapter {
     }
   }
 
+  async readManifest(sessionId: string): Promise<Manifest> {
+    const discovered = await this.discover();
+    for (const session of discovered) {
+      if (session.sessionId === sessionId) {
+        const { session: projected } = await this.projectFile(session);
+        if (projected === null) break;
+        return projected.manifest;
+      }
+    }
+    throw new Error(`session not found: ${sessionId}`);
+  }
+
   async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
     const discovered = await this.discover();
     for (const session of discovered) {

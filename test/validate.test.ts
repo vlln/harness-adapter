@@ -172,6 +172,10 @@ describe("AC-0002-N-5 idempotency helper", () => {
         run += 1;
         yield makeManifest({ sessionId: "sess-1", title: `run-${run}` });
       },
+      async readManifest(sessionId: string) {
+        run += 1;
+        return makeManifest({ sessionId, title: `run-${run}` });
+      },
       async *readRecords() {
         yield userMessage("go");
       },

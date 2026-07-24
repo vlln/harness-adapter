@@ -633,6 +633,23 @@ export class DevinAdapter implements HarnessAdapter {
     }
   }
 
+  async readManifest(sessionId: string): Promise<Manifest> {
+    const db = this.open();
+    try {
+      const rows = this.loadSessions(db).filter((r) => r.id === sessionId);
+      const row = rows[0];
+      if (row === undefined) throw new Error(`session not found: ${sessionId}`);
+      const group = this.projectRow(db, row);
+      if (group === null) throw new Error(`session not found: ${sessionId}`);
+      return buildManifest(row, group.session, {
+        includeCost: true,
+        headBranch: group.headBranch,
+      });
+    } finally {
+      db.close();
+    }
+  }
+
   async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
     const db = this.open();
     try {
