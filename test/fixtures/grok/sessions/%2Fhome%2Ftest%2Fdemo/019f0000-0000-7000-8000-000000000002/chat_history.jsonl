@@ -1,0 +1,3 @@
+{"type":"system","content":"You are Grok 4.5 released by xAI."}
+{"type":"user","content":[{"type":"text","text":"<project-instructions>\nSynthetic project instructions.\n</project-instructions>"}],"synthetic_reason":"project_instructions"}
+{"type":"user","content":[{"type":"text","text":"<user_query>\n这个项目用什么测试框架\n</user_query>"}]}
