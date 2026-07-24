@@ -6,7 +6,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| 01-plan-qwen.md | Qwen Code 适配器（Google parts[] + 全局 usage join） | pending | — |
+| 01-plan-qwen.md | Qwen Code 适配器（Google parts[] + 全局 usage join） | done | [01-report-qwen.md](01-report-qwen.md) |
 
 ## 适配器要点
 
