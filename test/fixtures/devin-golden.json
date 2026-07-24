@@ -31,7 +31,6 @@
           }
         ],
         "recordId": "node-0",
-        "seq": 0,
         "timestamp": "2025-07-11T02:13:20.000Z",
         "type": "user_message"
       }
@@ -69,7 +68,6 @@
           }
         ],
         "recordId": "m-q-0",
-        "seq": 0,
         "timestamp": "2025-07-09T22:26:40.000Z",
         "type": "user_message"
       }
@@ -135,7 +133,6 @@
           }
         ],
         "recordId": "m-sys-0",
-        "seq": 0,
         "timestamp": "2025-07-08T18:40:00.000Z",
         "type": "harness_message"
       },
@@ -147,7 +144,6 @@
           }
         ],
         "recordId": "m-user-1",
-        "seq": 1,
         "timestamp": "2025-07-08T18:40:10.000Z",
         "type": "user_message"
       },
@@ -163,7 +159,6 @@
           }
         ],
         "recordId": "m-asst-2",
-        "seq": 2,
         "timestamp": "2025-07-08T18:40:21.000Z",
         "type": "assistant_message",
         "usage": {
@@ -180,7 +175,6 @@
         "kind": "read",
         "name": "read_file",
         "recordId": "m-asst-2/tool_call/0",
-        "seq": 3,
         "status": "completed",
         "timestamp": "2025-07-08T18:40:21.000Z",
         "toolCallId": "tc-1",
@@ -189,7 +183,6 @@
       {
         "content": "file contents here",
         "recordId": "m-tool-4",
-        "seq": 4,
         "status": "success",
         "timestamp": "2025-07-08T18:40:30.000Z",
         "toolCallId": "tc-1",
@@ -202,7 +195,6 @@
         },
         "name": "write_file",
         "recordId": "m-asst-5/tool_call/0",
-        "seq": 5,
         "status": "completed",
         "timestamp": "2025-07-08T18:40:40.000Z",
         "toolCallId": "tc-2",
@@ -216,7 +208,6 @@
       {
         "content": "ok",
         "recordId": "m-tool-6",
-        "seq": 6,
         "status": "success",
         "timestamp": "2025-07-08T18:40:50.000Z",
         "toolCallId": "tc-2",
@@ -230,7 +221,6 @@
           }
         ],
         "recordId": "m-asst-8",
-        "seq": 7,
         "timestamp": "2025-07-08T18:41:10.000Z",
         "type": "assistant_message"
       },
@@ -240,7 +230,6 @@
         },
         "name": "run_shell",
         "recordId": "m-asst-8/tool_call/0",
-        "seq": 8,
         "status": "interrupted",
         "timestamp": "2025-07-08T18:41:10.000Z",
         "toolCallId": "tc-3",
@@ -254,7 +243,6 @@
           }
         ],
         "recordId": "m-user-10",
-        "seq": 9,
         "timestamp": "2025-07-08T18:41:30.000Z",
         "type": "user_message"
       },
@@ -266,7 +254,6 @@
           }
         ],
         "recordId": "m-user-12",
-        "seq": 10,
         "timestamp": "2025-07-08T18:41:50.000Z",
         "type": "user_message"
       },
@@ -278,7 +265,6 @@
           }
         ],
         "recordId": "m-harness-14",
-        "seq": 11,
         "timestamp": "2025-07-08T18:42:10.000Z",
         "type": "harness_message"
       },
@@ -290,7 +276,6 @@
           }
         ],
         "recordId": "m-asst-15",
-        "seq": 12,
         "timestamp": "2025-07-08T18:42:20.000Z",
         "type": "assistant_message"
       },
@@ -300,7 +285,6 @@
         },
         "name": "run_shell",
         "recordId": "m-asst-15/tool_call/0",
-        "seq": 13,
         "status": "completed",
         "timestamp": "2025-07-08T18:42:20.000Z",
         "toolCallId": "tc-4",
@@ -309,7 +293,6 @@
       {
         "content": "main result",
         "recordId": "m-tool-17",
-        "seq": 14,
         "status": "success",
         "timestamp": "2025-07-08T18:42:30.000Z",
         "toolCallId": "tc-4",
@@ -323,7 +306,6 @@
           }
         ],
         "recordId": "m-user-18",
-        "seq": 15,
         "timestamp": "2025-07-08T18:42:40.000Z",
         "type": "user_message"
       }

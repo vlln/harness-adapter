@@ -186,7 +186,6 @@ describe("pi adapter", () => {
         expect(thinking.model).toBe("DeepSeek-V4-Flash");
         expect(thinking.provider).toBe("ollama");
       }
-      expect(records.map((r) => r.seq)).toEqual([0, 1, 2, 3]);
     });
 
     it("preserves text and thinking verbatim (AC-0002-N-3)", async () => {
@@ -310,7 +309,6 @@ describe("pi adapter", () => {
         "cc000009",
         "cc00000b", // the retry's later answer
       ]);
-      expect(main.map((r) => r.seq)).toEqual(main.map((_, i) => i));
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_C)!.manifest;
       expect(manifest.lineage).toBeUndefined();
@@ -333,7 +331,6 @@ describe("pi adapter", () => {
     it("edit-resend branch (b001) stores suffix-only records", async () => {
       const records = await readAll(adapter, SESSION_C, "b001");
       expect(records.map((r) => r.recordId)).toEqual(["cc000005", "cc000006"]);
-      expect(records[0]!.seq).toBe(0);
     });
 
     it("re-answer branch (b002) stores the alternate answer, not in the main chain", async () => {
@@ -357,7 +354,6 @@ describe("pi adapter", () => {
       const records = await readAll(adapter, SESSION_D);
       expect(records.some((r) => r.recordId === "dd000001")).toBe(false);
       expect(records.map((r) => r.type)).toEqual(["user_message", "tool_call"]);
-      expect(records.map((r) => r.seq)).toEqual([0, 1]);
     });
 
     it("marks a tool_call without a paired result as interrupted, no synthetic result (AC-0002-B-1)", async () => {

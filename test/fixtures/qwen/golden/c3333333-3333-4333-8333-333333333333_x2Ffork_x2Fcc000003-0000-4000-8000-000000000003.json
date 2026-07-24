@@ -25,7 +25,6 @@
         }
       ],
       "recordId": "cc000003-0000-4000-8000-000000000003",
-      "seq": 0,
       "timestamp": "2026-07-22T11:01:00.000Z",
       "type": "user_message"
     },
@@ -38,7 +37,6 @@
       ],
       "model": "deepseek-v4-flash",
       "recordId": "cc000004-0000-4000-8000-000000000004",
-      "seq": 1,
       "timestamp": "2026-07-22T11:01:06.000Z",
       "type": "assistant_message"
     }

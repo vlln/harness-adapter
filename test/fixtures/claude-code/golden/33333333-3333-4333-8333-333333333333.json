@@ -32,7 +32,6 @@
   "records": [
     {
       "recordId": "dddd0001-0000-4000-8000-000000000001",
-      "seq": 0,
       "summary": "This session is being continued from a previous conversation that ran out of context. The parser refactor was in progress.",
       "timestamp": "2026-07-16T10:00:00.000Z",
       "type": "compaction"
@@ -45,7 +44,6 @@
         }
       ],
       "recordId": "dddd0002-0000-4000-8000-000000000002",
-      "seq": 1,
       "timestamp": "2026-07-16T10:00:01.000Z",
       "type": "user_message"
     },
@@ -58,7 +56,6 @@
       ],
       "model": "claude-sonnet-4-5",
       "recordId": "dddd0003-0000-4000-8000-000000000003",
-      "seq": 2,
       "timestamp": "2026-07-16T10:00:05.000Z",
       "type": "assistant_message",
       "usage": {
@@ -76,7 +73,6 @@
       },
       "name": "Task",
       "recordId": "dddd0003-0000-4000-8000-000000000003/tool_use/0",
-      "seq": 3,
       "status": "completed",
       "timestamp": "2026-07-16T10:00:05.000Z",
       "toolCallId": "toolu_task02AAAAAAAAAAAAAAAAAA",
@@ -85,7 +81,6 @@
     {
       "content": "Agent completed: no usages of the old API remain outside src/legacy/.",
       "recordId": "dddd0006-0000-4000-8000-000000000006",
-      "seq": 4,
       "sessionIds": [
         "def456"
       ],
@@ -103,7 +98,6 @@
       ],
       "model": "claude-sonnet-4-5",
       "recordId": "dddd0007-0000-4000-8000-000000000007",
-      "seq": 5,
       "timestamp": "2026-07-16T10:00:14.000Z",
       "type": "assistant_message",
       "usage": {
@@ -121,7 +115,6 @@
       ],
       "model": "claude-sonnet-4-5",
       "recordId": "dddd0009-0000-4000-8000-000000000009",
-      "seq": 6,
       "timestamp": "2026-07-16T10:00:16.000Z",
       "type": "assistant_message",
       "usage": {
@@ -137,7 +130,6 @@
       },
       "name": "Bash",
       "recordId": "dddd0009-0000-4000-8000-000000000009/tool_use/0",
-      "seq": 7,
       "status": "interrupted",
       "timestamp": "2026-07-16T10:00:16.000Z",
       "toolCallId": "toolu_task03AAAAAAAAAAAAAAAAAA",

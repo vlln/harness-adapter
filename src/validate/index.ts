@@ -25,7 +25,6 @@ export interface SessionData {
 
 export interface InvariantError {
   code:
-    | "seq-order"
     | "invocation-session"
     | "invocation-anchor"
     | "invocation-mismatch"
@@ -35,27 +34,6 @@ export interface InvariantError {
     | "branch-head-record";
   sessionId: string;
   message: string;
-}
-
-/**
- * AC-0002-N-1: linear shape. Each branch file carries its own seq numbering
- * (starting from 0). Within the collected branch, seq must be strictly
- * increasing AND contiguous (step exactly 1) in file order.
- */
-function checkLinear(session: SessionData, errors: InvariantError[]): void {
-  const { records } = session;
-  const sid = session.manifest.sessionId;
-  for (let i = 1; i < records.length; i += 1) {
-    const prev = records[i - 1]!;
-    const cur = records[i]!;
-    if (cur.seq !== prev.seq + 1) {
-      errors.push({
-        code: "seq-order",
-        sessionId: sid,
-        message: `seq not strictly increasing and contiguous at index ${i}: ${prev.seq} -> ${cur.seq}`,
-      });
-    }
-  }
 }
 
 /**
@@ -193,7 +171,6 @@ function checkToolPairing(session: SessionData, errors: InvariantError[]): void 
 export function validateSessions(sessions: SessionData[]): InvariantError[] {
   const errors: InvariantError[] = [];
   for (const session of sessions) {
-    checkLinear(session, errors);
     checkToolPairing(session, errors);
     checkBranchIntegrity(session, errors);
   }

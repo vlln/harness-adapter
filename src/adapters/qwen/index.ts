@@ -68,7 +68,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * - `usage_record.jsonl` contributes stats.durationMs (summed across the
  *   session's entries — one entry is appended per CLI run of the session).
  *
- * Determinism (AC-0002-N-5): directory entries are sorted, chains and seq
+ * Determinism (AC-0002-N-5): directory entries are sorted, chains
  * follow file order, recordIds are source uuids, fork ids are derived from
  * source uuids — no wall-clock reads anywhere.
  */
@@ -177,10 +177,8 @@ function stringifyResponse(response: unknown): string {
  */
 export function projectRecords(lines: RawLine[]): AhsRecord[] {
   const records: AhsRecord[] = [];
-  let seq = 0;
   const emit = (rec: AhsRecord): void => {
     records.push(rec);
-    seq += 1;
   };
 
   for (const line of lines) {
@@ -195,7 +193,7 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
         if (typeof part.text === "string") textBlocks.push({ type: "text", text: part.text });
       }
       if (textBlocks.length > 0) {
-        emit({ recordId: uuid, seq, timestamp, type: "user_message", content: textBlocks });
+        emit({ recordId: uuid, timestamp, type: "user_message", content: textBlocks });
       }
       let responseIndex = 0;
       for (const part of parts) {
@@ -211,7 +209,6 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
           typeof response === "object" && response !== null && "error" in response;
         emit({
           recordId,
-          seq,
           timestamp,
           type: "tool_result",
           // GenAI pairs by name when no call id exists.
@@ -245,7 +242,6 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
         emit({
           ...extras,
           recordId: uuid,
-          seq,
           timestamp,
           type: "assistant_message",
           content: contentBlocks,
@@ -265,7 +261,6 @@ export function projectRecords(lines: RawLine[]): AhsRecord[] {
         emit({
           ...carryExtras,
           recordId,
-          seq,
           timestamp,
           type: "tool_call",
           toolCallId: fc.id ?? `${uuid}/functionCall/${callIndex - 1}`,

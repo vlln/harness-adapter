@@ -10,7 +10,7 @@
  *               compaction + duplicate tool_result + interrupted tool_call —
  *               AC-0002-N-6/B-1
  *   44444444-…  dropped process records (system/mode/attachment) leaving no
- *               seq gaps, multi tool_use, non-string tool_result,
+ *               no file-order gaps, multi tool_use, non-string tool_result,
  *               missing usage — AC-0001-E-1, AC-0002-B-2
  *   55555555-…  only process records — not an AHS session (skipped)
  *   66666666-…  branch points: edit-resend after an assistant record
@@ -303,10 +303,6 @@ describe("claude-code adapter", () => {
       });
     });
 
-    it("assigns seq in emission order, strictly increasing and contiguous (AC-0002-N-1)", async () => {
-      const records = await readAll(adapter, SESSION_A);
-      expect(records.map((r) => r.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    });
   });
 
   describe("session with subagent file (fixture B)", () => {
@@ -370,7 +366,6 @@ describe("claude-code adapter", () => {
         "tool_result",
         "assistant_message",
       ]);
-      expect(child[0]!.seq).toBe(0);
       expect(sumUsage(child)).toEqual({
         inputTokens: 2400,
         outputTokens: 150,
@@ -384,7 +379,6 @@ describe("claude-code adapter", () => {
     it("groups inline isSidechain records by agentId into a child session (sourceToolUseID anchor)", async () => {
       const child = await readAll(adapter, "def456");
       expect(child.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
-      expect(child[0]!.seq).toBe(0);
 
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === "def456")!.manifest;
@@ -480,7 +474,6 @@ describe("claude-code adapter", () => {
         "eeee0009-0000-4000-8000-000000000009",
         "eeee0011-0000-4000-8000-000000000011", // the retry's later answer
       ]);
-      expect(main.map((r) => r.seq)).toEqual(main.map((_, i) => i));
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_F)!.manifest;
       expect(manifest.lineage).toBeUndefined();
@@ -508,7 +501,6 @@ describe("claude-code adapter", () => {
         "eeee0003-0000-4000-8000-000000000003",
         "eeee0004-0000-4000-8000-000000000004",
       ]);
-      expect(records[0]!.seq).toBe(0);
     });
 
     it("re-answer branch (b002) stores the alternate answer, not in the main chain", async () => {

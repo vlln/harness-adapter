@@ -166,7 +166,6 @@ describe("qwen adapter", () => {
         "user_message",
         "assistant_message",
       ]);
-      expect(records.map((r) => r.seq)).toEqual([0, 1, 2, 3]);
       const assistant = records[1]!;
       if (assistant.type === "assistant_message") {
         expect(assistant.content).toEqual([
@@ -324,7 +323,6 @@ describe("qwen adapter", () => {
         "cc000007-0000-4000-8000-000000000007",
         "cc000009-0000-4000-8000-000000000009", // the later re-answer
       ]);
-      expect(main.map((r) => r.seq)).toEqual(main.map((_, i) => i));
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_C)!.manifest;
       expect(manifest.lineage).toBeUndefined();
@@ -350,7 +348,6 @@ describe("qwen adapter", () => {
     it("edit-resend branch (b001) stores suffix-only records", async () => {
       const records = await readAll(adapter, SESSION_C, "b001");
       expect(records.map((r) => r.type)).toEqual(["user_message", "assistant_message"]);
-      expect(records[0]!.seq).toBe(0);
     });
 
     it("re-answer branch (b002) stores the alternate answer, not in the main chain", async () => {

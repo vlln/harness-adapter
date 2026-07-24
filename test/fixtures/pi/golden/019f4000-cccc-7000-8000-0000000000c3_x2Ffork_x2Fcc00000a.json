@@ -35,7 +35,6 @@
       ],
       "model": "DeepSeek-V4-Flash",
       "recordId": "cc00000a",
-      "seq": 0,
       "timestamp": "2026-07-20T12:03:05.000Z",
       "type": "assistant_message",
       "usage": {

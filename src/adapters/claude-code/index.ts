@@ -60,7 +60,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * - Assistant `tool_use` blocks are split out of the assistant message into
  *   their own `tool_call` records. Within one source record the emitted
  *   records follow in order (assistant_message → tool_call → …); emission
- *   order is preserved via seq.
+ *   order is preserved via file (JSONL line) order.
  * - When an assistant message has only tool_use blocks, no assistant_message
  *   is emitted; the usage (must not be silently lost, AC-0002-N-4) rides on
  *   the first tool_call record.
@@ -99,7 +99,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * across several assistant lines) usage is taken from the LAST segment —
  * intermediate segments carry duplicate running values, not additive data.
  *
- * Determinism (AC-0002-N-5): directory entries are sorted, chains and seq
+ * Determinism (AC-0002-N-5): directory entries are sorted, chains
  * follow file order, recordIds are source uuids, fork ids are derived from
  * source uuids — no wall-clock reads anywhere.
  */
@@ -258,14 +258,12 @@ export function projectRecords(
   usageByUuid?: Map<string, RawUsage>,
 ): AhsRecord[] {
   const records: AhsRecord[] = [];
-  let seq = 0;
 
   // Defaults to the chain-local computation when called standalone.
   const usageLookup = usageByUuid ?? computeUsageByUuid(lines);
 
   const emit = (rec: AhsRecord): void => {
     records.push(rec);
-    seq += 1;
   };
 
   lines.forEach((line) => {
@@ -280,7 +278,6 @@ export function projectRecords(
           typeof line.message?.content === "string" ? line.message.content : undefined;
         emit({
           recordId: uuid,
-          seq,
           timestamp,
           type: "compaction",
           ...(summary !== undefined ? { summary } : {}),
@@ -291,8 +288,7 @@ export function projectRecords(
           // Verbatim, including slash-command XML markup (do not parse).
           emit({
             recordId: uuid,
-            seq,
-            timestamp,
+              timestamp,
             type: "user_message",
             content: [{ type: "text", text: content }],
           });
@@ -306,8 +302,7 @@ export function projectRecords(
           if (textBlocks.length > 0) {
             emit({
               recordId: uuid,
-              seq,
-              timestamp,
+                  timestamp,
               type: "user_message",
               content: textBlocks,
             });
@@ -327,8 +322,7 @@ export function projectRecords(
             toolResultIndex += 1;
             emit({
               recordId,
-              seq,
-              timestamp,
+                  timestamp,
               type: "tool_result",
               toolCallId,
               content: stringifyToolResultContent(block.content),
@@ -352,7 +346,6 @@ export function projectRecords(
             : ("unmet" as const);
       emit({
         recordId: uuid,
-        seq,
         timestamp,
         type: "goal_update",
         status,
@@ -389,7 +382,6 @@ export function projectRecords(
         emit({
           ...extras,
           recordId: uuid,
-          seq,
           timestamp,
           type: "assistant_message",
           content: contentBlocks,
@@ -408,7 +400,6 @@ export function projectRecords(
         emit({
           ...carryExtras,
           recordId,
-          seq,
           timestamp,
           type: "tool_call",
           toolCallId: block.id ?? "",

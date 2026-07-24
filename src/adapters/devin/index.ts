@@ -257,7 +257,7 @@ function emitMessage(
   const timestamp = isoFromSeconds(node.created_at);
   const appended: AhsRecord[] = [];
   const emit = (specific: RecordSpecific, recordId: string): void => {
-    const rec = { recordId, timestamp, seq: records.length, ...specific } as AhsRecord;
+    const rec = { recordId, timestamp, ...specific } as AhsRecord;
     records.push(rec);
     appended.push(rec);
   };

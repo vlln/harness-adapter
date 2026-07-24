@@ -211,12 +211,9 @@ describe("AC-0002: output is complete (layer 2 invariants)", () => {
     expect(validateSessions(sessions)).toEqual([]);
   });
 
-  it("AC-0002-N-1: every session is linear (seq contiguous from 0, first record is the root)", () => {
-    for (const s of sessions) {
-      expect(s.records.map((r) => r.seq)).toEqual(s.records.map((_, i) => i));
-    }
+  it("AC-0002-N-1: every session is linear (records in file order, first record is the root)", () => {
     const base = session("sunny-forest");
-    expect(base.records[0]).toMatchObject({ recordId: "m-sys-0", seq: 0 });
+    expect(base.records[0]).toMatchObject({ recordId: "m-sys-0" });
   });
 
   it("AC-0002-N-2: no invocation edges — Devin CLI has no subagent sessions (vacuous)", () => {

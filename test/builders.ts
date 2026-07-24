@@ -38,42 +38,32 @@ interface RecordExtras {
   usage?: AhsRecord["usage"];
 }
 
-function base(seq: number, extras: RecordExtras = {}) {
+function base(extras: RecordExtras = {}) {
   return {
-    recordId: extras.recordId ?? `r${seq}`,
-    seq,
+    recordId: extras.recordId ?? "r0",
     timestamp: extras.timestamp ?? BASE_TIME,
     ...(extras.usage !== undefined ? { usage: extras.usage } : {}),
   };
 }
 
-export function userMessage(
-  seq: number,
-  text: string,
-  extras: RecordExtras = {},
-): AhsRecord {
-  return { ...base(seq, extras), type: "user_message", content: [{ type: "text", text }] };
+export function userMessage(text: string, extras: RecordExtras = {}): AhsRecord {
+  return { ...base(extras), type: "user_message", content: [{ type: "text", text }] };
 }
 
-export function assistantMessage(
-  seq: number,
-  text: string,
-  extras: RecordExtras = {},
-): AhsRecord {
+export function assistantMessage(text: string, extras: RecordExtras = {}): AhsRecord {
   return {
-    ...base(seq, extras),
+    ...base(extras),
     type: "assistant_message",
     content: [{ type: "text", text }],
   };
 }
 
 export function toolCall(
-  seq: number,
   toolCallId: string,
   extras: RecordExtras & { name?: string; status?: "completed" | "failed" | "interrupted" } = {},
 ): AhsRecord {
   return {
-    ...base(seq, extras),
+    ...base(extras),
     type: "tool_call",
     toolCallId,
     name: extras.name ?? "Bash",
@@ -83,13 +73,12 @@ export function toolCall(
 }
 
 export function toolResult(
-  seq: number,
   toolCallId: string,
   content: string,
   extras: RecordExtras & { sessionIds?: string[] } = {},
 ): AhsRecord {
   return {
-    ...base(seq, extras),
+    ...base(extras),
     type: "tool_result",
     toolCallId,
     content,
@@ -106,7 +95,7 @@ export function makeSession(
 ): SessionData {
   const result: SessionData = {
     manifest: makeManifest({ sessionId, ...manifest }),
-    records: records ?? [userMessage(0, "hi")],
+    records: records ?? [userMessage("hi")],
   };
   if (branchRecords !== undefined) result.branchRecords = branchRecords;
   return result;

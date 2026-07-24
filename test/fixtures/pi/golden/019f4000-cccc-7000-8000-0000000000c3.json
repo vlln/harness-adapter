@@ -42,7 +42,6 @@
       "model": "DeepSeek-V4-Flash",
       "provider": "ollama",
       "recordId": "cc000001",
-      "seq": 0,
       "timestamp": "2026-07-20T12:00:00.010Z",
       "type": "model_change"
     },
@@ -50,7 +49,6 @@
       "model": "DeepSeek-V4-Flash",
       "provider": "ollama",
       "recordId": "cc000002",
-      "seq": 1,
       "timestamp": "2026-07-20T12:00:00.020Z",
       "type": "model_change"
     },
@@ -62,7 +60,6 @@
         }
       ],
       "recordId": "cc000003",
-      "seq": 2,
       "timestamp": "2026-07-20T12:00:05.000Z",
       "type": "user_message"
     },
@@ -75,7 +72,6 @@
       ],
       "model": "DeepSeek-V4-Flash",
       "recordId": "cc000004",
-      "seq": 3,
       "timestamp": "2026-07-20T12:00:08.000Z",
       "type": "assistant_message",
       "usage": {
@@ -98,7 +94,6 @@
         }
       ],
       "recordId": "cc000007",
-      "seq": 4,
       "timestamp": "2026-07-20T12:02:00.000Z",
       "type": "user_message"
     },
@@ -111,7 +106,6 @@
       ],
       "model": "DeepSeek-V4-Flash",
       "recordId": "cc000008",
-      "seq": 5,
       "timestamp": "2026-07-20T12:02:05.000Z",
       "type": "assistant_message",
       "usage": {
@@ -134,7 +128,6 @@
         }
       ],
       "recordId": "cc000009",
-      "seq": 6,
       "timestamp": "2026-07-20T12:03:00.000Z",
       "type": "user_message"
     },
@@ -147,7 +140,6 @@
       ],
       "model": "DeepSeek-V4-Flash",
       "recordId": "cc00000b",
-      "seq": 7,
       "timestamp": "2026-07-20T12:04:05.000Z",
       "type": "assistant_message",
       "usage": {
