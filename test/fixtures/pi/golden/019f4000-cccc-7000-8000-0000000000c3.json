@@ -1,0 +1,148 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/Users/test/Project/demo",
+    "harness": "pi",
+    "harnessVersion": "3",
+    "model": "DeepSeek-V4-Flash",
+    "provider": "ollama",
+    "sessionId": "019f4000-cccc-7000-8000-0000000000c3",
+    "stats": {
+      "totalUsage": {
+        "cost": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "inputTokens": 440,
+        "outputTokens": 44
+      },
+      "turnCount": 3
+    }
+  },
+  "records": [
+    {
+      "model": "DeepSeek-V4-Flash",
+      "provider": "ollama",
+      "recordId": "cc000001",
+      "seq": 0,
+      "timestamp": "2026-07-20T12:00:00.010Z",
+      "type": "model_change"
+    },
+    {
+      "model": "DeepSeek-V4-Flash",
+      "provider": "ollama",
+      "recordId": "cc000002",
+      "seq": 1,
+      "timestamp": "2026-07-20T12:00:00.020Z",
+      "type": "model_change"
+    },
+    {
+      "content": [
+        {
+          "text": "hello",
+          "type": "text"
+        }
+      ],
+      "recordId": "cc000003",
+      "seq": 2,
+      "timestamp": "2026-07-20T12:00:05.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "Hi! What can I do for you?",
+          "type": "text"
+        }
+      ],
+      "model": "DeepSeek-V4-Flash",
+      "recordId": "cc000004",
+      "seq": 3,
+      "timestamp": "2026-07-20T12:00:08.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "cost": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "inputTokens": 100,
+        "outputTokens": 10,
+        "reasoningTokens": 0
+      }
+    },
+    {
+      "content": [
+        {
+          "text": "edited follow-up",
+          "type": "text"
+        }
+      ],
+      "recordId": "cc000007",
+      "seq": 4,
+      "timestamp": "2026-07-20T12:02:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "answer to the edited follow-up",
+          "type": "text"
+        }
+      ],
+      "model": "DeepSeek-V4-Flash",
+      "recordId": "cc000008",
+      "seq": 5,
+      "timestamp": "2026-07-20T12:02:05.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "cost": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "inputTokens": 160,
+        "outputTokens": 16,
+        "reasoningTokens": 0
+      }
+    },
+    {
+      "content": [
+        {
+          "text": "retry me",
+          "type": "text"
+        }
+      ],
+      "recordId": "cc000009",
+      "seq": 6,
+      "timestamp": "2026-07-20T12:03:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "new answer to the retry",
+          "type": "text"
+        }
+      ],
+      "model": "DeepSeek-V4-Flash",
+      "recordId": "cc00000b",
+      "seq": 7,
+      "timestamp": "2026-07-20T12:04:05.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "cost": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "inputTokens": 180,
+        "outputTokens": 18,
+        "reasoningTokens": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "manifest": {
+    "ahsVersion": "0.1.0",
+    "cwd": "/Users/test/Project/demo",
+    "harness": "pi",
+    "harnessVersion": "3",
+    "lineage": {
+      "atRecordId": "cc000004",
+      "sessionId": "019f4000-cccc-7000-8000-0000000000c3",
+      "type": "forked_from"
+    },
+    "model": "DeepSeek-V4-Flash",
+    "provider": "ollama",
+    "sessionId": "019f4000-cccc-7000-8000-0000000000c3/fork/cc000005",
+    "stats": {
+      "totalUsage": {
+        "cost": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "inputTokens": 150,
+        "outputTokens": 15
+      },
+      "turnCount": 1
+    }
+  },
+  "records": [
+    {
+      "content": [
+        {
+          "text": "original follow-up",
+          "type": "text"
+        }
+      ],
+      "recordId": "cc000005",
+      "seq": 0,
+      "timestamp": "2026-07-20T12:01:00.000Z",
+      "type": "user_message"
+    },
+    {
+      "content": [
+        {
+          "text": "answer to the original follow-up",
+          "type": "text"
+        }
+      ],
+      "model": "DeepSeek-V4-Flash",
+      "recordId": "cc000006",
+      "seq": 1,
+      "timestamp": "2026-07-20T12:01:05.000Z",
+      "type": "assistant_message",
+      "usage": {
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "cost": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "inputTokens": 150,
+        "outputTokens": 15,
+        "reasoningTokens": 0
+      }
+    }
+  ]
+}

@@ -6,7 +6,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| 01-plan-pi.md | Pi Agent 适配器（最简 tree，含 cost） | pending | — |
+| 01-plan-pi.md | Pi Agent 适配器（最简 tree，含 cost） | done | [01-report-pi.md](01-report-pi.md) |
 
 ## 适配器要点
 
