@@ -2,8 +2,8 @@
 
 | 字段 | 值 |
 |------|-----|
-| **当前阶段** | `DESIGN` |
-| **设计评估** | 增量迭代：readManifest 接口补全 |
+| **当前阶段** | `DEVELOP` |
+| **设计评估** | readManifest 接口补全（契约已冻结，进入实现） |
 
 Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):"` 重建上下文。
 
@@ -31,11 +31,11 @@ Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):
 
 ## 行为边界
 
-当前处于 **DESIGN** 阶段（v0.2.0 发布后增量迭代）：
+当前处于 **DEVELOP** 阶段（v0.2.0 发布后增量迭代）：
 
-- 只写/改契约文档（Vision/Spec/AC/ADR/Interface），在 `develop` 上进行；不写正式功能代码。
+- 在 `feat/*` 分支实现适配器功能，TDD 覆盖 AC。
 - 契约已冻结：Vision/Spec/AC/Interface = `active`，ADR = `accepted`。契约变更须走 ADR 修订流程（typo、措辞澄清走快速通道 B）。
-- 本轮迭代目标：HarnessAdapter 接口补全 `readManifest(sessionId)` 方法（增量追加，不改变现有方法语义）。
+- 本轮迭代目标：实现 `readManifest(sessionId)` 于全部 7 个 adapter，更新 writeArchive/facade 使用 readManifest，新增 ahs-export CLI。
 - ADR 验证性适配器原型走 `spike/*` 分支（保留不合并）。非契约验证的代码变更（微修改、hotfix）走快速通道。
 
 ### 快速通道（项目自定义）
