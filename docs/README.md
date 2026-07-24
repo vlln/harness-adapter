@@ -2,7 +2,7 @@
 
 | 字段 | 值 |
 |------|-----|
-| **当前阶段** | `DEVELOP` |
+| **当前阶段** | `RELEASE` |
 | **设计评估** | — |
 
 Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):"` 重建上下文。
@@ -31,12 +31,12 @@ Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):
 
 ## 行为边界
 
-当前处于 **SYSTEM_TEST** 阶段：
+当前处于 **RELEASE** 阶段：
 
 - 契约已冻结（2026-07-21）：Vision/Spec/AC/Interface = `active`，ADR = `accepted`。契约变更须退回 DESIGN 走 ADR 修订流程（typo、措辞澄清走快速通道 B）。
 - 基建就绪（2026-07-22）：GitHub Actions CI（tsc + vitest + 覆盖率 ≥80% + e2e）、develop 分支保护（status check 必过）、提测门禁脚本、系统测试 e2e（适配器→归档→ahs-report CLI 全链路）。
-- 业务开发以 `feat/*` 执行容器进行：docs/plans/ 下创建容器（README + Plan），从 develop 拉分支，TDD 实现，PR 过 MR 门禁合并，Report 留档 AC 验收结果。
-- 正式适配器（claude-code / codex / kimi-code / devin）以 spike/0001-adapter-prototypes 的原型为参考底稿重做；spike 保留不合并。
+- 业务开发完成（2026-07-24）：7 个正式适配器（claude-code / codex / kimi-code / devin / qwen / grok / pi）+ 归档层 + session facade 全部落地，各自执行容器 Report 留档 AC 验收结果；spike/0001-adapter-prototypes 保留不合并。
+- 发布走 Gitflow：`release/v0.1.0` 从 `develop` 拉出，合并回 `main` + `develop`，在 `main` 上打 tag `v0.1.0`。RELEASE 阶段不新增功能，仅收尾与发布。
 
 ### 快速通道（项目自定义）
 
