@@ -41,8 +41,8 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * - `message` role user → `user_message` (text blocks, verbatim).
  * - role assistant → `assistant_message` (text + thinking blocks in order;
  *   thinkingSignature dropped) with toolCall blocks split out into their own
- *   `tool_call` records (assistant_message first, then tool_calls, order via
- *   seq). A tool-call-only message emits no assistant_message; its usage and
+ *   `tool_call` records (assistant_message first, then tool_calls, in
+ *   emission order). A tool-call-only message emits no assistant_message; its usage and
  *   model ride on the first tool_call so usage is not lost (AC-0002-N-4).
  * - role toolResult → `tool_result`; text blocks joined with "\n"; status
  *   from the source `isError` flag. Duplicate deliveries of one toolCallId
@@ -64,7 +64,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  * currency; pi's pricing tables are USD-denominated — documented
  * assumption). `totalTokens` is dropped (sum of the parts, redundant).
  *
- * Determinism (AC-0002-N-5): directory entries are sorted, chains and seq
+ * Determinism (AC-0002-N-5): directory entries are sorted, chains
  * follow file order, recordIds are source ids, fork ids derive from source
  * ids — no wall-clock reads anywhere.
  */
@@ -333,12 +333,10 @@ export function projectRecords(
   initialModel?: { model: string; provider?: string },
 ): AhsRecord[] {
   const records: AhsRecord[] = [];
-  let seq = 0;
   let currentModel = initialModel;
 
   const emit = (rec: AhsRecord): void => {
     records.push(rec);
-    seq += 1;
   };
 
   for (const line of lines) {
@@ -354,7 +352,6 @@ export function projectRecords(
       };
       emit({
         recordId: id,
-        seq,
         timestamp,
         type: "model_change",
         model,
@@ -367,7 +364,6 @@ export function projectRecords(
       if (currentModel === undefined) continue;
       emit({
         recordId: id,
-        seq,
         timestamp,
         type: "model_change",
         model: currentModel.model,
@@ -383,7 +379,7 @@ export function projectRecords(
           }
         }
         if (textBlocks.length > 0) {
-          emit({ recordId: id, seq, timestamp, type: "user_message", content: textBlocks });
+          emit({ recordId: id, timestamp, type: "user_message", content: textBlocks });
         }
       } else if (msg.role === "assistant") {
         const contentBlocks: ContentBlock[] = [];
@@ -408,8 +404,7 @@ export function projectRecords(
           emit({
             ...extras,
             recordId: id,
-            seq,
-            timestamp,
+              timestamp,
             type: "assistant_message",
             content: contentBlocks,
           });
@@ -426,8 +421,7 @@ export function projectRecords(
           emit({
             ...carryExtras,
             recordId,
-            seq,
-            timestamp,
+              timestamp,
             type: "tool_call",
             toolCallId: block.id ?? "",
             name: block.name ?? "",
@@ -446,7 +440,6 @@ export function projectRecords(
         }
         emit({
           recordId: id,
-          seq,
           timestamp,
           type: "tool_result",
           toolCallId,

@@ -45,7 +45,7 @@ const STATE_TYPES = new Set(["turn_boundary", "model_change", "compaction", "goa
 /**
  * record → ConversationItem projection (interface-0003 mapping table).
  * Tool pairing is done HERE: each tool_call pairs with its tool_result
- * (first in seq order, per AC-0002-N-6); an interrupted call has no paired
+ * (first in file order, per AC-0002-N-6); an interrupted call has no paired
  * result, so its tool item carries none (XOR). Unpaired tool_results are
  * dropped defensively (N-6 forbids them). State records go to events().
  */
@@ -199,7 +199,6 @@ class FacadeImpl implements HarnessFacade {
       for await (const rec of this.adapter.readRecords(manifest.sessionId, branchName)) {
         records.push(rec);
       }
-      records.sort((a, b) => a.seq - b.seq);
       branchRecords.set(branchName, records);
     }
     return { manifest, branchRecords };

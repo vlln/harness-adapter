@@ -13,13 +13,13 @@ import type { HarnessAdapter, SessionFilter } from "../store/adapter";
  *
  * Layout:
  *   <outDir>/<sanitized-sessionId>/manifest.json        sorted-keys JSON
- *   <outDir>/<sanitized-sessionId>/records/<branch>.jsonl  one file per branch, seq order
+ *   <outDir>/<sanitized-sessionId>/records/<branch>.jsonl  one file per branch, file order
  *   <outDir>/<sanitized-sessionId>/blobs/sha256-<hex>
  *
  * Determinism / idempotency: manifest.json and each records JSONL line use
- * recursively sorted object keys; records are written in seq order; blobs
- * are content-addressed and skipped when already present. Re-exporting over
- * the same outDir yields byte-identical files.
+ * recursively sorted object keys; records are written in file (JSONL line)
+ * order; blobs are content-addressed and skipped when already present.
+ * Re-exporting over the same outDir yields byte-identical files.
  */
 
 /** Spec threshold: content above 64 KiB is externalized. */
@@ -193,7 +193,7 @@ async function writeSessionArchive(
   return { sessionId: manifest.sessionId, dir, recordCount: totalRecordCount, blobCount };
 }
 
-/** Read all branch records from the adapter, seq-sorted per branch. */
+/** Read all branch records from the adapter (file order per branch). */
 async function collectAllBranchRecords(
   adapter: HarnessAdapter,
   manifest: Manifest,
@@ -204,7 +204,6 @@ async function collectAllBranchRecords(
     for await (const rec of adapter.readRecords(manifest.sessionId, branchName)) {
       records.push(rec);
     }
-    records.sort((a, b) => a.seq - b.seq);
     branchRecords.set(branchName, records);
   }
   return branchRecords;

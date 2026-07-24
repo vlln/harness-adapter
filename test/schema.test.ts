@@ -9,7 +9,6 @@ import {
 
 const base = {
   recordId: "r1",
-  seq: 0,
   timestamp: "2026-07-21T10:00:00Z",
 };
 

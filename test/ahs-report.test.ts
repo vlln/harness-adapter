@@ -37,17 +37,17 @@ const CHILD_USAGE: Usage = {
 };
 
 const parent = makeSession("sess-parent", [
-  userMessage(0, "build the feature"),
-  assistantMessage(1, "delegating", { usage: PARENT_USAGE }),
-  toolCall(2, "tc-task", { name: "Task", status: "completed", recordId: "p-call" }),
-  toolResult(3, "tc-task", "child finished", { sessionIds: ["sess-child"] }),
-  assistantMessage(4, "all done", { usage: PARENT_USAGE_2 }),
+  userMessage("build the feature"),
+  assistantMessage("delegating", { usage: PARENT_USAGE }),
+  toolCall("tc-task", { name: "Task", status: "completed", recordId: "p-call" }),
+  toolResult("tc-task", "child finished", { sessionIds: ["sess-child"] }),
+  assistantMessage("all done", { usage: PARENT_USAGE_2 }),
 ]);
 const child = makeSession(
   "sess-child",
   [
-    userMessage(0, "subtask instructions"),
-    assistantMessage(1, "child working", { usage: CHILD_USAGE }),
+    userMessage("subtask instructions"),
+    assistantMessage("child working", { usage: CHILD_USAGE }),
   ],
   { invocation: { sessionId: "sess-parent", atRecordId: "p-call" } },
 );
@@ -120,7 +120,6 @@ describe("ahs-report (AC-0004-N-1)", () => {
         path.join(dir, "records", "main.jsonl"),
         `${JSON.stringify({
           recordId: `${id}-0`,
-          seq: 0,
           timestamp: "2026-07-20T10:00:00.000Z",
           type: "user_message",
           content: [{ type: "text", text: `hello from ${id}` }],
@@ -147,13 +146,13 @@ describe("ahs-report Task view (ADR-0006 intra-session branches)", () => {
   const session = makeSession(
     "task-sess",
     [
-      userMessage(0, "build it", { timestamp: T1, recordId: "r0" }),
-      assistantMessage(1, "first attempt", {
+      userMessage("build it", { timestamp: T1, recordId: "r0" }),
+      assistantMessage("first attempt", {
         timestamp: T1,
         recordId: "r1",
         usage: { inputTokens: 100, outputTokens: 10 },
       }),
-      assistantMessage(2, "abandoned direction", {
+      assistantMessage("abandoned direction", {
         timestamp: T1,
         recordId: "r2",
         usage: { inputTokens: 50, outputTokens: 5 },
@@ -168,8 +167,8 @@ describe("ahs-report Task view (ADR-0006 intra-session branches)", () => {
     },
     {
       "fork-1": [
-        userMessage(0, "new direction", { timestamp: T2, recordId: "r3" }),
-        assistantMessage(1, "fork work", {
+        userMessage("new direction", { timestamp: T2, recordId: "r3" }),
+        assistantMessage("fork work", {
           timestamp: T2,
           recordId: "r4",
           usage: { inputTokens: 30, outputTokens: 3 },
@@ -219,16 +218,16 @@ describe("ahs-report Task view (ADR-0006 intra-session branches)", () => {
 
   it("fork-of-subagent: the fork inherits the invocation and renders once", async () => {
     const parent = makeSession("p", [
-      userMessage(0, "top task", { timestamp: T1, recordId: "p0" }),
-      toolCall(1, "tc-task", { name: "Task", status: "completed", recordId: "p-call" }),
-      toolResult(2, "tc-task", "sub done", { sessionIds: ["s"], timestamp: T1, recordId: "p-result" }),
-      assistantMessage(3, "done", { timestamp: T1, recordId: "p3", usage: { inputTokens: 10, outputTokens: 1 } }),
+      userMessage("top task", { timestamp: T1, recordId: "p0" }),
+      toolCall("tc-task", { name: "Task", status: "completed", recordId: "p-call" }),
+      toolResult("tc-task", "sub done", { sessionIds: ["s"], timestamp: T1, recordId: "p-result" }),
+      assistantMessage("done", { timestamp: T1, recordId: "p3", usage: { inputTokens: 10, outputTokens: 1 } }),
     ]);
     const sub = makeSession(
       "s",
       [
-        userMessage(0, "subtask", { timestamp: T1, recordId: "s0" }),
-        assistantMessage(1, "sub answer", {
+        userMessage("subtask", { timestamp: T1, recordId: "s0" }),
+        assistantMessage("sub answer", {
           recordId: "s-r1",
           timestamp: T1,
           usage: { inputTokens: 7, outputTokens: 2 },
@@ -240,8 +239,8 @@ describe("ahs-report Task view (ADR-0006 intra-session branches)", () => {
     const subFork = makeSession(
       "s",
       [
-        userMessage(0, "subtask", { timestamp: T1, recordId: "s0" }),
-        assistantMessage(1, "sub answer", {
+        userMessage("subtask", { timestamp: T1, recordId: "s0" }),
+        assistantMessage("sub answer", {
           recordId: "s-r1",
           timestamp: T1,
           usage: { inputTokens: 7, outputTokens: 2 },
@@ -257,7 +256,7 @@ describe("ahs-report Task view (ADR-0006 intra-session branches)", () => {
       },
       {
         "fork-1": [
-          assistantMessage(0, "fork retry", { timestamp: T2, recordId: "sf2", usage: { inputTokens: 5, outputTokens: 1 } }),
+          assistantMessage("fork retry", { timestamp: T2, recordId: "sf2", usage: { inputTokens: 5, outputTokens: 1 } }),
         ],
       },
     );

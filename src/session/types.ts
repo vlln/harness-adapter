@@ -15,7 +15,7 @@ import type { HarnessAdapter, SessionFilter } from "../store/adapter";
 
 /**
  * One item of the conversation projection (interface-0003 messages()
- * mapping table). Order follows seq. `timestamp` is carried on every item
+ * mapping table). Order follows file (JSONL line) order. `timestamp` is carried on every item
  * (including tool items — see the interface; additive, items are unusable
  * on a timeline without it).
  */
@@ -34,7 +34,7 @@ export type ConversationItem =
       timestamp: string;
     };
 
-/** State records exposed as-is (seq order) via events(). */
+/** State records exposed as-is (file order) via events(). */
 export type StateEvent = Extract<
   AhsRecord,
   { type: "turn_boundary" | "model_change" | "compaction" | "goal_update" }

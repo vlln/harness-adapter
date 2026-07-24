@@ -77,7 +77,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   command, not the CreateGoal tool). goal.update WITH a status →
  *   goal_update verdict: "complete" → "met", "blocked" → "unmet", "paused"
  *   → "pending" (still open); goalId omitted (verdict events carry none —
- *   multiple verdicts correlate via seq, per spec). goal.update WITHOUT
+ *   multiple verdicts correlate via emission order, per spec). goal.update WITHOUT
  *   status ({turnsUsed}/{tokensUsed} progress telemetry) and goal.clear
  *   (ambiguous removal, no verdict semantics) are DROPPED.
  *   CreateGoal/UpdateGoal/GetGoal TOOL calls stay ordinary tool_call
@@ -112,9 +112,9 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   createdAt/updatedAt/lastPrompt/custom: dropped (no Manifest home).
  *
  * Causal synthesis: wires are temporal streams without parent links — a
- * linear chain is synthesized per wire (seq = emission index; the linear
+ * linear chain is synthesized per wire (emission order; the linear
  * model has no parentId). Record ids are
- * `<sessionId>:<seq>`; timestamps come from the Unix-ms `time` field
+ * `<sessionId>:<index>`; timestamps come from the Unix-ms `time` field
  * converted to ISO 8601. Directory entries are sorted and there are no
  * wall-clock reads, so output is byte-identical across runs.
  */
@@ -231,7 +231,7 @@ function sumUsageInto(target: Usage, add: Usage): void {
 
 /** Omit that distributes over the AhsRecord discriminated union. */
 type RecordPayload<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
-type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "seq" | "timestamp">;
+type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "timestamp">;
 
 /**
  * Sub-agent forward-link context for one session directory (ADR-0005):
@@ -328,10 +328,8 @@ function projectSingleStream(
   let pendingParts: ContentBlock[] = [];
 
   const emit = (timestamp: string, partial: EmittableRecord): void => {
-    const seq = records.length;
     const rec = {
-      recordId: `${sessionId}:${seq}`,
-      seq,
+      recordId: `${sessionId}:${records.length}`,
       timestamp,
       ...(pendingUsage !== undefined ? { usage: pendingUsage } : {}),
       ...partial,

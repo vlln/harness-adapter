@@ -31,39 +31,39 @@ const T3 = "2026-07-20T12:00:00.000Z";
  */
 function fixtureSessions(): SessionData[] {
   const root = makeSession("root", [
-    userMessage(0, "do the task", { timestamp: T1 }),
-    toolCall(1, "tc-task", { name: "Task", status: "completed", recordId: "root-call" }),
-    toolResult(2, "tc-task", "sub-agent done", { sessionIds: ["sub"], timestamp: T1 }),
-    assistantMessage(3, "wrapped up", { timestamp: T2 }),
+    userMessage("do the task", { timestamp: T1 }),
+    toolCall("tc-task", { name: "Task", status: "completed", recordId: "root-call" }),
+    toolResult("tc-task", "sub-agent done", { sessionIds: ["sub"], timestamp: T1 }),
+    assistantMessage("wrapped up", { timestamp: T2 }),
   ]);
   const sub = makeSession(
     "sub",
-    [userMessage(0, "subtask", { timestamp: T1 }), assistantMessage(1, "sub work", { timestamp: T1 })],
+    [userMessage("subtask", { timestamp: T1 }), assistantMessage("sub work", { timestamp: T1 })],
     { invocation: { sessionId: "root", atRecordId: "root-call" } },
   );
   // Fork of the sub-agent: lineage only — invocation is NOT copied (ADR-0005).
   const subFork = makeSession(
     "sub/fork-1",
-    [assistantMessage(0, "fork direction", { timestamp: T2 })],
+    [assistantMessage("fork direction", { timestamp: T2 })],
     { lineage: { type: "forked_from", sessionId: "sub", atRecordId: "sub-r1" } },
   );
   // Nested fork: transitive inheritance across two lineage hops.
   const subFork2 = makeSession(
     "sub/fork-2",
-    [assistantMessage(0, "nested fork", { timestamp: T3 })],
+    [assistantMessage("nested fork", { timestamp: T3 })],
     { lineage: { type: "forked_from", sessionId: "sub/fork-1" } },
   );
   // Independent lineage group for the HEAD heuristic: beta updated after
   // alpha; gamma has the same timestamp as beta (tie → smaller id wins).
-  const alpha = makeSession("alpha", [userMessage(0, "v1", { timestamp: T1 })]);
-  const beta = makeSession("beta", [userMessage(0, "v2", { timestamp: T3 })], {
+  const alpha = makeSession("alpha", [userMessage("v1", { timestamp: T1 })]);
+  const beta = makeSession("beta", [userMessage("v2", { timestamp: T3 })], {
     lineage: { type: "forked_from", sessionId: "alpha", atRecordId: "r0" },
   });
-  const gamma = makeSession("gamma", [userMessage(0, "v3", { timestamp: T3 })], {
+  const gamma = makeSession("gamma", [userMessage("v3", { timestamp: T3 })], {
     lineage: { type: "forked_from", sessionId: "alpha", atRecordId: "r0" },
   });
   // A dangling back-link (parent not archived): no edge, singleton group.
-  const orphan = makeSession("orphan", [userMessage(0, "alone", { timestamp: T1 })], {
+  const orphan = makeSession("orphan", [userMessage("alone", { timestamp: T1 })], {
     lineage: { type: "forked_from", sessionId: "not-archived" },
     invocation: { sessionId: "not-archived" },
   });

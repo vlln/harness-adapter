@@ -22,41 +22,11 @@ import {
   userMessage,
 } from "./builders";
 
-describe("AC-0002-N-1 linear shape (seq strictly increasing and contiguous)", () => {
-  it("passes a linear session with contiguous seq", () => {
-    const session = makeSession("sess-1", [
-      userMessage(0, "go"),
-      assistantMessage(1, "working"),
-      toolCall(2, "tc1"),
-      toolResult(3, "tc1", "ok"),
-    ]);
-    expect(validateSessions([session])).toEqual([]);
-  });
-
-  it("flags non-monotonic seq (seq-order)", () => {
-    const session = makeSession("sess-1", [
-      userMessage(0, "a"),
-      { ...assistantMessage(1, "b"), seq: 0 },
-    ]);
-    const errors = validateSessions([session]);
-    expect(errors.map((e) => e.code)).toContain("seq-order");
-  });
-
-  it("flags a seq gap (not contiguous)", () => {
-    const session = makeSession("sess-1", [
-      userMessage(0, "a"),
-      { ...assistantMessage(1, "b"), seq: 2 },
-    ]);
-    const errors = validateSessions([session]);
-    expect(errors.map((e) => e.code)).toContain("seq-order");
-  });
-});
-
 describe("AC-0002-N-2 invocation completeness (forward/back-link reconciliation)", () => {
   const parent = makeSession("parent", [
-    userMessage(0, "go"),
-    toolCall(1, "tc-task", { name: "Task", recordId: "p-call" }),
-    toolResult(2, "tc-task", "done", { recordId: "p-result", sessionIds: ["child"] }),
+    userMessage("go"),
+    toolCall("tc-task", { name: "Task", recordId: "p-call" }),
+    toolResult("tc-task", "done", { recordId: "p-result", sessionIds: ["child"] }),
   ]);
 
   it("passes when the parent, tool_call anchor and forward link reconcile", () => {
@@ -68,9 +38,9 @@ describe("AC-0002-N-2 invocation completeness (forward/back-link reconciliation)
 
   it("passes when one call lists MULTIPLE children in sessionIds (each reconciles)", () => {
     const swarm = makeSession("parent", [
-      userMessage(0, "go"),
-      toolCall(1, "tc-task", { name: "AgentSwarm", recordId: "p-call" }),
-      toolResult(2, "tc-task", "done", { recordId: "p-result", sessionIds: ["c1", "c2"] }),
+      userMessage("go"),
+      toolCall("tc-task", { name: "AgentSwarm", recordId: "p-call" }),
+      toolResult("tc-task", "done", { recordId: "p-result", sessionIds: ["c1", "c2"] }),
     ]);
     const c1 = makeSession("c1", undefined, {
       invocation: { sessionId: "parent", atRecordId: "p-call" },
@@ -115,9 +85,9 @@ describe("AC-0002-N-2 invocation completeness (forward/back-link reconciliation)
 
   it("flags a forward link that does not point back at the child (invocation-mismatch)", () => {
     const badParent = makeSession("parent", [
-      userMessage(0, "go"),
-      toolCall(1, "tc-task", { name: "Task", recordId: "p-call" }),
-      toolResult(2, "tc-task", "done", { recordId: "p-result" }), // no sessionId forward link
+      userMessage("go"),
+      toolCall("tc-task", { name: "Task", recordId: "p-call" }),
+      toolResult("tc-task", "done", { recordId: "p-result" }), // no sessionId forward link
     ]);
     const child = makeSession("child", undefined, {
       invocation: { sessionId: "parent", atRecordId: "p-call" },
@@ -126,9 +96,9 @@ describe("AC-0002-N-2 invocation completeness (forward/back-link reconciliation)
     expect(errors.map((e) => e.code)).toContain("invocation-mismatch");
 
     const wrongTarget = makeSession("parent", [
-      userMessage(0, "go"),
-      toolCall(1, "tc-task", { name: "Task", recordId: "p-call" }),
-      toolResult(2, "tc-task", "done", { recordId: "p-result", sessionIds: ["other-child"] }),
+      userMessage("go"),
+      toolCall("tc-task", { name: "Task", recordId: "p-call" }),
+      toolResult("tc-task", "done", { recordId: "p-result", sessionIds: ["other-child"] }),
     ]);
     expect(validateSessions([wrongTarget, child]).map((e) => e.code)).toContain(
       "invocation-mismatch",
@@ -138,28 +108,28 @@ describe("AC-0002-N-2 invocation completeness (forward/back-link reconciliation)
 
 describe("AC-0002-N-6 tool pairing (XOR: paired result | interrupted)", () => {
   const wrap = (middle: Parameters<typeof makeSession>[1]) =>
-    makeSession("sess-1", [userMessage(0, "go"), ...(middle ?? [])]);
+    makeSession("sess-1", [userMessage("go"), ...(middle ?? [])]);
 
   it("case 1: tool_call with exactly one paired tool_result passes", () => {
-    const session = wrap([toolCall(1, "tc1"), toolResult(2, "tc1", "ok")]);
+    const session = wrap([toolCall("tc1"), toolResult("tc1", "ok")]);
     expect(validateSessions([session])).toEqual([]);
   });
 
   it("case 2: interrupted tool_call with no tool_result passes (AC-0002-B-1)", () => {
-    const session = wrap([toolCall(1, "tc1", { status: "interrupted" })]);
+    const session = wrap([toolCall("tc1", { status: "interrupted" })]);
     expect(validateSessions([session])).toEqual([]);
   });
 
   it("case 3: tool_call with no result and not interrupted is flagged", () => {
-    const session = wrap([toolCall(1, "tc1")]);
+    const session = wrap([toolCall("tc1")]);
     const errors = validateSessions([session]);
     expect(errors.map((e) => e.code)).toContain("tool-result-match");
   });
 
   it("case 4: interrupted tool_call that still has a paired result is flagged", () => {
     const session = wrap([
-      toolCall(1, "tc1", { status: "interrupted" }),
-      toolResult(2, "tc1", "ok"),
+      toolCall("tc1", { status: "interrupted" }),
+      toolResult("tc1", "ok"),
     ]);
     const errors = validateSessions([session]);
     expect(errors.map((e) => e.code)).toContain("tool-result-match");
@@ -167,9 +137,9 @@ describe("AC-0002-N-6 tool pairing (XOR: paired result | interrupted)", () => {
 
   it("flags a tool_call with multiple results (adapter must keep file-order first only)", () => {
     const session = wrap([
-      toolCall(1, "tc1"),
-      toolResult(2, "tc1", "first"),
-      toolResult(3, "tc1", "second"),
+      toolCall("tc1"),
+      toolResult("tc1", "first"),
+      toolResult("tc1", "second"),
     ]);
     const errors = validateSessions([session]);
     expect(errors.map((e) => e.code)).toContain("tool-result-match");
@@ -177,8 +147,8 @@ describe("AC-0002-N-6 tool pairing (XOR: paired result | interrupted)", () => {
 
   it("flags a tool_result matching no tool_call", () => {
     const session = wrap([
-      toolCall(1, "tc1", { status: "interrupted" }),
-      toolResult(2, "tc-orphan", "ok"),
+      toolCall("tc1", { status: "interrupted" }),
+      toolResult("tc-orphan", "ok"),
     ]);
     const errors = validateSessions([session]);
     expect(errors.map((e) => e.code)).toContain("tool-result-match");
@@ -188,7 +158,7 @@ describe("AC-0002-N-6 tool pairing (XOR: paired result | interrupted)", () => {
 describe("AC-0002-N-5 idempotency helper", () => {
   it("passes when two runs over the same input are byte-identical", async () => {
     const adapter = fakeAdapter([
-      makeSession("sess-1", [userMessage(0, "go"), assistantMessage(1, "ok")]),
+      makeSession("sess-1", [userMessage("go"), assistantMessage("ok")]),
     ]);
     expect(await checkIdempotency(adapter)).toEqual([]);
   });
@@ -203,7 +173,7 @@ describe("AC-0002-N-5 idempotency helper", () => {
         yield makeManifest({ sessionId: "sess-1", title: `run-${run}` });
       },
       async *readRecords() {
-        yield userMessage(0, "go");
+        yield userMessage("go");
       },
     };
     const errors = await checkIdempotency(flaky);
@@ -220,7 +190,7 @@ describe("AC-0002-N-5 idempotency helper", () => {
   it("collectSessions gathers manifests and records from the adapter", async () => {
     const adapter = fakeAdapter([
       makeSession("sess-1"),
-      makeSession("sess-2", [userMessage(0, "second")]),
+      makeSession("sess-2", [userMessage("second")]),
     ]);
     const collected = await collectSessions(adapter);
     expect(collected.map((s) => s.manifest.sessionId)).toEqual(["sess-1", "sess-2"]);

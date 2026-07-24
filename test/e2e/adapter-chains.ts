@@ -64,7 +64,7 @@ interface ArchivedSession {
     HEAD: { branch: string; recordId: string | null };
     invocation?: { sessionId: string; atRecordId?: string };
   };
-  /** Branch name → records (seq-sorted). */
+  /** Branch name → records (file order). */
   branchRecords: Map<string, { recordId: string; type: string; usage?: Record<string, number> }[]>;
 }
 

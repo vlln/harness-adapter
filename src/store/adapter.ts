@@ -32,8 +32,8 @@ export interface HarnessAdapter {
 
   /**
    * Read records for a session branch. Defaults to the HEAD branch when
-   * branchName is omitted. Records are returned in seq order within the
-   * branch.
+   * branchName is omitted. Records are returned in file (JSONL line) order
+   * within the branch.
    */
   readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord>;
 }

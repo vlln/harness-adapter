@@ -20,14 +20,13 @@ export const ContentBlockSchema = z.discriminatedUnion("type", [
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 
 /**
- * Fields shared by every record. A session's history is strictly linear
- * (ADR-0005): seq is the ONLY structural field — no parentId, no in-session
- * branching. The first record is the root; every fork produces a new session
+ * Fields shared by every record. Each branch file is an append-only JSONL
+ * (ADR-0006): line order is the record order — no explicit seq field is
+ * needed. The first record is the root; every fork produces a new session
  * linked via the manifest's lineage edge.
  */
 export const BaseRecordSchema = z.object({
   recordId: z.string(),
-  seq: z.number().int().nonnegative(),
   /** ISO 8601. */
   timestamp: z.iso.datetime(),
   /** Per-record model override, for mid-session model switches. */

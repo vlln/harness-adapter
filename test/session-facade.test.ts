@@ -63,33 +63,31 @@ describe("openHarness registry (interface-0003 入口)", () => {
 
 describe("AhsSession (存储视角)", () => {
   const session = makeSession("root", [
-    userMessage(0, "build it", { timestamp: T1 }),
-    assistantMessage(1, "working", { timestamp: T1, usage: { inputTokens: 100, outputTokens: 10 } }),
-    toolCall(2, "tc-1", { name: "Bash", status: "completed", timestamp: T1 }),
-    toolResult(3, "tc-1", "done", { sessionIds: ["sub"], timestamp: T1 }),
-    toolCall(4, "tc-2", { name: "Edit", status: "interrupted", timestamp: T1 }),
-    { ...userMessage(0, "ignored"), seq: 5, recordId: "r5", type: "harness_message" } as never,
+    userMessage("build it", { timestamp: T1 }),
+    assistantMessage("working", { timestamp: T1, usage: { inputTokens: 100, outputTokens: 10 } }),
+    toolCall("tc-1", { name: "Bash", status: "completed", timestamp: T1 }),
+    toolResult("tc-1", "done", { sessionIds: ["sub"], timestamp: T1 }),
+    toolCall("tc-2", { name: "Edit", status: "interrupted", timestamp: T1 }),
+    { ...userMessage("ignored"), recordId: "r5", type: "harness_message" } as never,
     {
       recordId: "r6",
-      seq: 6,
       timestamp: T1,
       type: "turn_boundary",
       phase: "start",
     } as never,
     {
       recordId: "r7",
-      seq: 7,
       timestamp: T1,
       type: "turn_boundary",
       phase: "end",
     } as never,
-    { recordId: "r8", seq: 8, timestamp: T1, type: "model_change", model: "m2" } as never,
-    { recordId: "r9", seq: 9, timestamp: T1, type: "compaction", summary: "s" } as never,
-    { recordId: "r10", seq: 10, timestamp: T1, type: "goal_update", status: "met" } as never,
+    { recordId: "r8", timestamp: T1, type: "model_change", model: "m2" } as never,
+    { recordId: "r9", timestamp: T1, type: "compaction", summary: "s" } as never,
+    { recordId: "r10", timestamp: T1, type: "goal_update", status: "met" } as never,
   ]);
   const facade = createFacade(fakeAdapter([session]));
 
-  it("messages() projects the mapping table row by row, in seq order", async () => {
+  it("messages() projects the mapping table row by row, in file order", async () => {
     const s = await facade.loadSession("root");
     expect(s.manifest.sessionId).toBe("root");
     const items = s.messages();
@@ -110,7 +108,7 @@ describe("AhsSession (存储视角)", () => {
     expect(items[3]).not.toHaveProperty("result");
   });
 
-  it("events() exposes state records in seq order; none leak into messages()", async () => {
+  it("events() exposes state records in file order; none leak into messages()", async () => {
     const s = await facade.loadSession("root");
     expect(s.events().map((e) => `${e.type}${e.type === "turn_boundary" ? `:${e.phase}` : ""}`)).toEqual([
       "turn_boundary:start",
@@ -135,12 +133,12 @@ describe("AhsSession (存储视角)", () => {
 });
 
 describe("tool pairing edge cases (projection-internal, XOR)", () => {
-  it("pairs with the FIRST result in seq order; drops unpaired results defensively", () => {
+  it("pairs with the FIRST result in file order; drops unpaired results defensively", () => {
     const items = projectMessages([
-      toolCall(0, "tc", { name: "Bash" }),
-      toolResult(1, "tc", "first"),
-      toolResult(2, "tc", "second"),
-      toolResult(3, "orphan", "no call for this"),
+      toolCall("tc", { name: "Bash" }),
+      toolResult("tc", "first"),
+      toolResult("tc", "second"),
+      toolResult("orphan", "no call for this"),
     ]);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ kind: "tool", result: { content: "first" } });
@@ -151,20 +149,20 @@ describe("children() (invocation 直接子 session)", () => {
   // root → sub (back-link) + sub → grand (forward link in sub's records);
   // root also forward-links "ghost-child", which is not in the store.
   const root = makeSession("root", [
-    userMessage(0, "go", { timestamp: T1 }),
-    toolCall(1, "tc-1", { name: "Task", status: "completed", recordId: "root-call", timestamp: T1 }),
-    toolResult(2, "tc-1", "sub done", { sessionIds: ["sub", "ghost-child"], timestamp: T1 }),
+    userMessage("go", { timestamp: T1 }),
+    toolCall("tc-1", { name: "Task", status: "completed", recordId: "root-call", timestamp: T1 }),
+    toolResult("tc-1", "sub done", { sessionIds: ["sub", "ghost-child"], timestamp: T1 }),
   ]);
   const sub = makeSession(
     "sub",
     [
-      userMessage(0, "subtask", { timestamp: T1 }),
-      toolCall(1, "tc-2", { name: "Task", status: "completed", timestamp: T1 }),
-      toolResult(2, "tc-2", "grand done", { sessionIds: ["grand"], timestamp: T1 }),
+      userMessage("subtask", { timestamp: T1 }),
+      toolCall("tc-2", { name: "Task", status: "completed", timestamp: T1 }),
+      toolResult("tc-2", "grand done", { sessionIds: ["grand"], timestamp: T1 }),
     ],
     { invocation: { sessionId: "root", atRecordId: "root-call" } },
   );
-  const grand = makeSession("grand", [userMessage(0, "grand task", { timestamp: T1 })], {
+  const grand = makeSession("grand", [userMessage("grand task", { timestamp: T1 })], {
     invocation: { sessionId: "sub" },
   });
   const facade = createFacade(fakeAdapter([root, sub, grand]));
@@ -192,9 +190,9 @@ describe("AhsTask (用户视角：intra-session HEAD chain stitching)", () => {
     const session = makeSession(
       "sess-1",
       [
-        userMessage(0, "build it", { timestamp: T1, recordId: "r0" }),
-        assistantMessage(1, "first attempt", { timestamp: T1, recordId: "r1" }),
-        assistantMessage(2, "abandoned direction", { timestamp: T1, recordId: "r2" }),
+        userMessage("build it", { timestamp: T1, recordId: "r0" }),
+        assistantMessage("first attempt", { timestamp: T1, recordId: "r1" }),
+        assistantMessage("abandoned direction", { timestamp: T1, recordId: "r2" }),
       ],
       {
         branches: {
@@ -205,8 +203,8 @@ describe("AhsTask (用户视角：intra-session HEAD chain stitching)", () => {
       },
       {
         "fork-1": [
-          userMessage(0, "new direction", { timestamp: T2, recordId: "r3" }),
-          assistantMessage(1, "fork work", { timestamp: T2, recordId: "r4" }),
+          userMessage("new direction", { timestamp: T2, recordId: "r3" }),
+          assistantMessage("fork work", { timestamp: T2, recordId: "r4" }),
         ],
       },
     );
@@ -232,8 +230,8 @@ describe("AhsTask (用户视角：intra-session HEAD chain stitching)", () => {
     const session = makeSession(
       "sess-1",
       [
-        userMessage(0, "build it", { timestamp: T1, recordId: "r0" }),
-        assistantMessage(1, "work", { timestamp: T1, recordId: "r1" }),
+        userMessage("build it", { timestamp: T1, recordId: "r0" }),
+        assistantMessage("work", { timestamp: T1, recordId: "r1" }),
       ],
       {
         branches: {
@@ -244,8 +242,8 @@ describe("AhsTask (用户视角：intra-session HEAD chain stitching)", () => {
       },
       {
         "fork-1": [
-          userMessage(0, "continued", { timestamp: T2, recordId: "r2" }),
-          assistantMessage(1, "more work", { timestamp: T2, recordId: "r3" }),
+          userMessage("continued", { timestamp: T2, recordId: "r2" }),
+          assistantMessage("more work", { timestamp: T2, recordId: "r3" }),
         ],
       },
     );
@@ -261,8 +259,8 @@ describe("AhsTask (用户视角：intra-session HEAD chain stitching)", () => {
     const session = makeSession(
       "sess-1",
       [
-        userMessage(0, "a0", { timestamp: T1, recordId: "ra0" }),
-        assistantMessage(1, "a1", { timestamp: T1, recordId: "ra1" }),
+        userMessage("a0", { timestamp: T1, recordId: "ra0" }),
+        assistantMessage("a1", { timestamp: T1, recordId: "ra1" }),
       ],
       {
         branches: {
@@ -274,12 +272,12 @@ describe("AhsTask (用户视角：intra-session HEAD chain stitching)", () => {
       },
       {
         "fork-1": [
-          userMessage(0, "b0", { timestamp: T2, recordId: "rb0" }),
-          assistantMessage(1, "b1", { timestamp: T2, recordId: "rb1" }),
-          assistantMessage(2, "b2 abandoned", { timestamp: T2, recordId: "rb2" }),
+          userMessage("b0", { timestamp: T2, recordId: "rb0" }),
+          assistantMessage("b1", { timestamp: T2, recordId: "rb1" }),
+          assistantMessage("b2 abandoned", { timestamp: T2, recordId: "rb2" }),
         ],
         "fork-2": [
-          userMessage(0, "c0", { timestamp: T3, recordId: "rc0" }),
+          userMessage("c0", { timestamp: T3, recordId: "rc0" }),
         ],
       },
     );

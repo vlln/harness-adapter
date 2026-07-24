@@ -40,7 +40,6 @@
         }
       ],
       "recordId": "bbbb0001-0000-4000-8000-000000000001",
-      "seq": 0,
       "timestamp": "2026-07-15T09:00:00.000Z",
       "type": "user_message"
     },
@@ -53,7 +52,6 @@
       ],
       "model": "claude-opus-4-1",
       "recordId": "bbbb0002-0000-4000-8000-000000000002",
-      "seq": 1,
       "timestamp": "2026-07-15T09:00:04.000Z",
       "type": "assistant_message",
       "usage": {
@@ -71,7 +69,6 @@
       },
       "name": "Task",
       "recordId": "bbbb0002-0000-4000-8000-000000000002/tool_use/0",
-      "seq": 2,
       "status": "completed",
       "timestamp": "2026-07-15T09:00:04.000Z",
       "toolCallId": "toolu_task01AAAAAAAAAAAAAAAAAA",
@@ -80,7 +77,6 @@
     {
       "content": "Agent completed: found 3 parser files (src/parser.ts, src/generics.ts, src/ast.ts)",
       "recordId": "bbbb0003-0000-4000-8000-000000000003",
-      "seq": 3,
       "sessionIds": [
         "abc123"
       ],
@@ -98,7 +94,6 @@
       ],
       "model": "claude-opus-4-1",
       "recordId": "bbbb0004-0000-4000-8000-000000000004",
-      "seq": 4,
       "timestamp": "2026-07-15T09:00:33.000Z",
       "type": "assistant_message",
       "usage": {

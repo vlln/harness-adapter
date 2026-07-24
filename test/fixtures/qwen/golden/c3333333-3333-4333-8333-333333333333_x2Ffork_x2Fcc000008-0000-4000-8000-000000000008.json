@@ -26,7 +26,6 @@
       ],
       "model": "deepseek-v4-flash",
       "recordId": "cc000008-0000-4000-8000-000000000008",
-      "seq": 0,
       "timestamp": "2026-07-22T11:03:06.000Z",
       "type": "assistant_message"
     }

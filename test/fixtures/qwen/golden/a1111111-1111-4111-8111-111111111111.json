@@ -36,7 +36,6 @@
         }
       ],
       "recordId": "aa000001-0000-4000-8000-000000000001",
-      "seq": 0,
       "timestamp": "2026-07-22T09:00:00.000Z",
       "type": "user_message"
     },
@@ -53,7 +52,6 @@
       ],
       "model": "deepseek-v4-flash",
       "recordId": "aa000004-0000-4000-8000-000000000004",
-      "seq": 1,
       "timestamp": "2026-07-22T09:00:05.695Z",
       "type": "assistant_message",
       "usage": {
@@ -71,7 +69,6 @@
         }
       ],
       "recordId": "aa000006-0000-4000-8000-000000000006",
-      "seq": 2,
       "timestamp": "2026-07-22T09:01:00.000Z",
       "type": "user_message"
     },
@@ -84,7 +81,6 @@
       ],
       "model": "deepseek-v4-flash",
       "recordId": "aa000007-0000-4000-8000-000000000007",
-      "seq": 3,
       "timestamp": "2026-07-22T09:01:04.000Z",
       "type": "assistant_message",
       "usage": {

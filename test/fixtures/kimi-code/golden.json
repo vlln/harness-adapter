@@ -39,7 +39,6 @@
           }
         ],
         "recordId": "11111111-2222-4333-8444-555555555555:0",
-        "seq": 0,
         "timestamp": "2026-07-20T10:00:01.001Z",
         "type": "user_message"
       },
@@ -55,7 +54,6 @@
           }
         ],
         "recordId": "11111111-2222-4333-8444-555555555555:1",
-        "seq": 1,
         "timestamp": "2026-07-20T10:00:02.200Z",
         "type": "assistant_message"
       },
@@ -67,7 +65,6 @@
         "kind": "file_io",
         "name": "Grep",
         "recordId": "11111111-2222-4333-8444-555555555555:2",
-        "seq": 2,
         "status": "completed",
         "timestamp": "2026-07-20T10:00:02.200Z",
         "toolCallId": "call_k001",
@@ -76,7 +73,6 @@
       {
         "content": "src/auth/login.ts:42:  const user = session.user;",
         "recordId": "11111111-2222-4333-8444-555555555555:3",
-        "seq": 3,
         "status": "success",
         "timestamp": "2026-07-20T10:00:03.000Z",
         "toolCallId": "call_k001",
@@ -96,7 +92,6 @@
           }
         ],
         "recordId": "11111111-2222-4333-8444-555555555555:4",
-        "seq": 4,
         "timestamp": "2026-07-20T10:00:04.001Z",
         "type": "harness_message"
       },
@@ -108,7 +103,6 @@
           }
         ],
         "recordId": "11111111-2222-4333-8444-555555555555:5",
-        "seq": 5,
         "timestamp": "2026-07-20T10:00:05.100Z",
         "type": "assistant_message"
       },
@@ -116,14 +110,12 @@
         "goalId": "goal-0001",
         "reason": "完成登录页修复并验证",
         "recordId": "11111111-2222-4333-8444-555555555555:6",
-        "seq": 6,
         "status": "pending",
         "timestamp": "2026-07-20T10:00:05.100Z",
         "type": "goal_update"
       },
       {
         "recordId": "11111111-2222-4333-8444-555555555555:7",
-        "seq": 7,
         "status": "met",
         "timestamp": "2026-07-20T10:00:09.000Z",
         "type": "goal_update"
@@ -131,7 +123,6 @@
       {
         "model": "moonshot/kimi-k2-turbo",
         "recordId": "11111111-2222-4333-8444-555555555555:8",
-        "seq": 8,
         "timestamp": "2026-07-20T10:00:09.100Z",
         "type": "model_change",
         "usage": {
@@ -148,7 +139,6 @@
         },
         "name": "Agent",
         "recordId": "11111111-2222-4333-8444-555555555555:9",
-        "seq": 9,
         "status": "completed",
         "timestamp": "2026-07-20T10:00:09.250Z",
         "toolCallId": "call_k002",
@@ -157,7 +147,6 @@
       {
         "content": "agent_id: agent-0\nactual_subagent_type: general\nstatus: completed\n\n[summary]\n补丁正确，无回归风险。",
         "recordId": "11111111-2222-4333-8444-555555555555:10",
-        "seq": 10,
         "sessionIds": [
           "11111111-2222-4333-8444-555555555555/agent-0"
         ],
@@ -168,7 +157,6 @@
       },
       {
         "recordId": "11111111-2222-4333-8444-555555555555:11",
-        "seq": 11,
         "summary": "## 前文摘要\n用户要求修复登录页空指针，已定位到 login.ts:42。",
         "timestamp": "2026-07-20T10:00:10.500Z",
         "type": "compaction"
@@ -181,7 +169,6 @@
           }
         ],
         "recordId": "11111111-2222-4333-8444-555555555555:12",
-        "seq": 12,
         "timestamp": "2026-07-20T10:00:11.001Z",
         "type": "harness_message"
       },
@@ -192,7 +179,6 @@
         "kind": "shell",
         "name": "Bash",
         "recordId": "11111111-2222-4333-8444-555555555555:13",
-        "seq": 13,
         "status": "interrupted",
         "timestamp": "2026-07-20T10:00:12.000Z",
         "toolCallId": "call_k003",
@@ -206,7 +192,6 @@
           }
         ],
         "recordId": "11111111-2222-4333-8444-555555555555:14",
-        "seq": 14,
         "timestamp": "2026-07-20T10:00:12.000Z",
         "type": "assistant_message"
       }
@@ -253,7 +238,6 @@
           }
         ],
         "recordId": "11111111-2222-4333-8444-555555555555/agent-0:0",
-        "seq": 0,
         "timestamp": "2026-07-20T10:01:41.001Z",
         "type": "harness_message"
       },
@@ -265,7 +249,6 @@
           }
         ],
         "recordId": "11111111-2222-4333-8444-555555555555/agent-0:1",
-        "seq": 1,
         "timestamp": "2026-07-20T10:01:42.101Z",
         "type": "assistant_message",
         "usage": {

@@ -41,7 +41,6 @@
         }
       ],
       "recordId": "dddd0004-0000-4000-8000-000000000004",
-      "seq": 0,
       "timestamp": "2026-07-16T10:00:06.000Z",
       "type": "user_message"
     },
@@ -54,7 +53,6 @@
       ],
       "model": "claude-sonnet-4-5",
       "recordId": "dddd0005-0000-4000-8000-000000000005",
-      "seq": 1,
       "timestamp": "2026-07-16T10:00:09.000Z",
       "type": "assistant_message",
       "usage": {

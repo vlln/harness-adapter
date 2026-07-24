@@ -112,9 +112,9 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   the first in file order is kept.
  *
  * Causal synthesis: the source is a temporal stream with no parent links —
- * a linear chain is synthesized (seq = emission index; the linear model has
+ * a linear chain is synthesized (emission order; the linear model has
  * no parentId). Record ids are synthesized as
- * `<sessionId>:<seq>` (source records have no stable uuids); directory
+ * `<sessionId>:<index>` (source records have no stable uuids); directory
  * entries are sorted and there are no wall-clock reads, so output is
  * byte-identical across runs.
  *
@@ -203,7 +203,7 @@ interface RawContent {
 
 /** Omit that distributes over the AhsRecord discriminated union. */
 type RecordPayload<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
-type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "seq" | "timestamp">;
+type EmittableRecord = RecordPayload<AhsRecord, "recordId" | "timestamp">;
 
 interface SessionSource {
   /** sessionId from session_meta, falling back to the filename id. */
@@ -322,10 +322,8 @@ export function projectRecords(
   let prevTokenTotalKey: string | null = null;
 
   const emit = (timestamp: string, partial: EmittableRecord): void => {
-    const seq = records.length;
     const rec = {
-      recordId: `${sessionId}:${seq}`,
-      seq,
+      recordId: `${sessionId}:${records.length}`,
       timestamp,
       ...(pendingUsage !== undefined ? { usage: pendingUsage } : {}),
       ...partial,
