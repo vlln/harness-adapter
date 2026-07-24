@@ -14,6 +14,6 @@
 
 | 文件 | 状态 |
 |------|------|
-| [0001-harness-adapter.md](0001-harness-adapter.md) | active |
+| [0001-harness-adapter.md](0001-harness-adapter.md) | proposed |
 | [0002-archive.md](0002-archive.md) | active |
 | [0003-session-facade.md](0003-session-facade.md) | active |
