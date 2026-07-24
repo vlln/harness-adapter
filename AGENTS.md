@@ -56,10 +56,10 @@ harness-adapter 是一个 TypeScript 库，定义 **AHS（Agent History Standard
 
 项目遵循 devloop 6 阶段状态机（INIT → DESIGN → TEST_INFRA → DEVELOP → SYSTEM_TEST → RELEASE），当前阶段见 [docs/README.md](docs/README.md)。
 
-- **DESIGN（当前）**：只写/改契约文档（Vision/Spec/AC/ADR/Interface），在 `develop` 上进行；ADR 验证性适配器原型走 `spike/*` 分支（保留不合并）。不写正式功能代码。
+- **DESIGN**：只写/改契约文档（Vision/Spec/AC/ADR/Interface），在 `develop` 上进行；ADR 验证性适配器原型走 `spike/*` 分支（保留不合并）。不写正式功能代码。
 - **TEST_INFRA**：`ci/*` `test/*` 分支搭建 CI、测试基建，合并回 `develop`。
 - **DEVELOP**：`feat/*` 分支实现适配器，每个任务一个执行容器（docs/plans/），TDD 覆盖 AC。
-- **RELEASE**：不新增功能。`release/*` 分支从 `develop` 拉出，整理 CHANGELOG，合并回 `main` + `develop`，在 `main` 上打 tag `vX.Y.Z`。
+- **RELEASE（当前）**：不新增功能。`release/*` 分支从 `develop` 拉出，整理 CHANGELOG，合并回 `main` + `develop`，在 `main` 上打 tag `vX.Y.Z`。
 - 快速通道（验证性开发 / 微修改 / hotfix）见 [CONTRIBUTING.md](CONTRIBUTING.md) 第八节。
 
 ---
