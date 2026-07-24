@@ -57,7 +57,7 @@ describe("ahs-report (AC-0004-N-1)", () => {
     // Export through the writer's adapter-facing API, then FORGET the
     // adapter: the report reads only the archive directory.
     const outDir = path.join(tmp, "report");
-    await exportSessions(fakeAdapter([parent, child]), outDir, undefined, { relations: true });
+    await exportSessions(fakeAdapter([parent, child]), outDir);
 
     const report = await renderReport(outDir, "sess-parent");
 
@@ -180,7 +180,7 @@ describe("ahs-report Task view (ADR-0006 intra-session branches)", () => {
 
   it("renders the HEAD chain: stitched prefix + fork suffix, abandoning the cut tail", async () => {
     const outDir = path.join(tmp, "task-view");
-    await exportSessions(fakeAdapter([session]), outDir, undefined, { relations: true });
+    await exportSessions(fakeAdapter([session]), outDir);
 
     const report = await renderReport(outDir, "task-sess");
 
@@ -205,7 +205,7 @@ describe("ahs-report Task view (ADR-0006 intra-session branches)", () => {
 
   it("--all lists the session's branches as alternates, not stitched", async () => {
     const outDir = path.join(tmp, "task-view-all");
-    await exportSessions(fakeAdapter([session]), outDir, undefined, { relations: true });
+    await exportSessions(fakeAdapter([session]), outDir);
 
     const report = await renderReport(outDir, "task-sess", { all: true });
     expect(report.alternates).toEqual(["fork-1", "main"]);
@@ -262,7 +262,7 @@ describe("ahs-report Task view (ADR-0006 intra-session branches)", () => {
       },
     );
     const outDir = path.join(tmp, "fork-of-subagent");
-    await exportSessions(fakeAdapter([parent, subFork]), outDir, undefined, { relations: true });
+    await exportSessions(fakeAdapter([parent, subFork]), outDir);
 
     const report = await renderReport(outDir, "p");
     // The sub-agent renders with a header per branch segment

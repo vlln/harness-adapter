@@ -1,41 +1,24 @@
 /**
  * Derived relations store tests (ADR-0006):
  * - invocation edges derived from manifest back-links + tool_result.sessionId
- *   forward links (deduped), both directions navigable;
- * - relations.jsonl round-trip and pure derivability (deleting the file
- *   loses nothing: a rebuild is byte-identical).
+ *   forward links (deduped), both directions navigable.
  */
 
-import { mkdtempSync, readFileSync, rmSync, unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   buildRelations,
   effectiveInvocation,
   invocationChildEdges,
-  readRelations,
-  RELATIONS_FILENAME,
-  writeRelations,
-  type RelationSession,
 } from "../src/ahs/relations";
-import { exportSessions } from "../src/ahs/writer";
 import type { SessionData } from "../src/validate/index";
 import {
   assistantMessage,
-  fakeAdapter,
   makeSession,
   toolCall,
   toolResult,
   userMessage,
 } from "./builders";
-
-const tmp = mkdtempSync(path.join(tmpdir(), "ahs-relations-test-"));
-afterAll(() => {
-  rmSync(tmp, { recursive: true, force: true });
-});
 
 const T1 = "2026-07-20T10:00:00.000Z";
 const T2 = "2026-07-20T11:00:00.000Z";
@@ -116,64 +99,5 @@ describe("buildRelations", () => {
     expect(relations.edges.some((e) => e.from === "not-archived" || e.to === "not-archived")).toBe(
       false,
     );
-  });
-});
-
-describe("relations.jsonl (write/read)", () => {
-  it("round-trips: buildRelations(writeRelations-read-back) deep-equals the original", async () => {
-    const outDir = path.join(tmp, "round-trip");
-    const sessions = materialize(fixtureSessions());
-    const adapter = fakeAdapter(sessions);
-    await exportSessions(adapter, outDir, undefined, { relations: true });
-
-    const original = buildRelations(sessions);
-    const readBack = await readRelations(outDir);
-    expect(readBack).toEqual(original);
-  });
-
-  it("is purely derived (AR-005): deleting the file loses nothing — rebuild is byte-identical", async () => {
-    const outDir = path.join(tmp, "derived");
-    const sessions = materialize(fixtureSessions());
-    await exportSessions(fakeAdapter(sessions), outDir, undefined, { relations: true });
-
-    const file = path.join(outDir, RELATIONS_FILENAME);
-    const firstBytes = readFileSync(file, "utf8");
-    unlinkSync(file);
-
-    // Rebuild from the archived sessions alone (no adapter involved).
-    const reread: RelationSession[] = [];
-    for (const { manifest, records } of sessions) {
-      reread.push({ manifest, records });
-    }
-    await writeRelations(outDir, buildRelations(reread));
-    expect(readFileSync(file, "utf8")).toBe(firstBytes);
-  });
-
-  it("serializes deterministically (sorted keys, stable section order)", async () => {
-    const outDir = path.join(tmp, "deterministic");
-    const sessions = materialize(fixtureSessions());
-    const relations = buildRelations(sessions);
-    await writeRelations(outDir, relations);
-    const first = readFileSync(path.join(outDir, RELATIONS_FILENAME), "utf8");
-    // Rebuild from a shuffled input order: same bytes.
-    const shuffled = [...sessions].reverse();
-    await writeRelations(outDir, buildRelations(shuffled));
-    expect(readFileSync(path.join(outDir, RELATIONS_FILENAME), "utf8")).toBe(first);
-    // Keys sorted within each line (spot-check: "from" < "kind" < "to").
-    const edgeLine = first.split("\n").find((l) => l.includes('"kind":"edge"'))!;
-    expect(edgeLine.indexOf('"from"')).toBeLessThan(edgeLine.indexOf('"kind"'));
-    expect(edgeLine.indexOf('"kind"')).toBeLessThan(edgeLine.indexOf('"to"'));
-  });
-
-  it("exportSessions writes relations.jsonl when opted in; skips by default", async () => {
-    const withRelations = path.join(tmp, "opt-in");
-    await exportSessions(fakeAdapter(materialize(fixtureSessions())), withRelations, undefined, {
-      relations: true,
-    });
-    expect(() => readFileSync(path.join(withRelations, RELATIONS_FILENAME), "utf8")).not.toThrow();
-
-    const without = path.join(tmp, "opt-out");
-    await exportSessions(fakeAdapter(materialize(fixtureSessions())), without);
-    expect(() => readFileSync(path.join(without, RELATIONS_FILENAME), "utf8")).toThrow();
   });
 });

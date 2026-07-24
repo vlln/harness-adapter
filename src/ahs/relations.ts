@@ -1,8 +1,3 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-
-import { z } from "zod";
-
 import type { Manifest } from "../schema/manifest";
 import type { AhsRecord } from "../schema/record";
 
@@ -16,8 +11,8 @@ import type { AhsRecord } from "../schema/record";
  *   property, not inherited through forks).
  *
  * Everything here is PURELY DERIVED from session manifests + records
- * (AR-005): nothing is authored. Deleting relations.jsonl loses nothing —
- * `buildRelations` over the same sessions rebuilds a byte-identical file.
+ * (AR-005): nothing is authored. `buildRelations` over the same sessions
+ * always produces a byte-identical edge list.
  */
 
 /** A session as the relations builder needs it: manifest + its records. */
@@ -41,41 +36,6 @@ export interface RelationEdge {
 
 export interface Relations {
   edges: RelationEdge[];
-}
-
-/* ------------------------------------------------------------------ *
- * Disk format (relations.jsonl): one JSON object per line, keys sorted,
- * lines in canonical order, re-export over the same sessions is
- * byte-identical.
- * ------------------------------------------------------------------ */
-
-const EdgeLineSchema = z.object({
-  kind: z.literal("edge"),
-  type: z.literal("invocation"),
-  from: z.string(),
-  to: z.string(),
-  atRecordId: z.string().nullable().optional(),
-});
-
-const RelationLineSchema = EdgeLineSchema;
-
-export const RELATIONS_FILENAME = "relations.jsonl";
-
-/** JSON.stringify with recursively sorted object keys (deterministic). */
-function stableStringify(value: unknown): string {
-  return JSON.stringify(sortKeys(value));
-}
-
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (typeof value === "object" && value !== null) {
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(value).sort()) {
-      sorted[key] = sortKeys((value as Record<string, unknown>)[key]);
-    }
-    return sorted;
-  }
-  return value;
 }
 
 function compareStrings(a: string | null | undefined, b: string | null | undefined): number {
@@ -147,34 +107,6 @@ export function buildRelations(sessions: RelationSession[]): Relations {
   );
 
   return { edges: edgeList };
-}
-
-/** Write relations.jsonl at the archive root. Returns the file path. */
-export async function writeRelations(outDir: string, relations: Relations): Promise<string> {
-  const lines: string[] = [];
-  for (const edge of relations.edges) lines.push(stableStringify({ kind: "edge", ...edge }));
-  const file = path.join(outDir, RELATIONS_FILENAME);
-  await mkdir(outDir, { recursive: true });
-  await writeFile(file, lines.join("\n") + (lines.length > 0 ? "\n" : ""), "utf8");
-  return file;
-}
-
-/** Read and validate relations.jsonl from an archive root. */
-export async function readRelations(outDir: string): Promise<Relations> {
-  const raw = await readFile(path.join(outDir, RELATIONS_FILENAME), "utf8");
-  const edges: RelationEdge[] = [];
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed === "") continue;
-    const parsed = RelationLineSchema.parse(JSON.parse(trimmed));
-    edges.push({
-      type: parsed.type,
-      from: parsed.from,
-      to: parsed.to,
-      ...(parsed.atRecordId !== undefined ? { atRecordId: parsed.atRecordId } : {}),
-    });
-  }
-  return { edges };
 }
 
 /* ------------------------------------------------------------------ *

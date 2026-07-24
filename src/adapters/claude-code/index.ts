@@ -41,7 +41,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   session storing only its suffix: sessionId `<main>/fork/<branch-root
  *   uuid>`, lineage atRecordId = the anchor node's first projected record in
  *   the parent session, type by that record's type (user_message ⇔
- *   rewound_from).
+ *   forked_from).
  * - Fork chains may contain further branch points → nested fork sessions
  *   whose lineage points at the fork session holding the anchor.
  * - Chain restarts (kept line with parentUuid null/unknown mid-file) are

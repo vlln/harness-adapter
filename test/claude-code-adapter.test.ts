@@ -14,7 +14,7 @@
  *               missing usage — AC-0001-E-1, AC-0002-B-2
  *   55555555-…  only process records — not an AHS session (skipped)
  *   66666666-…  branch points: edit-resend after an assistant record
- *               (rewound_from) + re-answer to a user prompt (rewound_from);
+ *               (forked_from) + re-answer to a user prompt (forked_from);
  *               main chain = chain to the last leaf — AC-0002-N-7
  *   77777777-…  assistant segments sharing one message.id chain in file
  *               order (no fork); parallel result deliveries in separate user

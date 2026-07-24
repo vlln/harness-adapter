@@ -232,22 +232,11 @@ export async function writeArchive(
   return writeSessionArchive(manifest, branchRecords, outDir);
 }
 
-export interface ExportOptions {
-  /**
-   * Also derive and write relations.jsonl at the archive root (default
-   * false). Relations are purely derived (AR-005) and can be rebuilt from
-   * the archived sessions at any time. In ADR-0006, relations.jsonl is
-   * retired — all relation data is available directly from manifests.
-   */
-  relations?: boolean;
-}
-
 /** Export every session an adapter lists (optionally filtered) into outDir. */
 export async function exportSessions(
   adapter: HarnessAdapter,
   outDir: string,
   filter?: SessionFilter,
-  options?: ExportOptions,
 ): Promise<WriteArchiveResult[]> {
   // An archive is the storage view: default to the FULL set (forks included);
   // a caller-supplied filter may still narrow it down.
@@ -256,23 +245,6 @@ export async function exportSessions(
   for await (const manifest of adapter.listSessions(effective)) {
     const branchRecords = await collectAllBranchRecords(adapter, manifest);
     results.push(await writeSessionArchive(manifest, branchRecords, outDir));
-  }
-  if (options?.relations === true) {
-    // relations.jsonl is retired in ADR-0006; opt-in only for backward compat.
-    const { buildRelations, writeRelations } = await import("./relations");
-    const { readManifest, readRecords } = await import("./reader");
-    const sessions: import("./relations").RelationSession[] = [];
-    for (const result of results) {
-      const manifest = await readManifest(result.dir);
-      const records: AhsRecord[] = [];
-      for (const branchName of Object.keys(manifest.branches)) {
-        for await (const rec of readRecords(result.dir, branchName)) {
-          records.push(rec);
-        }
-      }
-      sessions.push({ manifest, records });
-    }
-    await writeRelations(outDir, buildRelations(sessions));
   }
   return results;
 }
