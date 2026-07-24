@@ -6,7 +6,7 @@
 
 | Plan | 内容 | 状态 | Report |
 |------|------|------|--------|
-| 01-plan-grok.md | Grok 适配器（四层表示取 chat_history 为规范） | pending | — |
+| 01-plan-grok.md | Grok 适配器（四层表示取 chat_history 为规范） | done | [01-report-grok.md](01-report-grok.md) |
 
 ## 适配器要点
 
