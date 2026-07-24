@@ -54,15 +54,14 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   Error messages carry empty content and all-zero usage — they project
  *   nothing (zero usage contributes nothing to the sums).
  * - The session record's `parentSession` pointer (cross-file
- *   continue-from) is NOT mapped: the child file re-logs the shared prefix
- *   instead of referencing it, so a lineage edge would double-count the
- *   prefix (forks are suffix-only). The file projects standalone.
+ *   continue-from) maps to lineage { type: "forked_from", sessionId }.
+ *   The child file re-logs the shared prefix (full copy = fork pattern).
  *
  * Usage: the most complete of all harnesses — input/output/cacheRead/
- * cacheWrite/reasoning tokens plus a cost breakdown. Mapping: tokens as-is,
- * cost.total → cost { amount, currency: "USD" } (the source records no
- * currency; pi's pricing tables are USD-denominated — documented
- * assumption). `totalTokens` is dropped (sum of the parts, redundant).
+ * cacheWrite/reasoning tokens plus a cost breakdown. Mapping: tokens as-is;
+ * cost omitted when the source provides no currency (AHS requires currency;
+ * Pi records none — cost is dropped rather than assuming USD).
+ * `totalTokens` is dropped (sum of the parts, redundant).
  *
  * Determinism (AC-0002-N-5): directory entries are sorted, chains
  * follow file order, recordIds are source ids, fork ids derive from source
@@ -77,6 +76,7 @@ interface RawLine {
   version?: number;
   id?: string;
   parentId?: string | null;
+  parentSession?: string;
   timestamp?: string;
   cwd?: string;
   provider?: string;
@@ -137,7 +137,8 @@ function mapUsage(raw: RawUsage): Usage {
   if (raw.cacheWrite !== undefined) usage.cacheWriteTokens = raw.cacheWrite;
   if (raw.reasoning !== undefined) usage.reasoningTokens = raw.reasoning;
   if (raw.cost?.total !== undefined) {
-    usage.cost = { amount: raw.cost.total, currency: "USD" };
+    // Source provides no currency field; AHS requires currency.
+    // Omit cost entirely rather than assuming USD (no escape hatch).
   }
   return usage;
 }
@@ -496,6 +497,7 @@ function buildManifest(
 
   const totalUsage: Usage = {};
   let costAmount = 0;
+  let costCurrency: string | undefined;
   let hasCost = false;
   let turnCount = 0;
   for (const rec of records) {
@@ -512,6 +514,7 @@ function buildManifest(
       if (rec.usage.cost !== undefined) {
         hasCost = true;
         costAmount += rec.usage.cost.amount;
+        costCurrency ??= rec.usage.cost.currency;
       }
     }
   }
@@ -519,7 +522,9 @@ function buildManifest(
   for (const key of Object.keys(totalUsage) as (keyof Usage)[]) {
     if (totalUsage[key] === 0) delete totalUsage[key];
   }
-  if (hasCost) totalUsage.cost = { amount: costAmount, currency: "USD" };
+  if (hasCost && costCurrency !== undefined) {
+    totalUsage.cost = { amount: costAmount, currency: costCurrency };
+  }
 
   const branchRegistry: Manifest["branches"] = {
     main: { parentBranch: null, parentRecordId: null },
@@ -532,6 +537,7 @@ function buildManifest(
   const lastRecordId = records.length > 0 ? records[records.length - 1]!.recordId : null;
 
   const hasUsage = Object.keys(totalUsage).length > 0;
+  const parentSession = sessionLine?.parentSession;
   return {
     sessionId,
     harness: "pi",
@@ -544,6 +550,7 @@ function buildManifest(
     ...(provider !== undefined ? { provider } : {}),
     branches: branchRegistry,
     HEAD: { branch: "main", recordId: lastRecordId },
+    ...(parentSession !== undefined ? { lineage: { type: "forked_from" as const, sessionId: parentSession } } : {}),
     stats: {
       turnCount,
       ...(hasUsage ? { totalUsage } : {}),

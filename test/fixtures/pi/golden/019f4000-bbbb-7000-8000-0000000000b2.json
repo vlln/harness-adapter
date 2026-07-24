@@ -21,10 +21,6 @@
       "totalUsage": {
         "cacheReadTokens": 100,
         "cacheWriteTokens": 300,
-        "cost": {
-          "amount": 0.0051,
-          "currency": "USD"
-        },
         "inputTokens": 3100,
         "outputTokens": 160,
         "reasoningTokens": 64
@@ -72,10 +68,6 @@
       "usage": {
         "cacheReadTokens": 0,
         "cacheWriteTokens": 300,
-        "cost": {
-          "amount": 0.0016,
-          "currency": "USD"
-        },
         "inputTokens": 2200,
         "outputTokens": 120,
         "reasoningTokens": 64
@@ -140,10 +132,6 @@
       "usage": {
         "cacheReadTokens": 100,
         "cacheWriteTokens": 0,
-        "cost": {
-          "amount": 0.0035,
-          "currency": "USD"
-        },
         "inputTokens": 900,
         "outputTokens": 40,
         "reasoningTokens": 0
