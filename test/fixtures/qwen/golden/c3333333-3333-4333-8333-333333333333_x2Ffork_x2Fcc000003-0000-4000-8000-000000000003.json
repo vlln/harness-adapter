@@ -7,9 +7,10 @@
     "lineage": {
       "atRecordId": "cc000002-0000-4000-8000-000000000002",
       "sessionId": "c3333333-3333-4333-8333-333333333333",
-      "type": "forked_from"
+      "type": "rewound_from"
     },
     "model": "deepseek-v4-flash",
+    "root": false,
     "sessionId": "c3333333-3333-4333-8333-333333333333/fork/cc000003-0000-4000-8000-000000000003",
     "stats": {
       "turnCount": 1

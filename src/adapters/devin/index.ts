@@ -37,13 +37,13 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   (atRecordId = its record in the owning session). With no leading
  *   duplicate the fork diverges right after the branch point, which becomes
  *   the anchor. Type judgment (AC-0002-N-7): anchor record is a
- *   user_message ⇔ sibling_attempt, anything else ⇔ forked_from.
+ *   rewound_from.
  * - CROSS-ROOT FORKS: roots after the first (lowest node_id = base root,
  *   AHS session id = the bare slug) become `<slug>#root-<nodeId>` sessions,
  *   anchored against all previously projected sessions of the group. Real
  *   data: the shared prefix is the system prompt (harness_message →
- *   forked_from). A root sharing nothing gets an anchor-less lineage
- *   { type: "sibling_attempt", sessionId: <slug> } — retry from start.
+ *   rewound_from). A root sharing nothing gets an anchor-less lineage
+ *   { type: "rewound_from", sessionId: <slug> } — retry from start.
  * - ORPHAN TOOL RESULTS: a fork suffix can contain tool_result nodes for a
  *   tool_call that lives in the shared prefix (real pattern: the twin
  *   assistant message carries calls whose results follow in both subtrees).
@@ -463,10 +463,10 @@ function projectGroup(row: SessionRow, nodes: NodeRow[]): GroupProjection | null
           const anchor = leadingAnchor ?? ctx.spawnAnchor;
           if (anchor === undefined) {
             // Retry from the very start: the fork carries its own prompt.
-            return { type: "sibling_attempt", sessionId: ctx.fallbackParentId };
+            return { type: "rewound_from", sessionId: ctx.fallbackParentId };
           }
           return {
-            type: anchor.type === "user_message" ? "sibling_attempt" : "forked_from",
+            type: "rewound_from",
             sessionId: anchor.sessionId,
             atRecordId: anchor.recordId,
           };
@@ -559,6 +559,7 @@ function buildManifest(
     cwd: row.working_directory,
     model: row.model,
     ...(row.title !== null ? { title: row.title, titleOrigin: "custom" as const } : {}),
+    root: projection.lineage === undefined,
     ...(projection.lineage !== undefined ? { lineage: projection.lineage } : {}),
     stats: {
       turnCount,

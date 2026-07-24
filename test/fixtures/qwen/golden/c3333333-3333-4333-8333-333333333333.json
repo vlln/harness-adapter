@@ -5,6 +5,7 @@
     "harness": "qwen-code",
     "harnessVersion": "0.19.1",
     "model": "deepseek-v4-flash",
+    "root": true,
     "sessionId": "c3333333-3333-4333-8333-333333333333",
     "stats": {
       "turnCount": 3

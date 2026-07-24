@@ -8,6 +8,7 @@
     "harness": "claude-code",
     "harnessVersion": "2.1.207",
     "model": "claude-opus-4-1",
+    "root": true,
     "sessionId": "66666666-6666-4666-8666-666666666666",
     "stats": {
       "totalUsage": {

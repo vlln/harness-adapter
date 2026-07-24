@@ -7,6 +7,7 @@
       "harnessVersion": "unknown",
       "model": "moonshot/kimi-k2",
       "provider": "moonshot",
+      "root": true,
       "sessionId": "11111111-2222-4333-8444-555555555555",
       "stats": {
         "totalUsage": {
@@ -213,6 +214,7 @@
       },
       "model": "moonshot/kimi-k2",
       "provider": "moonshot",
+      "root": false,
       "sessionId": "11111111-2222-4333-8444-555555555555/agent-0",
       "stats": {
         "totalUsage": {

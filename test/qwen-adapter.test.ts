@@ -11,7 +11,7 @@
  *               functionCall-only message carries usage on the tool_call —
  *               AC-0002-N-6/B-1/B-2
  *   c3333333-…  branch points: edit-resend after an assistant record
- *               (forked_from) + re-answer to a user prompt (sibling_attempt) —
+ *               (rewound_from) + re-answer to a user prompt (rewound_from) —
  *               AC-0002-N-7
  *   d4444444-…  only system records — not an AHS session (skipped)
  *   usage/token-usage-2026-07.jsonl  per-call usage: main rows reconcile with
@@ -337,11 +337,11 @@ describe("qwen adapter", () => {
       expect(manifest.stats?.durationMs).toBeUndefined();
     });
 
-    it("edit-resend branch becomes a forked_from session anchored at the assistant record", async () => {
+    it("edit-resend branch becomes a rewound_from session anchored at the assistant record", async () => {
       const sessions = await collectSessions(adapter);
       const fork = sessions.find((s) => s.manifest.sessionId === FORK_EDIT)!;
       expect(fork.manifest.lineage).toEqual({
-        type: "forked_from",
+        type: "rewound_from",
         sessionId: SESSION_C,
         atRecordId: "cc000002-0000-4000-8000-000000000002",
       });
@@ -349,11 +349,11 @@ describe("qwen adapter", () => {
       expect(fork.records[0]!.seq).toBe(0);
     });
 
-    it("re-answer to the same prompt becomes a sibling_attempt anchored at the user_message", async () => {
+    it("re-answer to the same prompt becomes a rewound_from anchored at the user_message", async () => {
       const sessions = await collectSessions(adapter);
       const fork = sessions.find((s) => s.manifest.sessionId === FORK_RETRY)!;
       expect(fork.manifest.lineage).toEqual({
-        type: "sibling_attempt",
+        type: "rewound_from",
         sessionId: SESSION_C,
         atRecordId: "cc000007-0000-4000-8000-000000000007",
       });

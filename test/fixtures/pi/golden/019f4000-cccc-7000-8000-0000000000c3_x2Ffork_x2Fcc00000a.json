@@ -7,10 +7,11 @@
     "lineage": {
       "atRecordId": "cc000009",
       "sessionId": "019f4000-cccc-7000-8000-0000000000c3",
-      "type": "sibling_attempt"
+      "type": "rewound_from"
     },
     "model": "DeepSeek-V4-Flash",
     "provider": "ollama",
+    "root": false,
     "sessionId": "019f4000-cccc-7000-8000-0000000000c3/fork/cc00000a",
     "stats": {
       "totalUsage": {

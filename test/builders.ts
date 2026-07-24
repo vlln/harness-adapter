@@ -15,6 +15,9 @@ import type { SessionData } from "../src/validate/index";
 export const BASE_TIME = "2026-07-20T10:00:00.000Z";
 
 export function makeManifest(overrides: Partial<Manifest> = {}): Manifest {
+  const { root: rootOverride, ...rest } = overrides;
+  const lineage = rest.lineage;
+  const invocation = rest.invocation;
   return {
     sessionId: "sess-1",
     harness: "fake",
@@ -22,7 +25,10 @@ export function makeManifest(overrides: Partial<Manifest> = {}): Manifest {
     ahsVersion: "0.1.0",
     cwd: "/tmp",
     model: "fake-model",
-    ...overrides,
+    ...rest,
+    root: rootOverride ?? !(
+      (lineage?.type === "rewound_from") || invocation
+    ),
   };
 }
 

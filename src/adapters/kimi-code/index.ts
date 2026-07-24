@@ -96,7 +96,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   is a fork of an earlier session (real-data shape: the new directory
  *   holds a FULL copy of the pre-fork history and the event marks the fork
  *   point inside the wire). The event carries NO source session id, so a
- *   forked_from lineage cannot be populated (ADR-0005): the event is
+ *   rewound_from lineage cannot be populated (ADR-0005): the event is
  *   DROPPED and the fork is projected as a standalone, content-complete
  *   linear session (source-unavailable; the duplicated shared prefix is a
  *   known fidelity/storage gap reported against the spec).
@@ -521,6 +521,7 @@ function buildManifest(
     ...(state.title !== undefined
       ? { title: state.title, titleOrigin: state.isCustomTitle === true ? ("custom" as const) : ("generated" as const) }
       : {}),
+    root: agent.invocation === undefined,
     ...(agent.invocation !== undefined ? { invocation: agent.invocation } : {}),
     stats: {
       turnCount,

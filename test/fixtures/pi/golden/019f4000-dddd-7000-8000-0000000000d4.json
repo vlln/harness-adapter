@@ -5,6 +5,7 @@
     "harness": "pi",
     "harnessVersion": "3",
     "model": "unknown",
+    "root": true,
     "sessionId": "019f4000-dddd-7000-8000-0000000000d4",
     "stats": {
       "turnCount": 1

@@ -52,8 +52,8 @@ export interface RelationEdge {
    * anchor (Kimi agent-level invocation links, retry-from-start forks).
    */
   atRecordId?: string | null;
-  /** lineage only: forked_from | sibling_attempt (ADR-0005 type judgment). */
-  lineageType?: "forked_from" | "sibling_attempt";
+  /** lineage only: forked_from | rewound_from (relation type). */
+  lineageType?: "forked_from" | "rewound_from";
 }
 
 /** A lineage group with its HEAD pointer (Task = group + HEAD, ADR-0005 §5). */
@@ -92,7 +92,7 @@ const EdgeLineSchema = z.object({
   // anchored, null = anchor source-unavailable, absent = no anchor
   // (retry-from-start for lineage, agent-level link for invocation).
   atRecordId: z.string().nullable().optional(),
-  lineageType: z.enum(["forked_from", "sibling_attempt"]).optional(),
+  lineageType: z.enum(["forked_from", "rewound_from"]).optional(),
 });
 
 const GroupLineSchema = z.object({

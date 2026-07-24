@@ -10,7 +10,7 @@
  *              mid-session model_change, an error assistant message
  *              (empty content, projects nothing) — AC-0001-E-1, AC-0002-N-6
  *   cccc…00c3  branch points: edit-resend after an assistant record
- *              (forked_from) + re-answer to a user prompt (sibling_attempt);
+ *              (rewound_from) + re-answer to a user prompt (rewound_from);
  *              main chain = chain to the last leaf — AC-0002-N-7
  *   dddd…00d4  thinking_level_change before any model_change (dropped),
  *              assistant without usage, interrupted tool_call — AC-0002-B-1/B-2
@@ -322,11 +322,11 @@ describe("pi adapter", () => {
       expect(manifest.stats?.turnCount).toBe(3);
     });
 
-    it("edit-resend branch becomes a forked_from session anchored at the assistant record", async () => {
+    it("edit-resend branch becomes a rewound_from session anchored at the assistant record", async () => {
       const sessions = await collectSessions(adapter);
       const fork = sessions.find((s) => s.manifest.sessionId === FORK_EDIT)!;
       expect(fork.manifest.lineage).toEqual({
-        type: "forked_from", // anchor is an assistant_message (agent-side)
+        type: "rewound_from", // anchor is an assistant_message (agent-side)
         sessionId: SESSION_C,
         atRecordId: "cc000004",
       });
@@ -338,11 +338,11 @@ describe("pi adapter", () => {
       expect(fork.manifest.harnessVersion).toBe("3");
     });
 
-    it("re-answer to the same prompt becomes a sibling_attempt anchored at the user_message", async () => {
+    it("re-answer to the same prompt becomes a rewound_from anchored at the user_message", async () => {
       const sessions = await collectSessions(adapter);
       const fork = sessions.find((s) => s.manifest.sessionId === FORK_RETRY)!;
       expect(fork.manifest.lineage).toEqual({
-        type: "sibling_attempt", // anchor is a user_message
+        type: "rewound_from", // anchor is a user_message
         sessionId: SESSION_C,
         atRecordId: "cc000009",
       });

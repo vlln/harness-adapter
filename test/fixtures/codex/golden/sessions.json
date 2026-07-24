@@ -12,6 +12,7 @@
       "harnessVersion": "0.142.5",
       "model": "gpt-5.5",
       "provider": "openai",
+      "root": true,
       "sessionId": "019f8000-0000-7000-8000-0000000000a1",
       "stats": {
         "totalUsage": {
@@ -235,6 +236,7 @@
       },
       "model": "gpt-5.5",
       "provider": "openai",
+      "root": false,
       "sessionId": "019f8000-0000-7000-8000-0000000000b2",
       "stats": {
         "totalUsage": {
@@ -307,10 +309,11 @@
       "lineage": {
         "atRecordId": "019f8000-0000-7000-8000-0000000000a1:17",
         "sessionId": "019f8000-0000-7000-8000-0000000000a1",
-        "type": "forked_from"
+        "type": "rewound_from"
       },
       "model": "gpt-5.5",
       "provider": "openai",
+      "root": false,
       "sessionId": "019f8000-0000-7000-8000-0000000000c3",
       "stats": {
         "turnCount": 1
@@ -370,6 +373,7 @@
       "harnessVersion": "0.142.5",
       "model": "gpt-5.5",
       "provider": "openai",
+      "root": true,
       "sessionId": "019f8000-0000-7000-8000-0000000000g7",
       "stats": {
         "turnCount": 1
@@ -410,10 +414,11 @@
       "lineage": {
         "atRecordId": "019f8000-0000-7000-8000-0000000000c3:3",
         "sessionId": "019f8000-0000-7000-8000-0000000000c3",
-        "type": "forked_from"
+        "type": "rewound_from"
       },
       "model": "gpt-5.5",
       "provider": "openai",
+      "root": false,
       "sessionId": "019f8000-0000-7000-8000-0000000000f6",
       "stats": {
         "totalUsage": {
@@ -486,10 +491,11 @@
       "lineage": {
         "atRecordId": "019f8000-0000-7000-8000-0000000000g7:1",
         "sessionId": "019f8000-0000-7000-8000-0000000000g7",
-        "type": "sibling_attempt"
+        "type": "rewound_from"
       },
       "model": "gpt-5.5",
       "provider": "openai",
+      "root": false,
       "sessionId": "019f8000-0000-7000-8000-0000000000e5",
       "stats": {
         "totalUsage": {

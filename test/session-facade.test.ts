@@ -199,7 +199,7 @@ describe("AhsTask (用户视角：lineage 组 + HEAD 链拼接)", () => {
         userMessage(0, "new direction", { timestamp: T2 }),
         assistantMessage(1, "fork work", { timestamp: T2 }),
       ],
-      { lineage: { type: "forked_from", sessionId: "base", atRecordId: "r1" } },
+      { lineage: { type: "rewound_from", sessionId: "base", atRecordId: "r1" } },
     );
     const facade = createFacade(fakeAdapter([base, fork]));
 
@@ -227,7 +227,7 @@ describe("AhsTask (用户视角：lineage 组 + HEAD 链拼接)", () => {
         userMessage(0, "the prompt", { timestamp: T2 }),
         assistantMessage(1, "retry answer", { timestamp: T2 }),
       ],
-      { lineage: { type: "sibling_attempt", sessionId: "base" } },
+      { lineage: { type: "rewound_from", sessionId: "base" } },
     );
     const facade = createFacade(fakeAdapter([base, retry]));
     const task = await facade.loadTask("base");
@@ -245,7 +245,7 @@ describe("AhsTask (用户视角：lineage 组 + HEAD 链拼接)", () => {
       assistantMessage(1, "work", { timestamp: T1 }),
     ]);
     const fork = makeSession("fork", [userMessage(0, "continued", { timestamp: T2 })], {
-      lineage: { type: "forked_from", sessionId: "base", atRecordId: null },
+      lineage: { type: "rewound_from", sessionId: "base", atRecordId: null },
     });
     const facade = createFacade(fakeAdapter([base, fork]));
     const task = await facade.loadTask("fork");
@@ -267,10 +267,10 @@ describe("AhsTask (用户视角：lineage 组 + HEAD 链拼接)", () => {
         assistantMessage(1, "b1", { timestamp: T2 }),
         assistantMessage(2, "b2 abandoned", { timestamp: T2 }),
       ],
-      { lineage: { type: "forked_from", sessionId: "a", atRecordId: "r1" } },
+      { lineage: { type: "rewound_from", sessionId: "a", atRecordId: "r1" } },
     );
     const c = makeSession("c", [userMessage(0, "c0", { timestamp: T3 })], {
-      lineage: { type: "forked_from", sessionId: "b", atRecordId: "r1" },
+      lineage: { type: "rewound_from", sessionId: "b", atRecordId: "r1" },
     });
     const facade = createFacade(fakeAdapter([a, b, c]));
     const task = await facade.loadTask("a");

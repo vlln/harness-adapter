@@ -68,8 +68,8 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   replayed (verified on real data). The most recent ancestor (the second
  *   session_meta) maps to lineage, anchored at the ancestor's LAST record
  *   (the child stores only the post-fork suffix); the type is judged by the
- *   anchor record: user_message → sibling_attempt, anything else →
- *   forked_from (AC-0002-N-7). If the ancestor file is absent/empty in this
+ *   anchor record: rewound_from.
+ *   rewound_from (AC-0002-N-7). If the ancestor file is absent/empty in this
  *   store, the lineage is kept with `atRecordId: null` (anchor
  *   source-unavailable, tri-state per the ADR-0005 amendment).
  *   A sub-agent file has lineage headers too, but invocation wins.
@@ -587,7 +587,7 @@ function buildManifest(
   //   omitted (source-unavailable).
   // - Otherwise an ancestor lineage header → lineage, anchored at the
   //   ancestor's last record with the type judged by that record's role
-  //   (user_message ⇔ sibling_attempt). Ancestor absent/empty → lineage kept
+  //   (rewound_from). Ancestor absent/empty → lineage kept
   //   without an anchor.
   let invocation: Manifest["invocation"];
   if (source.parentThreadId !== undefined) {
@@ -611,14 +611,14 @@ function buildManifest(
     lineage =
       last !== undefined
         ? {
-            type: last.type === "user_message" ? "sibling_attempt" : "forked_from",
+            type: "rewound_from",
             sessionId: source.ancestorId,
             atRecordId: last.recordId,
           }
         : // Ancestor file absent/empty in this store: the anchor should exist
           // but is source-unavailable → atRecordId null (tri-state, ADR-0005
           // amendment; distinct from absent = retry-from-start).
-          { type: "forked_from", sessionId: source.ancestorId, atRecordId: null };
+          { type: "rewound_from", sessionId: source.ancestorId, atRecordId: null };
   }
 
   return {
@@ -639,6 +639,7 @@ function buildManifest(
       : {}),
     model: model ?? "unknown",
     ...(meta?.model_provider !== undefined ? { provider: meta.model_provider } : {}),
+    root: lineage === undefined && invocation === undefined,
     ...(lineage !== undefined ? { lineage } : {}),
     ...(invocation !== undefined ? { invocation } : {}),
     stats: {

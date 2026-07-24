@@ -24,10 +24,11 @@ describe("Manifest", () => {
       workspaceRoots: ["/Users/x/project"],
       git: { branch: "main", commit: "abc123", repoUrl: "git@github.com:x/y.git" },
       model: "claude-sonnet-4",
+      root: true,
       provider: "anthropic",
       title: "Fix login bug",
       titleOrigin: "generated",
-      lineage: { type: "forked_from", sessionId: "parent-1", atRecordId: "r7" },
+      lineage: { type: "rewound_from", sessionId: "parent-1", atRecordId: "r7" },
       invocation: { sessionId: "parent-1", atRecordId: "r9" },
       acpBinding: { agentId: "claude", sessionId: "native-id" },
       stats: {
@@ -47,6 +48,7 @@ describe("Manifest", () => {
       ahsVersion: "0.1.0",
       cwd: "/tmp",
       model: "gpt-5",
+      root: true,
     };
     expect(ManifestSchema.parse(minimal).sessionId).toBe("s1");
   });
@@ -109,18 +111,18 @@ describe("records", () => {
 });
 
 describe("lineage / invocation", () => {
-  it("parses a forked_from lineage with anchor", () => {
-    const lin = { type: "forked_from", sessionId: "parent-1", atRecordId: "r7" };
+  it("parses a rewound_from lineage with anchor", () => {
+    const lin = { type: "rewound_from", sessionId: "parent-1", atRecordId: "r7" };
     expect(LineageSchema.parse(lin)).toEqual(lin);
   });
 
-  it("parses a sibling_attempt lineage without anchor (retry from start)", () => {
-    const lin = { type: "sibling_attempt", sessionId: "root-1" };
+  it("parses a rewound_from lineage without anchor (retry from start)", () => {
+    const lin = { type: "rewound_from", sessionId: "root-1" };
     expect(LineageSchema.parse(lin)).toEqual(lin);
   });
 
   it("parses a lineage with atRecordId null (anchor source-unavailable, tri-state)", () => {
-    const lin = { type: "forked_from", sessionId: "parent-1", atRecordId: null };
+    const lin = { type: "rewound_from", sessionId: "parent-1", atRecordId: null };
     expect(LineageSchema.parse(lin)).toEqual(lin);
   });
 

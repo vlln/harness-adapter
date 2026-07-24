@@ -47,7 +47,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   order is recency) continues the chain, every other child subtree becomes
  *   a fork session `<sessionId>/fork/<branch-root uuid>` storing only its
  *   suffix, with lineage anchored at the branch point's first projected
- *   record (user_message ⇔ sibling_attempt, else forked_from).
+ *   record (rewound_from).
  * - Duplicate lines sharing a uuid keep their first occurrence; kept lines
  *   with an unknown/null parent mid-file re-anchor to the previous kept line
  *   (chain restarts), preserving a single root.
@@ -549,6 +549,7 @@ function buildManifest(
     cwd: firstWith("cwd") ?? runtime?.work_dir ?? "",
     ...(branch !== undefined ? { git: { branch } } : {}),
     model: model ?? "unknown",
+    root: lineage === undefined,
     ...(lineage !== undefined ? { lineage } : {}),
     stats: {
       turnCount,
@@ -713,7 +714,7 @@ export class QwenCodeAdapter implements HarnessAdapter {
           node = node.parent;
         }
         lineage = {
-          type: anchorRec?.type === "user_message" ? "sibling_attempt" : "forked_from",
+          type: "rewound_from",
           sessionId: chain.parentSessionId,
           ...(anchorRec !== undefined ? { atRecordId: anchorRec.recordId } : {}),
         };

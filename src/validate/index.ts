@@ -111,20 +111,25 @@ function checkInvocations(sessions: SessionData[], errors: InvariantError[]): vo
 /**
  * AC-0002-N-7 (cross-session): lineage anchor resolution + type judgment.
  * For every manifest with `lineage`:
- * - atRecordId tri-state (ADR-0005 amendment): null = anchor
+ * - root === true: self-contained, lineage is metadata only — all checks
+ *   are skipped.
+ * - root === false: the lineage is a structural dependency that must be
+ *   validated.
+ *   atRecordId tri-state (ADR-0005 amendment): null = anchor
  *   source-unavailable → ALL lineage checks are skipped (the parent itself
  *   may be missing from the store); absent = retry from start → only the
  *   parent-existence check applies;
- * - otherwise (anchored): the parent session must exist in the session set,
- *   atRecordId must resolve to an existing record in the parent, and the
- *   type judgment must hold: anchored record is a user_message ⇔
- *   sibling_attempt; anything else ⇔ forked_from.
+ *   - otherwise (anchored): the parent session must exist in the session set,
+ *     atRecordId must resolve to an existing record in the parent, and the
+ *     lineage type must be "rewound_from".
  */
 function checkLineages(sessions: SessionData[], errors: InvariantError[]): void {
   const byId = new Map(sessions.map((s) => [s.manifest.sessionId, s]));
   for (const session of sessions) {
     const lineage = session.manifest.lineage;
     if (lineage === undefined) continue;
+    // root === true: lineage is metadata only, skip validation.
+    if (session.manifest.root) continue;
     const sid = session.manifest.sessionId;
     if (lineage.atRecordId === null) continue; // anchor source-unavailable
     const parent = byId.get(lineage.sessionId);
@@ -146,12 +151,12 @@ function checkLineages(sessions: SessionData[], errors: InvariantError[]): void 
       });
       continue;
     }
-    const expected = anchor.type === "user_message" ? "sibling_attempt" : "forked_from";
+    const expected = "rewound_from";
     if (lineage.type !== expected) {
       errors.push({
         code: "lineage-type",
         sessionId: sid,
-        message: `lineage anchored at ${anchor.type} record ${anchor.recordId} must be "${expected}", got "${lineage.type}"`,
+        message: `lineage anchored at ${anchor.type} record ${anchor.recordId} must be "rewound_from", got "${lineage.type}"`,
       });
     }
   }

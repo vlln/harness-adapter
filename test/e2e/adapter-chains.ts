@@ -324,7 +324,7 @@ const cases: E2eCase[] = [
     name: "devin",
     makeAdapter: (tmp) => new DevinAdapter(createDevinFixture(tmp)),
     rootSessionId: "sunny-forest",
-    // sibling_attempt/fork sessions are lineage-linked, NOT invocation
+    // rewound_from/fork sessions are lineage-linked, NOT invocation
     // children — the default view folds them (HEAD chain only).
     childSessionIds: [],
     // Group HEAD by the recency heuristic is sunny-forest#root-50 (latest

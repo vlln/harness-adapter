@@ -42,7 +42,7 @@ import type { HarnessAdapter, SessionFilter } from "../../store/adapter";
  *   session storing only its suffix: sessionId `<main>/fork/<branch-root
  *   uuid>`, lineage atRecordId = the anchor node's first projected record in
  *   the parent session, type by that record's type (user_message ⇔
- *   sibling_attempt, else forked_from).
+ *   rewound_from).
  * - Fork chains may contain further branch points → nested fork sessions
  *   whose lineage points at the fork session holding the anchor.
  * - Chain restarts (kept line with parentUuid null/unknown mid-file) are
@@ -731,6 +731,7 @@ function buildManifest(
     ...(branch !== undefined ? { git: { branch } } : {}),
     model: model ?? "unknown",
     ...(title !== undefined ? { title, titleOrigin: "generated" as const } : {}),
+    root: relations?.lineage === undefined && relations?.invocation === undefined,
     ...(relations?.lineage !== undefined ? { lineage: relations.lineage } : {}),
     ...(relations?.invocation !== undefined ? { invocation: relations.invocation } : {}),
     stats: {
@@ -924,7 +925,7 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
             node = node.parent;
           }
           lineage = {
-            type: anchorRec?.type === "user_message" ? "sibling_attempt" : "forked_from",
+            type: "rewound_from",
             sessionId: chain.parentSessionId,
             ...(anchorRec !== undefined ? { atRecordId: anchorRec.recordId } : {}),
           };
@@ -991,7 +992,7 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
           : // Anchor source-unavailable (toolUseId absent or the call's
             // result never landed): agent-level parent link only (B-3).
             { sessionId: session.sessionId };
-      projected.manifest = { ...projected.manifest, invocation };
+      projected.manifest = { ...projected.manifest, invocation, root: false };
       if (anchor !== undefined && toolUseId !== undefined) {
         // Forward link: the paired tool_result carries the child sessionId.
         const parent = sessions.get(anchor.sessionId)!;

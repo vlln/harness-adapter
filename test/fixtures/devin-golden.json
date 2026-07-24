@@ -6,6 +6,7 @@
       "harness": "devin",
       "harnessVersion": "unknown",
       "model": "devin-mini",
+      "root": true,
       "sessionId": "odd-cove",
       "stats": {
         "durationMs": 60000,
@@ -34,6 +35,7 @@
       "harness": "devin",
       "harnessVersion": "unknown",
       "model": "devin-mini",
+      "root": true,
       "sessionId": "quiet-pond",
       "stats": {
         "durationMs": 0,
@@ -62,6 +64,7 @@
       "harness": "devin",
       "harnessVersion": "unknown",
       "model": "claude-test-medium",
+      "root": true,
       "sessionId": "sunny-forest",
       "stats": {
         "durationMs": 3600000,
@@ -292,9 +295,10 @@
       "lineage": {
         "atRecordId": "m-asst-15/tool_call/0",
         "sessionId": "sunny-forest",
-        "type": "forked_from"
+        "type": "rewound_from"
       },
       "model": "claude-test-medium",
+      "root": false,
       "sessionId": "sunny-forest#fork-16",
       "stats": {
         "durationMs": 3600000,
@@ -338,9 +342,10 @@
       "harnessVersion": "unknown",
       "lineage": {
         "sessionId": "sunny-forest",
-        "type": "sibling_attempt"
+        "type": "rewound_from"
       },
       "model": "claude-test-medium",
+      "root": false,
       "sessionId": "sunny-forest#root-30",
       "stats": {
         "durationMs": 3600000,
@@ -373,9 +378,10 @@
       "lineage": {
         "atRecordId": "m-sys-0",
         "sessionId": "sunny-forest",
-        "type": "forked_from"
+        "type": "rewound_from"
       },
       "model": "claude-test-medium",
+      "root": false,
       "sessionId": "sunny-forest#root-40",
       "stats": {
         "durationMs": 3600000,
@@ -420,9 +426,10 @@
       "lineage": {
         "atRecordId": "m-user-1",
         "sessionId": "sunny-forest",
-        "type": "sibling_attempt"
+        "type": "rewound_from"
       },
       "model": "claude-test-medium",
+      "root": false,
       "sessionId": "sunny-forest#root-50",
       "stats": {
         "durationMs": 3600000,
