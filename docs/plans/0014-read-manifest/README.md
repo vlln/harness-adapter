@@ -4,7 +4,7 @@
 
 | 子任务 | 状态 |
 |--------|------|
-| 01 readManifest 全 adapter 实现 + writeArchive/facade 改用 | pending |
+| 01 readManifest 全 adapter 实现 + writeArchive/facade 改用 | done |
 
 ## 概述
 

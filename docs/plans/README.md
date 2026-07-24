@@ -15,7 +15,7 @@
 | [0011](0011-qwen-adapter/) | Qwen Code 适配器 | done | 2026-07-23 |
 | [0012](0012-grok-adapter/) | Grok 适配器 | done | 2026-07-23 |
 | [0013](0013-pi-adapter/) | Pi Agent 适配器 | done | 2026-07-23 |
-| [0014](0014-read-manifest/) | readManifest 实现 | pending | 2026-07-24 |
+| [0014](0014-read-manifest/) | readManifest 实现 | done | 2026-07-24 |
 
 ## 状态说明
 
