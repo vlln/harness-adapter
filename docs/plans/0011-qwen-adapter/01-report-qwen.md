@@ -31,7 +31,13 @@ created: 2026-07-23T18:45:00Z
 
 ## 真实数据 sweep
 
-本机存在 `~/.qwen`（2 个 chat 文件、6 行 token-usage、3 行 usage_record），但按主代理时间预算指示跳过全量 sweep，验证以合成 fixture 为准。真实数据结构抽查（只读）与调研文档一致：parts {text, thought?}、无分叉点、无 functionCall 部分、token-usage 行 `source: "main" | "managed-auto-memory-extractor"`。**遗留**：发布前本地 sweep（含 invariant + usage 对账）仍应补做。
+本机存在 `~/.qwen`（2 个 chat 文件、20 行源记录：user 3 / assistant 3 / system 14；6 行 token-usage、3 行 usage_record）。只读 sweep（chat jsonl + runtime.json + usage/token-usage-2026-06.jsonl + usage_record.jsonl，临时脚本已删除）：
+
+- **session：2，record：6**（user_message 3 / assistant_message 3）
+- **zod 校验错误：0；AC 层2 不变量错误：0；幂等性错误：0**；耗时 14ms
+- harnessVersion 取自 chat 行 version 字段（0.19.1）；model deepseek-v4-flash；turnCount 2 / 1
+- usage 对账全部精确一致：record 级 usageMetadata 求和 = token-usage `source: "main"` 行求和；Manifest.stats.totalUsage = record 求和 + 归属 subagent 行（本机 subagent 行对这两个 session 无增量）；stats.durationMs = usage_record.jsonl 逐 session 求和。汇总 input=123932 / output=1036 / cacheRead=22784 / reasoning=597
+- 数据形态抽查与调研文档一致：parts 仅 {text}（6）与 {text, thought: true}（3），无 functionCall/functionResponse 部分，无分叉点（不产生 fork/lineage）；14 行 system（attribution_snapshot / file_history_snapshot / ui_telemetry）按 ADR-0001 丢弃
 
 ## 映射决策
 
