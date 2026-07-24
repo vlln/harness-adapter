@@ -546,6 +546,7 @@ function buildManifest(
   source: SessionSource,
   records: AhsRecord[],
   ctx: ProjectionContext,
+  branches?: Record<string, { parentRecordId: string | null }>,
 ): Manifest {
   const { sessionId, lines } = source;
   const metas: RawPayload[] = [];
@@ -577,24 +578,12 @@ function buildManifest(
   const git = meta?.git ?? {};
   const hasGit =
     git.branch !== undefined || git.commit_hash !== undefined || git.repository_url !== undefined;
-  const hasUsage = Object.keys(totalUsage).length > 0;
 
-  // Relations (ADR-0005):
-  // - thread_spawn → invocation back-link. The atRecordId anchor is resolved
-  //   by correlating this thread's id against the PARENT's sub_agent_activity
-  //   (agent_thread_id → event_id = the spawn_agent call_id), then finding
-  //   that tool_call in the parent's projected records. Unresolvable → anchor
-  //   omitted (source-unavailable).
-  // - Otherwise an ancestor lineage header → lineage, anchored at the
-  //   ancestor's last record with the type judged by that record's role
-  //   (rewound_from). Ancestor absent/empty → lineage kept
-  //   without an anchor.
+  // Relations (ADR-0006):
+  // - thread_spawn → invocation back-link.
   let invocation: Manifest["invocation"];
   if (source.parentThreadId !== undefined) {
     invocation = { sessionId: source.parentThreadId };
-    // Correlate against the parent's sub_agent_activity: agent_thread_id ==
-    // my sessionId → event_id == the parent's spawn_agent call_id → that
-    // tool_call's recordId is the anchor.
     const parent = ctx.sourcesById.get(source.parentThreadId);
     const spawn = parent?.spawnEvents.find((e) => e.childThreadId === sessionId);
     const parentRecords = ctx.recordsById.get(source.parentThreadId);
@@ -604,22 +593,17 @@ function buildManifest(
         : parentRecords?.find((r) => r.type === "tool_call" && r.toolCallId === spawn.callId);
     if (anchor !== undefined) invocation.atRecordId = anchor.recordId;
   }
-  let lineage: Manifest["lineage"];
-  if (source.parentThreadId === undefined && source.ancestorId !== undefined) {
-    const parentRecords = ctx.recordsById.get(source.ancestorId);
-    const last = parentRecords?.[parentRecords.length - 1];
-    lineage =
-      last !== undefined
-        ? {
-            type: "rewound_from",
-            sessionId: source.ancestorId,
-            atRecordId: last.recordId,
-          }
-        : // Ancestor file absent/empty in this store: the anchor should exist
-          // but is source-unavailable → atRecordId null (tri-state, ADR-0005
-          // amendment; distinct from absent = retry-from-start).
-          { type: "rewound_from", sessionId: source.ancestorId, atRecordId: null };
+
+  const branchRegistry: Manifest["branches"] = {
+    main: { parentBranch: null, parentRecordId: null },
+  };
+  if (branches !== undefined) {
+    for (const [name, info] of Object.entries(branches)) {
+      branchRegistry[name] = { parentBranch: "main", parentRecordId: info.parentRecordId };
+    }
   }
+  const lastRecordId = records.length > 0 ? records[records.length - 1]!.recordId : null;
+  const hasUsage = Object.keys(totalUsage).length > 0;
 
   return {
     sessionId,
@@ -639,8 +623,8 @@ function buildManifest(
       : {}),
     model: model ?? "unknown",
     ...(meta?.model_provider !== undefined ? { provider: meta.model_provider } : {}),
-    root: lineage === undefined && invocation === undefined,
-    ...(lineage !== undefined ? { lineage } : {}),
+    branches: branchRegistry,
+    HEAD: { branch: "main", recordId: lastRecordId },
     ...(invocation !== undefined ? { invocation } : {}),
     stats: {
       turnCount,
@@ -656,52 +640,6 @@ function buildManifest(
  * the smaller sessionId, deterministically). Sessions whose lineage points
  * outside the store form their own group (they are the visible head).
  */
-function computeGroupHeads(
-  sessions: SessionSource[],
-  recordsById: Map<string, AhsRecord[]>,
-): Set<string> {
-  const parent = new Map<string, string>();
-  const find = (x: string): string => {
-    let root = x;
-    while (parent.get(root) !== root) root = parent.get(root)!;
-    let cur = x;
-    while (parent.get(cur) !== cur) {
-      const next = parent.get(cur)!;
-      parent.set(cur, root);
-      cur = next;
-    }
-    return root;
-  };
-  for (const id of recordsById.keys()) parent.set(id, id);
-  for (const s of sessions) {
-    if (!recordsById.has(s.sessionId)) continue;
-    // Only the effective lineage edge groups (invocation is the other
-    // dimension and never folds): thread_spawn children carry no lineage.
-    if (s.parentThreadId !== undefined || s.ancestorId === undefined) continue;
-    if (!recordsById.has(s.ancestorId)) continue; // fork parent not in store
-    const ra = find(s.sessionId);
-    const rb = find(s.ancestorId);
-    if (ra !== rb) parent.set(ra, rb);
-  }
-  const lastTimestamp = (id: string): string => {
-    const records = recordsById.get(id)!;
-    return records[records.length - 1]!.timestamp;
-  };
-  const heads = new Map<string, string>(); // group root -> HEAD sessionId
-  for (const id of recordsById.keys()) {
-    const root = find(id);
-    const current = heads.get(root);
-    if (
-      current === undefined ||
-      lastTimestamp(id) > lastTimestamp(current) ||
-      (lastTimestamp(id) === lastTimestamp(current) && id < current)
-    ) {
-      heads.set(root, id);
-    }
-  }
-  return new Set(heads.values());
-}
-
 export class CodexAdapter implements HarnessAdapter {
   readonly harness = "codex";
   readonly capabilities = { history: "full", control: false } as const;
@@ -768,7 +706,7 @@ export class CodexAdapter implements HarnessAdapter {
   async *listSessions(filter?: SessionFilter): AsyncIterable<Manifest> {
     if (filter?.harness !== undefined && filter.harness !== this.harness) return;
     const sessions = await this.loadAll();
-    // Project every file once: manifests need cross-session anchors, and
+    // Project every file: manifests need cross-session anchors, and
     // files with zero projectable content are not AHS sessions at all.
     const recordsById = new Map<string, AhsRecord[]>();
     const sourcesById = new Map<string, SessionSource>();
@@ -783,26 +721,118 @@ export class CodexAdapter implements HarnessAdapter {
       sourcesById.set(session.sessionId, session);
     }
     const ctx: ProjectionContext = { sourcesById, recordsById };
-    const heads =
-      filter?.includeForks === true ? undefined : computeGroupHeads(sessions, recordsById);
+
+    // Build ancestor → descendants map for branch creation.
+    // Subagent sessions carry lineage headers too, but invocation wins
+    // (ADR-0006): they are separate sessions, not branches of the ancestor.
+    const descendants = new Map<string, SessionSource[]>();
+    for (const session of sessions) {
+      if (!recordsById.has(session.sessionId)) continue;
+      if (session.parentThreadId !== undefined) continue;
+      if (session.ancestorId !== undefined && recordsById.has(session.ancestorId)) {
+        const list = descendants.get(session.ancestorId);
+        if (list !== undefined) list.push(session);
+        else descendants.set(session.ancestorId, [session]);
+      }
+    }
+
+    // Track which sessions are branches (descendants) so we don't list them separately.
+    const isBranch = new Set<string>();
+    for (const list of descendants.values()) {
+      for (const s of list) isBranch.add(s.sessionId);
+    }
+
     for (const session of sessions) {
       const records = recordsById.get(session.sessionId);
       if (records === undefined) continue;
-      if (heads !== undefined && !heads.has(session.sessionId)) continue;
-      const manifest = buildManifest(session, records, ctx);
+
+      // Subagent sessions: separate sessions with invocation.
+      if (session.parentThreadId !== undefined) {
+        if (!recordsById.has(session.parentThreadId)) {
+          // Parent not in store: still list as standalone session.
+        }
+        const manifest = buildManifest(session, records, ctx);
+        if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) continue;
+        yield manifest;
+        continue;
+      }
+
+      // Branch sessions: folded into the ancestor's session, not listed separately.
+      if (isBranch.has(session.sessionId)) continue;
+
+      // Root session: build manifest with branches from descendants.
+      const branchEntries: Record<string, { parentRecordId: string | null }> = {};
+      const branchRecords = new Map<string, AhsRecord[]>();
+      const descList = descendants.get(session.sessionId) ?? [];
+      let branchIndex = 0;
+      for (const desc of descList) {
+        const descRecords = recordsById.get(desc.sessionId);
+        if (descRecords === undefined) continue;
+        branchIndex += 1;
+        const branchName = `b${String(branchIndex).padStart(3, "0")}`;
+        const parentRecords = recordsById.get(session.sessionId);
+        const lastRecordId = parentRecords !== undefined && parentRecords.length > 0
+          ? parentRecords[parentRecords.length - 1]!.recordId
+          : null;
+        branchEntries[branchName] = { parentRecordId: lastRecordId };
+        branchRecords.set(branchName, descRecords);
+      }
+      const manifest = buildManifest(session, records, ctx, branchEntries);
       if (filter?.cwd !== undefined && manifest.cwd !== filter.cwd) continue;
       yield manifest;
     }
   }
 
-  async *readRecords(sessionId: string): AsyncIterable<AhsRecord> {
-    for (const filePath of await this.walk(this.basePath)) {
-      const session = await this.load(filePath);
-      if (session.sessionId === sessionId) {
-        yield* projectRecords(session.sessionId, session.lines, session.fallbackTimestamp);
-        return;
+  async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
+    const sessions = await this.loadAll();
+    const recordsById = new Map<string, AhsRecord[]>();
+    const sourcesById = new Map<string, SessionSource>();
+    for (const session of sessions) {
+      const records = projectRecords(
+        session.sessionId,
+        session.lines,
+        session.fallbackTimestamp,
+      );
+      if (records.length === 0) continue;
+      recordsById.set(session.sessionId, records);
+      sourcesById.set(session.sessionId, session);
+    }
+
+    // Build ancestor → descendants map for branch lookup.
+    // Subagent sessions are separate, not branches.
+    const descendants = new Map<string, SessionSource[]>();
+    for (const session of sessions) {
+      if (!recordsById.has(session.sessionId)) continue;
+      if (session.parentThreadId !== undefined) continue;
+      if (session.ancestorId !== undefined && recordsById.has(session.ancestorId)) {
+        const list = descendants.get(session.ancestorId);
+        if (list !== undefined) list.push(session);
+        else descendants.set(session.ancestorId, [session]);
       }
     }
+
+    // Check if the requested sessionId is a root session.
+    const source = sourcesById.get(sessionId);
+    if (source !== undefined) {
+      const targetBranch = branchName ?? "main";
+      if (targetBranch === "main") {
+        yield* recordsById.get(sessionId)!;
+        return;
+      }
+      // Branch lookup: find the descendant file with this branch name.
+      const descList = descendants.get(sessionId) ?? [];
+      let branchIndex = 0;
+      for (const desc of descList) {
+        branchIndex += 1;
+        const bName = `b${String(branchIndex).padStart(3, "0")}`;
+        if (bName === targetBranch) {
+          yield* recordsById.get(desc.sessionId)!;
+          return;
+        }
+      }
+      throw new Error(`branch not found: ${targetBranch}`);
+    }
+
     throw new Error(`session not found: ${sessionId}`);
   }
 }

@@ -1,11 +1,20 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "aa000007-0000-4000-8000-000000000007"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/tmp/st",
     "harness": "qwen-code",
     "harnessVersion": "0.19.1",
     "model": "deepseek-v4-flash",
-    "root": true,
     "sessionId": "a1111111-1111-4111-8111-111111111111",
     "stats": {
       "durationMs": 32073,

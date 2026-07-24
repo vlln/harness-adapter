@@ -1,6 +1,16 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "eeee0006-0000-4000-8000-000000000006"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/Users/test/Project/demo",
     "git": {
       "branch": "feature/multi-tool"
@@ -8,7 +18,6 @@
     "harness": "claude-code",
     "harnessVersion": "2.1.206",
     "model": "claude-opus-4-1",
-    "root": true,
     "sessionId": "44444444-4444-4444-8444-444444444444",
     "stats": {
       "totalUsage": {

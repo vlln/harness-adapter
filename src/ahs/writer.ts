@@ -6,17 +6,17 @@ import type { Manifest } from "../schema/manifest";
 import type { BlobRef } from "../schema/blob";
 import type { AhsRecord } from "../schema/record";
 import type { HarnessAdapter, SessionFilter } from "../store/adapter";
-import { buildRelations, writeRelations, type RelationSession } from "./relations";
 
 /**
- * AHS archive writer (spec section "磁盘布局与 blob 外置").
+ * AHS archive writer (spec section "磁盘布局与 blob 外置", ADR-0006
+ * multi-branch layout).
  *
  * Layout:
- *   <outDir>/<sanitized-sessionId>/manifest.json   sorted-keys JSON
- *   <outDir>/<sanitized-sessionId>/records.jsonl   one record per line, seq order
+ *   <outDir>/<sanitized-sessionId>/manifest.json        sorted-keys JSON
+ *   <outDir>/<sanitized-sessionId>/records/<branch>.jsonl  one file per branch, seq order
  *   <outDir>/<sanitized-sessionId>/blobs/sha256-<hex>
  *
- * Determinism / idempotency: manifest.json and each records.jsonl line use
+ * Determinism / idempotency: manifest.json and each records JSONL line use
  * recursively sorted object keys; records are written in seq order; blobs
  * are content-addressed and skipped when already present. Re-exporting over
  * the same outDir yields byte-identical files.
@@ -147,51 +147,67 @@ export interface WriteArchiveResult {
 }
 
 /**
- * Write one already-collected session (manifest + seq-sorted records).
+ * Write one already-collected session (manifest + per-branch records).
  * Shared by writeArchive and exportSessions.
  */
 async function writeSessionArchive(
   manifest: Manifest,
-  records: AhsRecord[],
+  branchRecords: Map<string, AhsRecord[]>,
   outDir: string,
 ): Promise<WriteArchiveResult> {
   const dir = path.join(outDir, sanitizeSessionId(manifest.sessionId));
+  const recordsDir = path.join(dir, "records");
   const blobsDir = path.join(dir, "blobs");
+  await mkdir(recordsDir, { recursive: true });
   await mkdir(blobsDir, { recursive: true });
 
-  const lines: string[] = [];
+  let totalRecordCount = 0;
   let blobCount = 0;
-  for (const rec of records) {
-    const { record, blobs } = externalizeRecord(rec);
-    for (const blob of blobs) {
-      const blobPath = path.join(blobsDir, `sha256-${blob.sha256}`);
-      try {
-        // Content-addressed: an existing file holds the same bytes — skip.
-        await readFile(blobPath);
-      } catch {
-        await writeFile(blobPath, blob.content);
-        blobCount += 1;
+
+  for (const [branchName, records] of branchRecords) {
+    const lines: string[] = [];
+    for (const rec of records) {
+      const { record, blobs } = externalizeRecord(rec);
+      for (const blob of blobs) {
+        const blobPath = path.join(blobsDir, `sha256-${blob.sha256}`);
+        try {
+          // Content-addressed: an existing file holds the same bytes — skip.
+          await readFile(blobPath);
+        } catch {
+          await writeFile(blobPath, blob.content);
+          blobCount += 1;
+        }
       }
+      lines.push(stableStringify(record));
     }
-    lines.push(stableStringify(record));
+    await writeFile(
+      path.join(recordsDir, `${branchName}.jsonl`),
+      lines.join("\n") + (lines.length > 0 ? "\n" : ""),
+      "utf8",
+    );
+    totalRecordCount += records.length;
   }
 
   await writeFile(path.join(dir, "manifest.json"), `${stableStringify(manifest, 2)}\n`, "utf8");
-  await writeFile(
-    path.join(dir, "records.jsonl"),
-    lines.join("\n") + (lines.length > 0 ? "\n" : ""),
-    "utf8",
-  );
 
-  return { sessionId: manifest.sessionId, dir, recordCount: records.length, blobCount };
+  return { sessionId: manifest.sessionId, dir, recordCount: totalRecordCount, blobCount };
 }
 
-/** Read one session's records from the adapter, seq-sorted. */
-async function collectRecords(adapter: HarnessAdapter, sessionId: string): Promise<AhsRecord[]> {
-  const records: AhsRecord[] = [];
-  for await (const rec of adapter.readRecords(sessionId)) records.push(rec);
-  records.sort((a, b) => a.seq - b.seq);
-  return records;
+/** Read all branch records from the adapter, seq-sorted per branch. */
+async function collectAllBranchRecords(
+  adapter: HarnessAdapter,
+  manifest: Manifest,
+): Promise<Map<string, AhsRecord[]>> {
+  const branchRecords = new Map<string, AhsRecord[]>();
+  for (const branchName of Object.keys(manifest.branches)) {
+    const records: AhsRecord[] = [];
+    for await (const rec of adapter.readRecords(manifest.sessionId, branchName)) {
+      records.push(rec);
+    }
+    records.sort((a, b) => a.seq - b.seq);
+    branchRecords.set(branchName, records);
+  }
+  return branchRecords;
 }
 
 /**
@@ -204,7 +220,7 @@ export async function writeArchive(
   outDir: string,
 ): Promise<WriteArchiveResult> {
   let manifest: Manifest | undefined;
-  // Storage view: look up among ALL sessions, lineage descendants included.
+  // Storage view: look up among ALL sessions, fork descendants included.
   for await (const m of adapter.listSessions({ includeForks: true })) {
     if (m.sessionId === sessionId) {
       manifest = m;
@@ -212,14 +228,16 @@ export async function writeArchive(
     }
   }
   if (manifest === undefined) throw new Error(`session not found: ${sessionId}`);
-  return writeSessionArchive(manifest, await collectRecords(adapter, sessionId), outDir);
+  const branchRecords = await collectAllBranchRecords(adapter, manifest);
+  return writeSessionArchive(manifest, branchRecords, outDir);
 }
 
 export interface ExportOptions {
   /**
    * Also derive and write relations.jsonl at the archive root (default
-   * true). Pure derivation (AR-005): the file can be deleted and rebuilt
-   * from the archived sessions at any time.
+   * false). Relations are purely derived (AR-005) and can be rebuilt from
+   * the archived sessions at any time. In ADR-0006, relations.jsonl is
+   * retired — all relation data is available directly from manifests.
    */
   relations?: boolean;
 }
@@ -234,15 +252,26 @@ export async function exportSessions(
   // An archive is the storage view: default to the FULL set (forks included);
   // a caller-supplied filter may still narrow it down.
   const effective: SessionFilter = { includeForks: true, ...filter };
-  const sessions: RelationSession[] = [];
-  for await (const manifest of adapter.listSessions(effective)) {
-    sessions.push({ manifest, records: await collectRecords(adapter, manifest.sessionId) });
-  }
   const results: WriteArchiveResult[] = [];
-  for (const session of sessions) {
-    results.push(await writeSessionArchive(session.manifest, session.records, outDir));
+  for await (const manifest of adapter.listSessions(effective)) {
+    const branchRecords = await collectAllBranchRecords(adapter, manifest);
+    results.push(await writeSessionArchive(manifest, branchRecords, outDir));
   }
-  if (options?.relations !== false) {
+  if (options?.relations === true) {
+    // relations.jsonl is retired in ADR-0006; opt-in only for backward compat.
+    const { buildRelations, writeRelations } = await import("./relations");
+    const { readManifest, readRecords } = await import("./reader");
+    const sessions: import("./relations").RelationSession[] = [];
+    for (const result of results) {
+      const manifest = await readManifest(result.dir);
+      const records: AhsRecord[] = [];
+      for (const branchName of Object.keys(manifest.branches)) {
+        for await (const rec of readRecords(result.dir, branchName)) {
+          records.push(rec);
+        }
+      }
+      sessions.push({ manifest, records });
+    }
     await writeRelations(outDir, buildRelations(sessions));
   }
   return results;

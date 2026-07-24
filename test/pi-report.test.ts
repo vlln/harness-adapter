@@ -24,8 +24,8 @@ const fixturesDir = path.join(
 );
 const SESSION_B = "019f4000-bbbb-7000-8000-0000000000b2";
 const SESSION_C = "019f4000-cccc-7000-8000-0000000000c3";
-const FORK_EDIT = `${SESSION_C}/fork/cc000005`;
-const FORK_RETRY = `${SESSION_C}/fork/cc00000a`;
+const BRANCH_EDIT = "b001";
+const BRANCH_RETRY = "b002";
 
 const tmp = mkdtempSync(path.join(tmpdir(), "pi-report-test-"));
 afterAll(() => {
@@ -79,9 +79,9 @@ describe("pi archive + ahs-report (AC-0004-N-1)", () => {
     // main: input 100+160+180, output 10+16+18
     expect(report.totalUsage).toMatchObject({ inputTokens: 440, outputTokens: 44 });
 
-    expect(report.alternates.sort()).toEqual([SESSION_C, FORK_EDIT, FORK_RETRY].sort());
+    expect(report.alternates.sort()).toEqual([BRANCH_EDIT, BRANCH_RETRY, "main"].sort());
     expect(report.text).toContain("== alternate versions");
-    expect(report.text).toContain(FORK_EDIT);
-    expect(report.text).toContain(FORK_RETRY);
+    expect(report.text).toContain(BRANCH_EDIT);
+    expect(report.text).toContain(BRANCH_RETRY);
   });
 });

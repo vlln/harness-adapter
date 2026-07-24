@@ -1,13 +1,22 @@
 [
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "11111111-2222-4333-8444-555555555555:14"
+      },
       "ahsVersion": "0.1.0",
+      "branches": {
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
+      },
       "cwd": "",
       "harness": "kimi-code",
       "harnessVersion": "unknown",
       "model": "moonshot/kimi-k2",
       "provider": "moonshot",
-      "root": true,
       "sessionId": "11111111-2222-4333-8444-555555555555",
       "stats": {
         "totalUsage": {
@@ -205,7 +214,17 @@
   },
   {
     "manifest": {
+      "HEAD": {
+        "branch": "main",
+        "recordId": "11111111-2222-4333-8444-555555555555/agent-0:1"
+      },
       "ahsVersion": "0.1.0",
+      "branches": {
+        "main": {
+          "parentBranch": null,
+          "parentRecordId": null
+        }
+      },
       "cwd": "",
       "harness": "kimi-code",
       "harnessVersion": "unknown",
@@ -214,7 +233,6 @@
       },
       "model": "moonshot/kimi-k2",
       "provider": "moonshot",
-      "root": false,
       "sessionId": "11111111-2222-4333-8444-555555555555/agent-0",
       "stats": {
         "totalUsage": {

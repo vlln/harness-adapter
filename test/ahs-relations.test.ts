@@ -1,10 +1,7 @@
 /**
- * Derived relations store tests (ADR-0005 §6, AR-005):
- * - edges derived from manifest back-links + tool_result.sessionId forward
- *   links (deduped), both dimensions navigable both ways;
- * - lineage groups (union-find) + HEAD pointer heuristic (most recently
- *   updated, deterministic tie-break);
- * - fork-of-subagent transitive invocation closure;
+ * Derived relations store tests (ADR-0006):
+ * - invocation edges derived from manifest back-links + tool_result.sessionId
+ *   forward links (deduped), both directions navigable;
  * - relations.jsonl round-trip and pure derivability (deleting the file
  *   loses nothing: a rebuild is byte-identical).
  */
@@ -18,9 +15,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   buildRelations,
   effectiveInvocation,
-  groupOfSession,
   invocationChildEdges,
-  lineageParentEdge,
   readRelations,
   RELATIONS_FILENAME,
   writeRelations,
@@ -67,26 +62,26 @@ function fixtureSessions(): SessionData[] {
   const subFork = makeSession(
     "sub/fork-1",
     [assistantMessage(0, "fork direction", { timestamp: T2 })],
-    { lineage: { type: "rewound_from", sessionId: "sub", atRecordId: "sub-r1" } },
+    { lineage: { type: "forked_from", sessionId: "sub", atRecordId: "sub-r1" } },
   );
   // Nested fork: transitive inheritance across two lineage hops.
   const subFork2 = makeSession(
     "sub/fork-2",
     [assistantMessage(0, "nested fork", { timestamp: T3 })],
-    { lineage: { type: "rewound_from", sessionId: "sub/fork-1" } },
+    { lineage: { type: "forked_from", sessionId: "sub/fork-1" } },
   );
   // Independent lineage group for the HEAD heuristic: beta updated after
   // alpha; gamma has the same timestamp as beta (tie → smaller id wins).
   const alpha = makeSession("alpha", [userMessage(0, "v1", { timestamp: T1 })]);
   const beta = makeSession("beta", [userMessage(0, "v2", { timestamp: T3 })], {
-    lineage: { type: "rewound_from", sessionId: "alpha", atRecordId: "r0" },
+    lineage: { type: "forked_from", sessionId: "alpha", atRecordId: "r0" },
   });
   const gamma = makeSession("gamma", [userMessage(0, "v3", { timestamp: T3 })], {
-    lineage: { type: "rewound_from", sessionId: "alpha", atRecordId: "r0" },
+    lineage: { type: "forked_from", sessionId: "alpha", atRecordId: "r0" },
   });
   // A dangling back-link (parent not archived): no edge, singleton group.
   const orphan = makeSession("orphan", [userMessage(0, "alone", { timestamp: T1 })], {
-    lineage: { type: "rewound_from", sessionId: "not-archived" },
+    lineage: { type: "forked_from", sessionId: "not-archived" },
     invocation: { sessionId: "not-archived" },
   });
   return [root, sub, subFork, subFork2, alpha, beta, gamma, orphan];
@@ -117,80 +112,10 @@ describe("buildRelations", () => {
     });
   });
 
-  it("derives lineage edges with the type judgment attached", () => {
-    const lineage = relations.edges.filter((e) => e.type === "lineage");
-    expect(lineage).toContainEqual({
-      type: "lineage",
-      from: "sub",
-      to: "sub/fork-1",
-      atRecordId: "sub-r1",
-      lineageType: "rewound_from",
-    });
-    expect(lineage).toContainEqual({
-      type: "lineage",
-      from: "sub/fork-1",
-      to: "sub/fork-2",
-      lineageType: "rewound_from",
-    });
-    expect(lineageParentEdge(relations, "sub/fork-1")?.from).toBe("sub");
-  });
-
-  it("preserves the atRecordId tri-state on lineage edges (null = source-unavailable)", () => {
-    const sessions: SessionData[] = [
-      makeSession("p", [userMessage(0, "q", { timestamp: T1 })]),
-      makeSession("f-null", [userMessage(0, "v2", { timestamp: T2 })], {
-        lineage: { type: "rewound_from", sessionId: "p", atRecordId: null },
-      }),
-      makeSession("f-retry", [userMessage(0, "v3", { timestamp: T2 })], {
-        lineage: { type: "rewound_from", sessionId: "p" },
-      }),
-    ];
-    const rel = buildRelations(sessions);
-    // null (source-unavailable) is preserved, distinct from absent (retry-from-start).
-    expect(lineageParentEdge(rel, "f-null")).toMatchObject({ atRecordId: null });
-    expect(lineageParentEdge(rel, "f-retry")).not.toHaveProperty("atRecordId");
-  });
-
-  it("groups lineage-connected sessions (union-find) and picks HEAD by recency", () => {
-    const subGroup = groupOfSession(relations, "sub/fork-2");
-    expect(subGroup?.groupId).toBe("sub");
-    expect(subGroup?.members).toEqual(["sub", "sub/fork-1", "sub/fork-2"]);
-    // sub/fork-2 has the latest last-record timestamp (T3).
-    expect(subGroup?.mainSessionId).toBe("sub/fork-2");
-
-    const alphaGroup = groupOfSession(relations, "gamma");
-    expect(alphaGroup?.members).toEqual(["alpha", "beta", "gamma"]);
-    // beta and gamma tie at T3 → deterministic tie-break: smaller sessionId.
-    expect(alphaGroup?.mainSessionId).toBe("beta");
-
-    // Root has no lineage: singleton group, its own HEAD.
-    const rootGroup = groupOfSession(relations, "root");
-    expect(rootGroup?.members).toEqual(["root"]);
-    expect(rootGroup?.mainSessionId).toBe("root");
-  });
-
   it("drops edges whose endpoints are not archived (partial archives)", () => {
     expect(relations.edges.some((e) => e.from === "not-archived" || e.to === "not-archived")).toBe(
       false,
     );
-    expect(groupOfSession(relations, "orphan")?.members).toEqual(["orphan"]);
-  });
-
-  it("computes the fork-of-subagent transitive closure (ADR-0005 §2)", () => {
-    // The fork itself carries no invocation — the closure inherits it.
-    expect(effectiveInvocation(relations, "sub/fork-1")).toEqual({
-      sessionId: "root",
-      atRecordId: "root-call",
-    });
-    // Transitively across two lineage hops.
-    expect(effectiveInvocation(relations, "sub/fork-2")).toEqual({
-      sessionId: "root",
-      atRecordId: "root-call",
-    });
-    const closure = relations.closures.find((c) => c.sessionId === "sub/fork-2");
-    expect(closure?.inheritedFrom).toBe("sub");
-    // Directly invoked sessions get no closure entry.
-    expect(relations.closures.some((c) => c.sessionId === "sub")).toBe(false);
   });
 });
 
@@ -199,7 +124,7 @@ describe("relations.jsonl (write/read)", () => {
     const outDir = path.join(tmp, "round-trip");
     const sessions = materialize(fixtureSessions());
     const adapter = fakeAdapter(sessions);
-    await exportSessions(adapter, outDir);
+    await exportSessions(adapter, outDir, undefined, { relations: true });
 
     const original = buildRelations(sessions);
     const readBack = await readRelations(outDir);
@@ -209,7 +134,7 @@ describe("relations.jsonl (write/read)", () => {
   it("is purely derived (AR-005): deleting the file loses nothing — rebuild is byte-identical", async () => {
     const outDir = path.join(tmp, "derived");
     const sessions = materialize(fixtureSessions());
-    await exportSessions(fakeAdapter(sessions), outDir);
+    await exportSessions(fakeAdapter(sessions), outDir, undefined, { relations: true });
 
     const file = path.join(outDir, RELATIONS_FILENAME);
     const firstBytes = readFileSync(file, "utf8");
@@ -240,15 +165,15 @@ describe("relations.jsonl (write/read)", () => {
     expect(edgeLine.indexOf('"kind"')).toBeLessThan(edgeLine.indexOf('"to"'));
   });
 
-  it("exportSessions writes relations.jsonl by default; opt-out skips it", async () => {
-    const withRelations = path.join(tmp, "opt-default");
-    await exportSessions(fakeAdapter(materialize(fixtureSessions())), withRelations);
+  it("exportSessions writes relations.jsonl when opted in; skips by default", async () => {
+    const withRelations = path.join(tmp, "opt-in");
+    await exportSessions(fakeAdapter(materialize(fixtureSessions())), withRelations, undefined, {
+      relations: true,
+    });
     expect(() => readFileSync(path.join(withRelations, RELATIONS_FILENAME), "utf8")).not.toThrow();
 
     const without = path.join(tmp, "opt-out");
-    await exportSessions(fakeAdapter(materialize(fixtureSessions())), without, undefined, {
-      relations: false,
-    });
+    await exportSessions(fakeAdapter(materialize(fixtureSessions())), without);
     expect(() => readFileSync(path.join(without, RELATIONS_FILENAME), "utf8")).toThrow();
   });
 });

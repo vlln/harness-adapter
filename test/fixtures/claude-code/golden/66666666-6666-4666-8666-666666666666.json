@@ -1,6 +1,24 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "eeee0011-0000-4000-8000-000000000011"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "b001": {
+        "parentBranch": "main",
+        "parentRecordId": "eeee0002-0000-4000-8000-000000000002"
+      },
+      "b002": {
+        "parentBranch": "main",
+        "parentRecordId": "eeee0009-0000-4000-8000-000000000009"
+      },
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/Users/test/Project/demo",
     "git": {
       "branch": "main"
@@ -8,7 +26,6 @@
     "harness": "claude-code",
     "harnessVersion": "2.1.207",
     "model": "claude-opus-4-1",
-    "root": true,
     "sessionId": "66666666-6666-4666-8666-666666666666",
     "stats": {
       "totalUsage": {

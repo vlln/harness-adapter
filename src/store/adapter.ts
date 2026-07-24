@@ -5,7 +5,7 @@ import type { AhsRecord } from "../schema/record";
 export interface SessionFilter {
   harness?: string;
   cwd?: string;
-  /** Include lineage descendants (forks/attempts). Default false: only group heads. */
+  /** Include fork sessions (lineage descendants). Default false: only root sessions. */
   includeForks?: boolean;
 }
 
@@ -30,5 +30,10 @@ export interface HarnessAdapter {
 
   listSessions(filter?: SessionFilter): AsyncIterable<Manifest>;
 
-  readRecords(sessionId: string): AsyncIterable<AhsRecord>;
+  /**
+   * Read records for a session branch. Defaults to the HEAD branch when
+   * branchName is omitted. Records are returned in seq order within the
+   * branch.
+   */
+  readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord>;
 }

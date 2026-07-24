@@ -1,6 +1,16 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "dddd0005-0000-4000-8000-000000000005"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/Users/test/Project/demo",
     "git": {
       "branch": "feature/parser"
@@ -12,7 +22,6 @@
       "sessionId": "33333333-3333-4333-8333-333333333333"
     },
     "model": "claude-sonnet-4-5",
-    "root": false,
     "sessionId": "def456",
     "stats": {
       "totalUsage": {

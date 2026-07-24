@@ -2,19 +2,36 @@ import { z } from "zod";
 import { InvocationSchema, LineageSchema } from "./relation";
 import { UsageSchema } from "./usage";
 
+/** Branch descriptor within a session (ADR-0006). */
+export const BranchSchema = z.object({
+  /** Parent branch name; null = root branch (no parent). */
+  parentBranch: z.string().nullable(),
+  /** Fork point in the parent branch's records; null = from the start of the branch. */
+  parentRecordId: z.string().nullable(),
+});
+
+export type Branch = z.infer<typeof BranchSchema>;
+
+/** HEAD pointer: the current active node in the session tree. */
+export const HeadSchema = z.object({
+  branch: z.string(),
+  /** recordId of the current leaf; null = branch has no records yet. */
+  recordId: z.string().nullable(),
+});
+
+export type Head = z.infer<typeof HeadSchema>;
+
 /**
- * Session-level manifest: one per session.
- * stats aggregates this session only (exclusive of child sessions);
- * cross-session aggregation is left to consumers walking the relation graph.
+ * Session-level manifest: one per session directory (ADR-0006).
+ *
+ * A session contains one or more branches (rewind/retry = intra-session
+ * branch; fork = new session directory). stats aggregates all branches.
  */
 export const ManifestSchema = z.object({
-  /** Kept as-is (ULID / UUID / slug); not forced to UUID. */
   sessionId: z.string(),
   harness: z.string(),
   harnessVersion: z.string(),
-  /** AHS spec version. */
   ahsVersion: z.string(),
-  /** Agent profile declaration; omitted for harnesses without a profile mechanism. */
   profile: z.string().optional(),
   cwd: z.string(),
   workspaceRoots: z.array(z.string()).optional(),
@@ -25,20 +42,20 @@ export const ManifestSchema = z.object({
       repoUrl: z.string().optional(),
     })
     .optional(),
-  /** Primary model; mid-session switches are per-record overrides. */
   model: z.string(),
   provider: z.string().optional(),
   title: z.string().optional(),
   titleOrigin: z.enum(["generated", "custom"]).optional(),
-  /** History-dimension back-link (fork source); see ADR-0005. */
+  /** Reasoning depth (session-level config; mid-session switches are per-record). */
+  thinking: z.string().optional(),
+  /** Branch registry. "main" is always present. */
+  branches: z.record(z.string(), BranchSchema),
+  /** Current active node. */
+  HEAD: HeadSchema,
+  /** Fork source metadata (optional; omitted when the harness records no source). */
   lineage: LineageSchema.optional(),
-  /** Call-dimension back-link (invoking session); see ADR-0005. */
+  /** Call-dimension back-link (subagent). */
   invocation: InvocationSchema.optional(),
-  /** true = self-contained (all history in this session);
-   *  false = must walk lineage/invocation to reconstruct full history.
-   *  Original sessions and forks: true. Rewinds and subagents: false. */
-  root: z.boolean(),
-  /** Binding back to the native session for resumption via ACP. */
   acpBinding: z
     .object({
       agentId: z.string(),

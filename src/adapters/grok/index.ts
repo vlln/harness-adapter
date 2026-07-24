@@ -362,6 +362,8 @@ function buildManifest(
       ? signals.sessionDurationSeconds * 1000
       : undefined;
 
+  const lastRecordId = records.length > 0 ? records[records.length - 1]!.recordId : null;
+
   return {
     sessionId: source.sessionId,
     harness: "grok",
@@ -369,8 +371,9 @@ function buildManifest(
     ahsVersion: AHS_VERSION,
     cwd,
     model: summary.current_model_id ?? firstModel ?? "unknown",
-    root: true,
     provider: "xai",
+    branches: { main: { parentBranch: null, parentRecordId: null } },
+    HEAD: { branch: "main", recordId: lastRecordId },
     ...(summary.generated_title !== undefined
       ? { title: summary.generated_title, titleOrigin: "generated" as const }
       : {}),
@@ -472,7 +475,7 @@ export class GrokAdapter implements HarnessAdapter {
     }
   }
 
-  async *readRecords(sessionId: string): AsyncIterable<AhsRecord> {
+  async *readRecords(sessionId: string, _branchName?: string): AsyncIterable<AhsRecord> {
     for (const session of await this.discover()) {
       if (session.sessionId === sessionId) {
         const fallback = session.summary.created_at ?? EPOCH;

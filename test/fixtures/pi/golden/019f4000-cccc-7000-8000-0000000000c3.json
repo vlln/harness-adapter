@@ -1,12 +1,29 @@
 {
   "manifest": {
+    "HEAD": {
+      "branch": "main",
+      "recordId": "cc00000b"
+    },
     "ahsVersion": "0.1.0",
+    "branches": {
+      "b001": {
+        "parentBranch": "main",
+        "parentRecordId": "cc000004"
+      },
+      "b002": {
+        "parentBranch": "main",
+        "parentRecordId": "cc000009"
+      },
+      "main": {
+        "parentBranch": null,
+        "parentRecordId": null
+      }
+    },
     "cwd": "/Users/test/Project/demo",
     "harness": "pi",
     "harnessVersion": "3",
     "model": "DeepSeek-V4-Flash",
     "provider": "ollama",
-    "root": true,
     "sessionId": "019f4000-cccc-7000-8000-0000000000c3",
     "stats": {
       "totalUsage": {

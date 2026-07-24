@@ -2,7 +2,7 @@
 title: ADR-0005 线性 Session 与两维关系（部分 supersede ADR-0002）
 description: Session 一律线性（删 tree/parentId）；fork/rewind 一律成 session（lineage + atRecordId 锚点）；invocation 两链（tool_result.sessionId 正链 + manifest 回链）；mainness 去 session 化（组级 HEAD 指针）；Task 为用户视角派生概念。
 type: adr
-status: accepted
+status: superseded
 created: 2026-07-23T05:18:21Z
 ---
 

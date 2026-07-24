@@ -6,9 +6,9 @@
  * Coverage: projection mapping table row by row, XOR tool pairing,
  * interrupted → tool item without result, state records → events(),
  * usage sums, children() recursion + silent skip of undiscoverable
- * children, Task group/HEAD/stitching (prefix cut / null anchor /
- * retry-from-start / chained forks), SessionNotFoundError, openHarness
- * registry.
+ * children, Task intra-session HEAD chain stitching (prefix cut /
+ * null parentRecordId / chained branches), SessionNotFoundError,
+ * openHarness registry.
  */
 
 import { describe, expect, it } from "vitest";
@@ -186,27 +186,36 @@ describe("children() (invocation 直接子 session)", () => {
   });
 });
 
-describe("AhsTask (用户视角：lineage 组 + HEAD 链拼接)", () => {
-  it("stitches the HEAD chain: parent prefix cut at atRecordId + fork suffix, no duplicated prefix", async () => {
-    const base = makeSession("base", [
-      userMessage(0, "build it", { timestamp: T1 }),
-      assistantMessage(1, "first attempt", { timestamp: T1 }),
-      assistantMessage(2, "abandoned direction", { timestamp: T1 }),
-    ]);
-    const fork = makeSession(
-      "fork",
+describe("AhsTask (用户视角：intra-session HEAD chain stitching)", () => {
+  it("stitches the HEAD chain: parent prefix cut at parentRecordId + fork suffix, no duplicated prefix", async () => {
+    // A session with two branches: main (base) and fork-1 (forked from main at r1)
+    const session = makeSession(
+      "sess-1",
       [
-        userMessage(0, "new direction", { timestamp: T2 }),
-        assistantMessage(1, "fork work", { timestamp: T2 }),
+        userMessage(0, "build it", { timestamp: T1, recordId: "r0" }),
+        assistantMessage(1, "first attempt", { timestamp: T1, recordId: "r1" }),
+        assistantMessage(2, "abandoned direction", { timestamp: T1, recordId: "r2" }),
       ],
-      { lineage: { type: "rewound_from", sessionId: "base", atRecordId: "r1" } },
+      {
+        branches: {
+          main: { parentBranch: null, parentRecordId: null },
+          "fork-1": { parentBranch: "main", parentRecordId: "r1" },
+        },
+        HEAD: { branch: "fork-1", recordId: "r4" },
+      },
+      {
+        "fork-1": [
+          userMessage(0, "new direction", { timestamp: T2, recordId: "r3" }),
+          assistantMessage(1, "fork work", { timestamp: T2, recordId: "r4" }),
+        ],
+      },
     );
-    const facade = createFacade(fakeAdapter([base, fork]));
+    const facade = createFacade(fakeAdapter([session]));
 
-    const task = await facade.loadTask("base");
-    expect(task.groupId).toBe("base");
-    expect(task.members.map((m) => m.manifest.sessionId)).toEqual(["base", "fork"]);
-    expect(task.head.manifest.sessionId).toBe("fork"); // recency heuristic
+    const task = await facade.loadTask("sess-1");
+    expect(task.sessionId).toBe("sess-1");
+    expect(task.branches).toEqual(["fork-1", "main"]);
+    expect(task.head.manifest.sessionId).toBe("sess-1");
 
     const items = task.messages();
     expect(kinds(items)).toEqual(["user", "assistant", "user", "assistant"]);
@@ -219,63 +228,64 @@ describe("AhsTask (用户视角：lineage 组 + HEAD 链拼接)", () => {
     expect(texts).not.toContain("abandoned direction");
   });
 
-  it("retry-from-start (atRecordId absent): the parent contributes nothing", async () => {
-    const base = makeSession("base", [userMessage(0, "the prompt", { timestamp: T1 })]);
-    const retry = makeSession(
-      "retry",
+  it("null parentRecordId: the parent branch slice is kept in full", async () => {
+    const session = makeSession(
+      "sess-1",
       [
-        userMessage(0, "the prompt", { timestamp: T2 }),
-        assistantMessage(1, "retry answer", { timestamp: T2 }),
+        userMessage(0, "build it", { timestamp: T1, recordId: "r0" }),
+        assistantMessage(1, "work", { timestamp: T1, recordId: "r1" }),
       ],
-      { lineage: { type: "rewound_from", sessionId: "base" } },
+      {
+        branches: {
+          main: { parentBranch: null, parentRecordId: null },
+          "fork-1": { parentBranch: "main", parentRecordId: null },
+        },
+        HEAD: { branch: "fork-1", recordId: "r3" },
+      },
+      {
+        "fork-1": [
+          userMessage(0, "continued", { timestamp: T2, recordId: "r2" }),
+          assistantMessage(1, "more work", { timestamp: T2, recordId: "r3" }),
+        ],
+      },
     );
-    const facade = createFacade(fakeAdapter([base, retry]));
-    const task = await facade.loadTask("base");
-    expect(task.head.manifest.sessionId).toBe("retry");
+    const facade = createFacade(fakeAdapter([session]));
+    const task = await facade.loadTask("sess-1");
     const texts = task.messages().map((i) =>
       i.kind === "tool" ? "" : i.content.map((b) => (b.type === "text" ? b.text : "")).join(""),
     );
-    // The fork carries its own prompt copy: exactly one "the prompt".
-    expect(texts).toEqual(["the prompt", "retry answer"]);
+    expect(texts).toEqual(["build it", "work", "continued", "more work"]);
   });
 
-  it("null atRecordId (anchor source-unavailable): the parent slice is kept in full", async () => {
-    const base = makeSession("base", [
-      userMessage(0, "build it", { timestamp: T1 }),
-      assistantMessage(1, "work", { timestamp: T1 }),
-    ]);
-    const fork = makeSession("fork", [userMessage(0, "continued", { timestamp: T2 })], {
-      lineage: { type: "rewound_from", sessionId: "base", atRecordId: null },
-    });
-    const facade = createFacade(fakeAdapter([base, fork]));
-    const task = await facade.loadTask("fork");
-    const texts = task.messages().map((i) =>
-      i.kind === "tool" ? "" : i.content.map((b) => (b.type === "text" ? b.text : "")).join(""),
-    );
-    expect(texts).toEqual(["build it", "work", "continued"]);
-  });
-
-  it("chained forks (a → b → c): each segment cut at the next segment's anchor", async () => {
-    const a = makeSession("a", [
-      userMessage(0, "a0", { timestamp: T1 }),
-      assistantMessage(1, "a1", { timestamp: T1 }),
-    ]);
-    const b = makeSession(
-      "b",
+  it("chained branches (main → fork-1 → fork-2): each segment cut at the next segment's anchor", async () => {
+    const session = makeSession(
+      "sess-1",
       [
-        userMessage(0, "b0", { timestamp: T2 }),
-        assistantMessage(1, "b1", { timestamp: T2 }),
-        assistantMessage(2, "b2 abandoned", { timestamp: T2 }),
+        userMessage(0, "a0", { timestamp: T1, recordId: "ra0" }),
+        assistantMessage(1, "a1", { timestamp: T1, recordId: "ra1" }),
       ],
-      { lineage: { type: "rewound_from", sessionId: "a", atRecordId: "r1" } },
+      {
+        branches: {
+          main: { parentBranch: null, parentRecordId: null },
+          "fork-1": { parentBranch: "main", parentRecordId: "ra1" },
+          "fork-2": { parentBranch: "fork-1", parentRecordId: "rb1" },
+        },
+        HEAD: { branch: "fork-2", recordId: "rc0" },
+      },
+      {
+        "fork-1": [
+          userMessage(0, "b0", { timestamp: T2, recordId: "rb0" }),
+          assistantMessage(1, "b1", { timestamp: T2, recordId: "rb1" }),
+          assistantMessage(2, "b2 abandoned", { timestamp: T2, recordId: "rb2" }),
+        ],
+        "fork-2": [
+          userMessage(0, "c0", { timestamp: T3, recordId: "rc0" }),
+        ],
+      },
     );
-    const c = makeSession("c", [userMessage(0, "c0", { timestamp: T3 })], {
-      lineage: { type: "rewound_from", sessionId: "b", atRecordId: "r1" },
-    });
-    const facade = createFacade(fakeAdapter([a, b, c]));
-    const task = await facade.loadTask("a");
-    expect(task.head.manifest.sessionId).toBe("c");
-    expect(task.members.map((m) => m.manifest.sessionId)).toEqual(["a", "b", "c"]);
+    const facade = createFacade(fakeAdapter([session]));
+    const task = await facade.loadTask("sess-1");
+    expect(task.branches).toEqual(["fork-1", "fork-2", "main"]);
     const texts = task.messages().map((i) =>
       i.kind === "tool" ? "" : i.content.map((b2) => (b2.type === "text" ? b2.text : "")).join(""),
     );
