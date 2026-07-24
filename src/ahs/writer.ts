@@ -218,15 +218,7 @@ export async function writeArchive(
   sessionId: string,
   outDir: string,
 ): Promise<WriteArchiveResult> {
-  let manifest: Manifest | undefined;
-  // Storage view: look up among ALL sessions, fork descendants included.
-  for await (const m of adapter.listSessions({ includeForks: true })) {
-    if (m.sessionId === sessionId) {
-      manifest = m;
-      break;
-    }
-  }
-  if (manifest === undefined) throw new Error(`session not found: ${sessionId}`);
+  const manifest = await adapter.readManifest(sessionId);
   const branchRecords = await collectAllBranchRecords(adapter, manifest);
   return writeSessionArchive(manifest, branchRecords, outDir);
 }

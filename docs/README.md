@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | **当前阶段** | `RELEASE` |
-| **设计评估** | — |
+| **设计评估** | readManifest 接口补全 + 实现（SYSTEM_TEST 通过，271 tests + 7 e2e chains） |
 
 Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):"` 重建上下文。
 
@@ -31,11 +31,12 @@ Agent 中断恢复时，用 `git log --oneline --grep="docs(state):\|docs(plan):
 
 ## 行为边界
 
-当前处于 **DESIGN** 阶段（v0.1.0 发布后下一轮迭代起点）：
+当前处于 **RELEASE** 阶段（v0.2.0 发布后增量迭代完成）：
 
-- 只写/改契约文档（Vision/Spec/AC/ADR/Interface），在 `develop` 上进行；不写正式功能代码。
-- 契约已冻结：Vision/Spec/AC/Interface = `active`，ADR = `accepted`。契约变更须走 ADR 修订流程（typo、措辞澄清走快速通道 B）。
-- ADR 验证性适配器原型走 `spike/*` 分支（保留不合并）。非契约验证的代码变更（微修改、hotfix）走快速通道。
+- 不新增功能。`release/*` 分支从 `develop` 拉出，整理 CHANGELOG，合并回 `main` + `develop`，在 `main` 上打 tag `vX.Y.Z`。
+- 契约已冻结：Vision/Spec/AC/Interface = `active`，ADR = `accepted`。
+- 本轮迭代成果：HarnessAdapter 接口补全 `readManifest(sessionId)`，writeArchive/facade 改用，ahs-export CLI。
+- 快速通道（验证性开发 / 微修改 / hotfix）见 [CONTRIBUTING.md](../../CONTRIBUTING.md) 第八节。
 
 ### 快速通道（项目自定义）
 

@@ -700,6 +700,17 @@ export class PiAdapter implements HarnessAdapter {
     }
   }
 
+  async readManifest(sessionId: string): Promise<Manifest> {
+    for (const filePath of await this.discover()) {
+      const { fileSessionId, session } = await this.projectFile(filePath);
+      if (fileSessionId === sessionId) {
+        if (session !== null) return session.manifest;
+        break;
+      }
+    }
+    throw new Error(`session not found: ${sessionId}`);
+  }
+
   async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
     for (const filePath of await this.discover()) {
       const { fileSessionId, session } = await this.projectFile(filePath);

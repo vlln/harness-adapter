@@ -109,9 +109,14 @@ export function fakeAdapter(sessions: SessionData[]): HarnessAdapter {
     async *listSessions() {
       for (const s of sessions) yield s.manifest;
     },
+    async readManifest(sessionId: string) {
+      const session = sessions.find((s) => s.manifest.sessionId === sessionId);
+      if (session === undefined) throw new Error(`session not found: ${sessionId}`);
+      return session.manifest;
+    },
     async *readRecords(sessionId: string, branchName?: string) {
       const session = sessions.find((s) => s.manifest.sessionId === sessionId);
-      if (session === undefined) throw new Error(`unknown session: ${sessionId}`);
+      if (session === undefined) throw new Error(`session not found: ${sessionId}`);
       if (branchName !== undefined && session.branchRecords?.[branchName]) {
         yield* session.branchRecords[branchName]!;
       } else {

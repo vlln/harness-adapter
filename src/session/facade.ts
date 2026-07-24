@@ -205,8 +205,12 @@ class FacadeImpl implements HarnessFacade {
   }
 
   async loadSession(sessionId: string): Promise<AhsSession> {
-    const manifest = (await this.allManifests()).find((m) => m.sessionId === sessionId);
-    if (manifest === undefined) throw new SessionNotFoundError(sessionId);
+    let manifest: Manifest;
+    try {
+      manifest = await this.adapter.readManifest(sessionId);
+    } catch {
+      throw new SessionNotFoundError(sessionId);
+    }
     return new SessionView(this, await this.materialize(manifest));
   }
 
@@ -251,9 +255,12 @@ class FacadeImpl implements HarnessFacade {
    * root branch, cutting at each segment's parentRecordId.
    */
   async loadTask(sessionId: string): Promise<AhsTask> {
-    const manifests = await this.allManifests();
-    const manifest = manifests.find((m) => m.sessionId === sessionId);
-    if (manifest === undefined) throw new SessionNotFoundError(sessionId);
+    let manifest: Manifest;
+    try {
+      manifest = await this.adapter.readManifest(sessionId);
+    } catch {
+      throw new SessionNotFoundError(sessionId);
+    }
 
     const session = await this.materialize(manifest);
 

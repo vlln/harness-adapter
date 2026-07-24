@@ -742,6 +742,33 @@ export class KimiCodeAdapter implements HarnessAdapter {
     }
   }
 
+  async readManifest(sessionId: string): Promise<Manifest> {
+    for (const session of await this.discover()) {
+      const link: SubAgentLink = {
+        rootSessionId: session.sessionId,
+        agentNames: new Set(session.agents.map((a) => a.name)),
+      };
+      for (const agent of session.agents) {
+        if (agent.sessionId === sessionId) {
+          const lines = await this.loadWire(agent);
+          const plans = await this.loadPlans(agent);
+          const projected = projectRecords(agent.sessionId, lines, plans, link);
+          if (projected.main.length === 0) throw new Error(`session not found: ${sessionId}`);
+          const extraBranches: Record<string, { parentRecordId: string; records: AhsRecord[] }> = {};
+          for (const [name, brecords] of Object.entries(projected.branches)) {
+            if (brecords.length === 0) continue;
+            const parentRecordId = projected.main.length > 0
+              ? projected.main[projected.main.length - 1]!.recordId
+              : "";
+            extraBranches[name] = { parentRecordId, records: brecords };
+          }
+          return buildManifest(agent, session.state, lines, projected.main, extraBranches);
+        }
+      }
+    }
+    throw new Error(`session not found: ${sessionId}`);
+  }
+
   async *readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord> {
     for (const session of await this.discover()) {
       const link: SubAgentLink = {
