@@ -1,6 +1,6 @@
 {
   "name": "ahs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Agent History Standard (AHS) — offline exchange and consumption format for coding agent session history",
   "type": "module",

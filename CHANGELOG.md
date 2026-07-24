@@ -4,6 +4,28 @@
 
 ---
 
+## [0.3.0] - 2026-07-24
+
+HarnessAdapter 接口补全 `readManifest(sessionId)`——O(1) 单 session manifest 查询，不再遍历 listSessions。
+
+### Added
+
+- `HarnessAdapter.readManifest(sessionId): Promise<Manifest>` 接口方法（interface/0001 契约更新）
+- 全部 7 个 adapter 实现 readManifest
+- `examples/ahs-export.ts` CLI：从 native 存储导出 session 为 AHS 磁盘格式（ahs-report 的逆向）
+
+### Changed
+
+- `writeArchive`：从 listSessions 遍历改为 `adapter.readManifest(sessionId)` 直接调用
+- `facade.loadSession` / `facade.loadTask`：同上，不再全量扫描 listSessions
+- codex adapter：提取 `projectAllManifests()` 共享于 listSessions 和 readManifest
+
+### 契约文档
+
+- interface/0001：readManifest 方法 + readRecords 签名修正（补 branchName、seq→file order）
+- AC-0001-N-2/E-2、AC-0002-N-8 新增 readManifest 验收场景
+- 移除 stale AC-0002-N-7 重复（引用退役的 rewound_from/root）
+
 ## [0.2.0] - 2026-07-24
 
 ADR-0006 多分支 session 目录模型。从 v0.1.0 的"扁平 session + 跨 session lineage 回链"重构为"session = 目录 + 多分支 JSONL"。
