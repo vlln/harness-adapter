@@ -1,8 +1,8 @@
 ---
 title: Interface-0001 HarnessAdapter 契约
-description: HarnessAdapter 只读投影接口：listSessions / readRecords，AsyncIterable 返回 AHS Manifest 与 Record；能力声明与错误语义。
+description: HarnessAdapter 只读投影接口：listSessions / readManifest / readRecords，AsyncIterable 返回 AHS Manifest 与 Record；能力声明与错误语义。
 type: interface
-status: active
+status: proposed
 created: 2026-07-21T11:48:45Z
 ---
 
@@ -37,7 +37,19 @@ export interface HarnessAdapter {
 
   listSessions(filter?: SessionFilter): AsyncIterable<Manifest>;
 
-  readRecords(sessionId: string): AsyncIterable<AhsRecord>;
+  /**
+   * Read the Manifest for a single session by ID — O(1) direct lookup,
+   * no listSessions scan. Throws when sessionId does not exist (consistent
+   * with readRecords error semantics).
+   */
+  readManifest(sessionId: string): Promise<Manifest>;
+
+  /**
+   * Read records for a session branch. Defaults to the HEAD branch when
+   * branchName is omitted. Records are returned in file (JSONL line) order
+   * within the branch.
+   */
+  readRecords(sessionId: string, branchName?: string): AsyncIterable<AhsRecord>;
 }
 ```
 
@@ -57,15 +69,28 @@ export interface HarnessAdapter {
 
 **响应：** `AsyncIterable<Manifest>`——每个元素是一个 session 的 Manifest（字段见 Spec 第四节 Manifest 字段详表）。
 
-### readRecords
+### readManifest
 
-读取指定 session 的全部 record，按 `seq` 顺序流式返回。
+读取单个 session 的 Manifest，O(1) 直接定位（不遍历 listSessions）。适用于已知 sessionId 的单 session 投影场景（writeArchive、facade loadSession 等）。
 
 **请求：**
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `sessionId` | string | 是 | 目标 session 标识（原样保留源 ID 形态，不强制 UUID） |
+
+**响应：** `Promise<Manifest>`——该 session 的 Manifest（字段见 Spec 第四节 Manifest 字段详表）。sessionId 不存在时抛出错误（不返回 undefined 静默成功）。
+
+### readRecords
+
+读取指定 session 的一个分支的全部 record，按文件（JSONL 行）顺序流式返回。`branchName` 省略时默认读 HEAD 分支。
+
+**请求：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `sessionId` | string | 是 | 目标 session 标识（原样保留源 ID 形态，不强制 UUID） |
+| `branchName` | string | 否 | 分支名（省略时默认 HEAD 分支） |
 
 **响应：** `AsyncIterable<AhsRecord>`——record 级数据（JSONL append-only 语义），类型见 Spec 第四节 Record 类型最小集。
 
@@ -80,15 +105,16 @@ export interface HarnessAdapter {
 
 ## 已知限制与演进方向
 
-- 无 `readManifest(sessionId)` 方法：写入方取单个 session 的 Manifest 需遍历 `listSessions()`。spike 验证中不构成阻塞，正式实现时评估是否补充。
 - 归档读写契约见 [0002-archive.md](0002-archive.md)。
+- session facade（loadSession / loadTask）见 [0003-session-facade.md](0003-session-facade.md)。
 
 ## 错误语义
 
 | 情况 | 行为 | 调用方处理 |
 |------|------|----------|
-| `sessionId` 不存在 | AsyncIterable 抛出错误（不作为空流静默返回） | 捕获并视为输入错误 |
-| 源端数据不可得 | 不抛错；通过 `capabilities.history` 预先声明，listSessions 返回可得部分 | 先读 capabilities 再决定消费策略 |
+| `sessionId` 不存在（readManifest） | Promise reject 抛出错误 | 捕获并视为输入错误 |
+| `sessionId` 不存在（readRecords） | AsyncIterable 抛出错误（不作为空流静默返回） | 捕获并视为输入错误 |
+| 源端数据不可得 | 不抛错；通过 `capabilities.history` 预先声明，listSessions / readManifest 返回可得部分 | 先读 capabilities 再决定消费策略 |
 | 源格式无法映射的字段 | 按 Spec 丢弃规则处理，不产生 schema 外字段 | 无需处理（规范保证） |
 
 ## 不变量

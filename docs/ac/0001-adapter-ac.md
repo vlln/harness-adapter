@@ -15,12 +15,14 @@ created: 2026-07-21T11:48:45Z
 | 编号 | 前置条件 | 操作步骤 | 预期结果 | 验证方式 |
 |------|---------|---------|---------|---------|
 | AC-0001-N-1 | 源存储中存在至少一个合法会话 | 1. 运行适配器 listSessions + readRecords<br>2. 对每个 Manifest 与每条 record 执行 zod parse | 全部通过校验，无 ZodError | 自动化 |
+| AC-0001-N-2 | 源存储中存在至少一个合法会话 | 1. 调用 readManifest(sessionId)<br>2. 对返回 Manifest 执行 zod parse | 通过校验，无 ZodError | 自动化 |
 
 ## 异常场景
 
 | 编号 | 前置条件 | 操作步骤 | 预期结果 | 验证方式 |
 |------|---------|---------|---------|---------|
 | AC-0001-E-1 | 源会话含适配器无法映射的字段（如 Codex encrypted_content） | 1. 运行适配器<br>2. 校验输出 | 输出仍全部通过 schema 校验；无法映射的信息按 Spec 丢弃规则处理，不产生 schema 外字段 | 自动化 |
+| AC-0001-E-2 | readManifest 传入不存在的 sessionId | 1. 调用 readManifest("nonexistent") | Promise reject 抛出错误，不返回 undefined | 自动化 |
 
 ## 失败场景
 
@@ -45,7 +47,7 @@ created: 2026-07-21T11:48:45Z
 | AC-0002-N-4 | 源会话含 usage 数据（usage 无静默丢失） | 1. 运行适配器<br>2. 汇总 record 级 usage | record 级 usage 求和 ≈ 源会话总量（容差内） | 自动化 |
 | AC-0002-N-5 | 任意源会话（幂等） | 1. 同一输入运行适配器两次 | 两次输出逐字节一致 | 自动化 |
 | AC-0002-N-6 | 任意源会话（tool 配对） | 1. 运行适配器<br>2. 检查 tool_call/tool_result | 每个 `tool_call` 恰有配对 `tool_result`，或 `status === "interrupted"`，二者必居其一；同一 toolCallId 多个 result 时仅保留文件序第一条 | 自动化 |
-| AC-0002-N-7 | 源会话含分叉（历史维完整） | 1. 运行适配器<br>2. 检查 lineage | 每个分叉恰好产出一个 rewind session（只存后缀）；`lineage.sessionId` 存在；`atRecordId`（非 null 时）指向父 session 中真实存在的 record；类型为 `rewound_from`；`root: false` | 自动化 |
+| AC-0002-N-8 | 任意源会话 | 1. 调用 readManifest(sessionId)<br>2. 与 listSessions 遍历找到的同 sessionId Manifest 对比 | 逐字段一致（readManifest 是 listSessions 的 O(1) 捷径，语义等价） | 自动化 |
 
 ## 边界场景
 
