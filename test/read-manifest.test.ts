@@ -22,7 +22,7 @@ import { QwenCodeAdapter } from "../src/adapters/qwen";
 import { KimiCodeAdapter } from "../src/adapters/kimi-code";
 import { DevinAdapter } from "../src/adapters/devin";
 import { createDevinFixture } from "./fixtures/devin-db";
-import { fakeAdapter, makeSession, userMessage, makeManifest } from "./builders";
+import { fakeAdapter, makeSession, userMessage } from "./builders";
 import type { Manifest } from "../src/schema/manifest";
 import type { HarnessAdapter } from "../src/store/adapter";
 
@@ -96,6 +96,17 @@ describe("readManifest vs listSessions — real adapters", () => {
     await expect(adapter.readManifest("no-such-session")).rejects.toThrow("session not found");
   });
 
+  it("claude-code: readManifest finds subagent session (second-phase scan)", async () => {
+    const adapter = new ClaudeCodeAdapter(ccFixtures);
+    const listed = await listAllManifests(adapter);
+    // "abc123" is a subagent child of SESSION_B — found via second-phase scan,
+    // not the fast path (file named by id).
+    const target = listed.find((m) => m.sessionId === "abc123")!;
+    expect(target).toBeDefined();
+    const got = await adapter.readManifest("abc123");
+    assertManifestEqual(got, target);
+  });
+
   // Grok
   const grokFixtures = path.join(import.meta.dirname, "fixtures", "grok", "sessions");
   const grokSession = "019f0000-0000-7000-8000-000000000001";
@@ -147,6 +158,17 @@ describe("readManifest vs listSessions — real adapters", () => {
     const target = listed.find((m) => m.sessionId === kimiSession)!;
     const got = await adapter.readManifest(kimiSession);
     assertManifestEqual(got, target);
+  });
+
+  it("kimi-code: readManifest finds subagent session", async () => {
+    const adapter = new KimiCodeAdapter(kimiFixtures);
+    const childId = `${kimiSession}/agent-0`;
+    const listed = await listAllManifests(adapter);
+    const target = listed.find((m) => m.sessionId === childId);
+    if (target !== undefined) {
+      const got = await adapter.readManifest(childId);
+      assertManifestEqual(got, target);
+    }
   });
 
   // Codex
