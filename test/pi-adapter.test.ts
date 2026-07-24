@@ -4,8 +4,7 @@
  *
  * Fixture layout (all hand-crafted, no real user data), under
  * test/fixtures/pi/--Users-test-Project-demo--/:
- *   aaaa…00a1  minimal session with cost-bearing usage — AC-0002-N-3/N-4,
- *              cost mapping (pi is the only harness with cost)
+ *   aaaa…00a1  minimal session with usage — AC-0002-N-3/N-4
  *   bbbb…00b2  parallel tool calls (chained results, one isError),
  *              mid-session model_change, an error assistant message
  *              (empty content, projects nothing) — AC-0001-E-1, AC-0002-N-6
@@ -34,7 +33,7 @@ const fixturesDir = path.join(
   "pi",
 );
 
-const SESSION_A = "019f4000-aaaa-7000-8000-0000000000a1"; // minimal + cost
+const SESSION_A = "019f4000-aaaa-7000-8000-0000000000a1"; // minimal usage
 const SESSION_B = "019f4000-bbbb-7000-8000-0000000000b2"; // tools + model switch + error msg
 const SESSION_C = "019f4000-cccc-7000-8000-0000000000c3"; // forks
 const SESSION_D = "019f4000-dddd-7000-8000-0000000000d4"; // edge cases
@@ -146,7 +145,7 @@ describe("pi adapter", () => {
     expect(none).toEqual([]);
   });
 
-  describe("minimal session with cost (fixture A)", () => {
+  describe("minimal session with usage (fixture A)", () => {
     it("maps manifest fields from the session + first model_change records", async () => {
       const sessions = await collectSessions(adapter);
       const manifest = sessions.find((s) => s.manifest.sessionId === SESSION_A)!.manifest;
@@ -163,7 +162,6 @@ describe("pi adapter", () => {
         inputTokens: 1918,
         outputTokens: 409,
         cacheReadTokens: 256,
-        cost: { amount: 0.0007, currency: "USD" },
       });
     });
 
@@ -203,7 +201,7 @@ describe("pi adapter", () => {
       }
     });
 
-    it("maps usage including cost and reasoning; drops totalTokens (AC-0002-N-4)", async () => {
+    it("maps usage including reasoning; drops totalTokens (AC-0002-N-4)", async () => {
       const records = await readAll(adapter, SESSION_A);
       const assistant = records[3]!;
       expect(assistant.model).toBe("DeepSeek-V4-Flash");
@@ -213,7 +211,6 @@ describe("pi adapter", () => {
         cacheReadTokens: 256,
         cacheWriteTokens: 0,
         reasoningTokens: 0,
-        cost: { amount: 0.0007, currency: "USD" },
       });
     });
   });

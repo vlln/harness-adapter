@@ -15,10 +15,6 @@
     "sessionId": "019f4000-cccc-7000-8000-0000000000c3/fork/cc000005",
     "stats": {
       "totalUsage": {
-        "cost": {
-          "amount": 0,
-          "currency": "USD"
-        },
         "inputTokens": 150,
         "outputTokens": 15
       },
@@ -51,10 +47,6 @@
       "usage": {
         "cacheReadTokens": 0,
         "cacheWriteTokens": 0,
-        "cost": {
-          "amount": 0,
-          "currency": "USD"
-        },
         "inputTokens": 150,
         "outputTokens": 15,
         "reasoningTokens": 0
